@@ -1,4 +1,4 @@
-# NEAR AI Foundation
+# Cyborg: NEAR AI Agent Starter Kit
 
 ## Module Federation Monorepo
 
@@ -10,7 +10,7 @@ Built with React, Hono.js, oRPC, Better-Auth, Module Federation, and NEAR AI Clo
 
 ```bash
 # 1. Clone and install
-git clone <repo> && cd mythic
+git clone https://github.com/NEARBuilders/cyborg.git && cd mythic
 bun install
 
 # 2. Create environment files
@@ -140,14 +140,15 @@ All runtime configuration lives in `bos.config.json`:
 
 Built-in rate limiting protects against abuse:
 
-| Endpoint | Limit | Window |
-|----------|-------|--------|
-| Chat/AI | 20 requests | 1 minute |
-| Key-Value | 100 requests | 1 minute |
-| Auth | 10 requests | 1 minute |
-| Global | 1000 requests | 1 minute |
+| Endpoint  | Limit         | Window   |
+| --------- | ------------- | -------- |
+| Chat/AI   | 20 requests   | 1 minute |
+| Key-Value | 100 requests  | 1 minute |
+| Auth      | 10 requests   | 1 minute |
+| Global    | 1000 requests | 1 minute |
 
 Rate limit headers included in responses:
+
 - `X-RateLimit-Limit`: Maximum requests allowed
 - `X-RateLimit-Remaining`: Requests remaining
 - `X-RateLimit-Reset`: Unix timestamp when window resets
@@ -164,6 +165,7 @@ Two health endpoints are available:
 - `GET /health/ready` - Readiness check with dependency status
 
 Example readiness response:
+
 ```json
 {
   "status": "ready",
