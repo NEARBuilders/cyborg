@@ -68,27 +68,27 @@ function mapOpenAIError(error: unknown): never {
 
   if (error instanceof OpenAI.APIError) {
     if (error.status === 401) {
-      throw new ORPCError('UNAUTHORIZED', {
-        message: 'Invalid NEAR AI API key'
+      throw new ORPCError("UNAUTHORIZED", {
+        message: "Invalid NEAR AI API key",
       });
     }
     if (error.status === 429) {
-      throw new ORPCError('RATE_LIMITED', {
+      throw new ORPCError("RATE_LIMITED", {
         data: {
-          retryAfter: parseInt(error.headers?.['retry-after'] || '60'),
-          limitType: 'requests' as const
-        }
+          retryAfter: parseInt(error.headers?.["retry-after"] || "60"),
+          limitType: "requests" as const,
+        },
       });
     }
-    throw new ORPCError('SERVICE_UNAVAILABLE', {
+    throw new ORPCError("SERVICE_UNAVAILABLE", {
       message: error.message,
-      data: { retryAfter: 30 }
+      data: { retryAfter: 30 },
     });
   }
 
-  throw new ORPCError('SERVICE_UNAVAILABLE', {
-    message: error instanceof Error ? error.message : 'Unknown error',
-    data: { retryAfter: 30 }
+  throw new ORPCError("SERVICE_UNAVAILABLE", {
+    message: error instanceof Error ? error.message : "Unknown error",
+    data: { retryAfter: 30 },
   });
 }
 
@@ -115,7 +115,7 @@ export class AgentService {
 
   private async resolveConversation(
     nearAccountId: string,
-    conversationId?: string
+    conversationId?: string,
   ) {
     const convId = conversationId ?? nanoid();
     const conversation = await this.db.query.conversation.findFirst({
@@ -132,11 +132,11 @@ export class AgentService {
   private async buildChatContext(
     nearAccountId: string,
     userMessage: string,
-    conversationId?: string
+    conversationId?: string,
   ) {
     const { convId, isNew } = await this.resolveConversation(
       nearAccountId,
-      conversationId
+      conversationId,
     );
 
     const now = new Date();
@@ -223,53 +223,71 @@ export class AgentService {
   processMessage(
     nearAccountId: string,
     userMessage: string,
-    conversationId?: string
+    conversationId?: string,
   ) {
     return Effect.tryPromise({
       try: async (): Promise<ChatResponse> => {
-        const { convId, chatMessages, now, isNew } = await this.buildChatContext(
+        console.log("[processMessage] START:", {
           nearAccountId,
-          userMessage,
-          conversationId
-        );
-
-        await this.persistUserMessage({
-          nearAccountId,
-          convId,
-          isNew,
-          userMessage,
-          createdAt: now,
+          userMessage: userMessage.slice(0, 50),
         });
 
-        // Get AI response from NEAR AI
-        const completion = await this.client.chat.completions.create({
-          model: this.config.model,
-          messages: chatMessages,
-        });
+        try {
+          const { convId, chatMessages, now, isNew } =
+            await this.buildChatContext(
+              nearAccountId,
+              userMessage,
+              conversationId,
+            );
+          console.log("[processMessage] Context built:", { convId, isNew });
 
-        const assistantContent = completion.choices[0]?.message?.content ?? "";
+          await this.persistUserMessage({
+            nearAccountId,
+            convId,
+            isNew,
+            userMessage,
+            createdAt: now,
+          });
+          console.log("[processMessage] User message persisted");
 
-        const assistantCreatedAt = new Date();
-        const assistantMsgId = nanoid();
+          console.log("[processMessage] Calling NEAR AI...");
+          const completion = await this.client.chat.completions.create({
+            model: this.config.model,
+            messages: chatMessages,
+          });
+          console.log("[processMessage] Got response from NEAR AI");
 
-        await this.persistAssistantMessage({
-          convId,
-          assistantMessageId: assistantMsgId,
-          content: assistantContent,
-          createdAt: assistantCreatedAt,
-        });
+          const assistantContent =
+            completion.choices[0]?.message?.content ?? "";
+          const assistantCreatedAt = new Date();
+          const assistantMsgId = nanoid();
 
-        return {
-          conversationId: convId,
-          message: {
-            id: assistantMsgId,
-            role: "assistant",
+          await this.persistAssistantMessage({
+            convId,
+            assistantMessageId: assistantMsgId,
             content: assistantContent,
-            createdAt: assistantCreatedAt.toISOString(),
-          },
-        };
+            createdAt: assistantCreatedAt,
+          });
+          console.log("[processMessage] Assistant message persisted");
+
+          return {
+            conversationId: convId,
+            message: {
+              id: assistantMsgId,
+              role: "assistant",
+              content: assistantContent,
+              createdAt: assistantCreatedAt.toISOString(),
+            },
+          };
+        } catch (innerError) {
+          console.error("[processMessage] Inner error:", innerError);
+          throw innerError;
+        }
       },
-      catch: mapOpenAIError
+      catch: (error) => {
+        console.error("[processMessage] Outer catch:", error);
+        return mapOpenAIError(error);
+      },
     });
   }
 
@@ -279,19 +297,21 @@ export class AgentService {
   processMessageStream(
     nearAccountId: string,
     userMessage: string,
-    conversationId?: string
+    conversationId?: string,
   ) {
     const self = this;
-    const eventId = () => `evt-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const eventId = () =>
+      `evt-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
     return Effect.tryPromise({
       try: async (): Promise<AsyncGenerator<StreamEvent>> => {
         // Setup: resolve conversation and save user message
-        const { convId, chatMessages, now, isNew } = await self.buildChatContext(
-          nearAccountId,
-          userMessage,
-          conversationId
-        );
+        const { convId, chatMessages, now, isNew } =
+          await self.buildChatContext(
+            nearAccountId,
+            userMessage,
+            conversationId,
+          );
 
         await self.persistUserMessage({
           nearAccountId,
@@ -351,9 +371,10 @@ export class AgentService {
             try {
               mapOpenAIError(error);
             } catch (orpcError) {
-              const safeMessage = orpcError instanceof ORPCError
-                ? orpcError.message
-                : "Chat stream failed";
+              const safeMessage =
+                orpcError instanceof ORPCError
+                  ? orpcError.message
+                  : "Chat stream failed";
               yield {
                 type: "error",
                 id: eventId(),
@@ -367,7 +388,7 @@ export class AgentService {
 
         return streamGenerator();
       },
-      catch: mapOpenAIError
+      catch: mapOpenAIError,
     });
   }
 
@@ -397,7 +418,7 @@ export class AgentService {
       .groupBy(schema.message.conversationId);
 
     const statsByConversationId = new Map(
-      messageStats.map((stat) => [stat.conversationId, stat])
+      messageStats.map((stat) => [stat.conversationId, stat]),
     );
 
     return conversations.map((conv) => {
@@ -461,7 +482,7 @@ export class AgentContext extends Context.Tag("AgentService")<
 
 export const AgentLive = (
   db: DrizzleDatabase,
-  config: { apiKey?: string; baseUrl: string; model: string }
+  config: { apiKey?: string; baseUrl: string; model: string },
 ): Layer.Layer<AgentContext, never, never> => {
   if (!config.apiKey) {
     console.log("[AgentService] API key not provided - service unavailable");
@@ -471,23 +492,11 @@ export const AgentLive = (
   // Capture apiKey in scope for type safety
   const apiKey = config.apiKey;
 
-  return Layer.scoped(
-    AgentContext,
-    Effect.gen(function* () {
-      const service = new AgentService(db, {
-        apiKey,
-        baseUrl: config.baseUrl,
-        model: config.model,
-      });
-
-      console.log("[AgentService] Initialized with NEAR AI");
-
-      // Add cleanup finalizer
-      yield* Effect.addFinalizer(() =>
-        Effect.sync(() => console.log("[AgentService] Cleanup complete"))
-      );
-
-      return service;
-    })
-  );
+  const service = new AgentService(db, {
+    apiKey,
+    baseUrl: config.baseUrl,
+    model: config.model,
+  });
+  console.log("[AgentService] Initialized with NEAR AI");
+  return Layer.succeed(AgentContext, service);
 };
