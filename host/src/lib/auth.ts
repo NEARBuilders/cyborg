@@ -10,13 +10,18 @@ import * as schema from "../db/schema/auth";
 
 const configPath = process.env.BOS_CONFIG_PATH ?? path.resolve(process.cwd(), 'bos.config.json');
 const bosConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+const env = process.env.NODE_ENV === "production" ? "production" : "development";
+const defaultOrigins = [
+  bosConfig?.app?.host?.[env],
+  bosConfig?.app?.ui?.[env],
+].filter(Boolean);
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
     provider: "sqlite",
     schema: schema,
   }),
-  trustedOrigins: process.env.CORS_ORIGIN?.split(",") || ["*"],
+  trustedOrigins: process.env.CORS_ORIGIN?.split(",") || defaultOrigins,
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL: process.env.BETTER_AUTH_URL,
   plugins: [
@@ -45,7 +50,7 @@ export const auth = betterAuth({
   advanced: {
     defaultCookieAttributes: {
       sameSite: "lax",
-      secure: true,
+      secure: process.env.NODE_ENV === "production",
       httpOnly: true
     }
   }

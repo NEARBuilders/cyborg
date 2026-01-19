@@ -16,7 +16,7 @@ The host orchestrates two federation systems:
 │  └────────────────────────────────────────────────┘     │
 │           ↑                         ↑                   │
 │  ┌────────┴────────┐       ┌────────┴────────┐          │
-│  │ remotes.json    │       │ registry.json   │          │
+│  │ bos.config.json │       │ bos.config.json │          │
 │  │ UI Federation   │       │ API Plugins     │          │
 │  └────────┬────────┘       └────────┬────────┘          │
 │           ↓                         ↓                   │
@@ -32,34 +32,43 @@ The host orchestrates two federation systems:
 └─────────────────────────────────────────────────────────┘
 ```
 
-## Federation
+## Configuration
 
-**UI Remotes** (`remotes.json`):
-
-```json
-{
-  "ui": {
-    "url": "https://...",
-    "exposes": {
-      "App": "./App",
-      "Router": "./Router",
-      "components": "./components",
-      "providers": "./providers"
-    }
-  }
-}
-```
-
-**API Plugins** (`registry.json`):
+All runtime configuration is in `bos.config.json` at the project root:
 
 ```json
 {
-  "plugins": {
-    "api": {
-      "remote": "https://...",
-      "secrets": {
-        "STRIPE_SECRET_KEY": "{{STRIPE_SECRET_KEY}}"
+  "account": "agency.near",
+  "app": {
+    "host": {
+      "title": "agent",
+      "development": "http://localhost:3001",
+      "production": "https://"
+    },
+    "ui": {
+      "name": "ui",
+      "development": "http://localhost:3002",
+      "production": "https://",
+      "exposes": {
+        "App": "./App",
+        "components": "./components",
+        "providers": "./providers",
+        "types": "./types"
       }
+    },
+    "api": {
+      "name": "api",
+      "development": "http://localhost:3014",
+      "production": "https://",
+      "variables": {
+        "NEAR_AI_MODEL": "deepseek-ai/DeepSeek-V3.1"
+      },
+      "secrets": [
+        "API_DATABASE_URL",
+        "API_DATABASE_AUTH_TOKEN",
+        "NEAR_AI_API_KEY",
+        "NEAR_AI_BASE_URL"
+      ]
     }
   }
 }
@@ -85,7 +94,7 @@ return {
 
 ## Available Scripts
 
-- `bun dev` - Start dev server (API: 3000, UI: 3001)
+- `bun dev` - Start dev server (Host: 3001, UI: 3002, API: 3014)
 - `bun build` - Build for production
 - `bun preview` - Run production server
 - `bun db:migrate` - Run migrations
@@ -96,20 +105,20 @@ return {
 - `/api/auth/*` - Authentication endpoints (Better-Auth)
 - `/api/rpc/*` - RPC endpoint (batching supported)
 - `/api/*` - REST API (OpenAPI spec)
-- `/api/webhooks/stripe` - Stripe webhook handler
-- `/api/webhooks/fulfillment` - Fulfillment webhook handler
 - `/health` - Health check
 
 ## Adding New Plugins
 
-1. Add plugin to `registry.json`:
+1. Add plugin to `bos.config.json`:
 ```json
 {
-  "plugins": {
+  "app": {
     "new-plugin": {
-      "remote": "https://plugin-url...",
+      "name": "new-plugin",
+      "development": "http://localhost:3015",
+      "production": "https://cdn.example.com/plugin/remoteEntry.js",
       "variables": {},
-      "secrets": {}
+      "secrets": []
     }
   }
 }

@@ -12,8 +12,10 @@ import { eq } from 'drizzle-orm';
 import { formatORPCError } from 'every-plugin/errors';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { z } from 'every-plugin/zod';
 import config from './rsbuild.config';
 import { loadBosConfig, type RuntimeConfig } from './src/config';
 import { db } from './src/db';
@@ -24,6 +26,39 @@ import { auth } from './src/lib/auth';
 import { createRouter } from './src/routers';
 import { initializePlugins } from './src/runtime';
 import { renderToStream, createSSRHtml } from './src/ssr';
+import { rateLimitChat, rateLimitKV, rateLimitAuth } from './src/middleware/rate-limit';
+
+const envSchema = z.object({
+  BETTER_AUTH_SECRET: z.string().min(32, "BETTER_AUTH_SECRET must be at least 32 characters"),
+  BETTER_AUTH_URL: z.string().url("BETTER_AUTH_URL must be a valid URL"),
+  HOST_DATABASE_URL: z.string().min(1, "HOST_DATABASE_URL is required"),
+  CORS_ORIGIN: z.string().optional(),
+});
+
+function ensureDevSecrets() {
+  const isDev = process.env.NODE_ENV !== 'production';
+
+  if (!process.env.BETTER_AUTH_SECRET && isDev) {
+    const generated = randomBytes(32).toString('hex');
+    process.env.BETTER_AUTH_SECRET = generated;
+    logger.warn('[Auth] ⚠️  Generated temporary BETTER_AUTH_SECRET for development');
+    logger.warn(`       For persistence, add to host/.env:`);
+    logger.warn(`       BETTER_AUTH_SECRET=${generated}`);
+  }
+}
+
+function validateEnv() {
+  const result = envSchema.safeParse(process.env);
+  if (!result.success) {
+    logger.error("❌ Invalid environment variables:");
+    result.error.issues.forEach((issue) => {
+      logger.error(`   ${issue.path.join(".")}: ${issue.message}`);
+    });
+    logger.error("\nCheck your .env file against .env.example");
+    process.exit(1);
+  }
+  logger.info("✅ Environment variables validated");
+}
 
 function injectRuntimeConfig(html: string, config: RuntimeConfig): string {
   const clientConfig = {
@@ -54,14 +89,21 @@ async function createContext(req: Request) {
     nearAccountId = nearAccount?.accountId ?? null;
   }
 
+  // Extract role from user
+  const role = (session?.user as { role?: string })?.role ?? null;
+
   return {
     session,
     user: session?.user,
     nearAccountId,
+    role,
   };
 }
 
 async function startServer() {
+  ensureDevSecrets();
+  validateEnv();
+
   const port = Number(process.env.PORT) || 3001;
   const apiPort = Number(process.env.API_PORT) || 3000;
   const isDev = process.env.NODE_ENV !== 'production';
@@ -107,21 +149,64 @@ async function startServer() {
 
   const apiApp = new Hono();
 
+  // Configure CORS origins
+  const corsOrigins = process.env.CORS_ORIGIN?.split(',').map((o) => o.trim())
+    ?? [bosConfig.hostUrl, bosConfig.ui.url];
+
+  if (!process.env.CORS_ORIGIN && isDev === false) {
+    logger.warn('[CORS] ⚠️  CORS_ORIGIN not set. Using bos.config.json defaults. Set explicitly for production.');
+  }
+
   apiApp.use(
     '/*',
     cors({
-      origin: process.env.CORS_ORIGIN?.split(',').map((o) => o.trim()) ?? [
-        bosConfig.hostUrl,
-        bosConfig.ui.url,
-        "http://localhost:3001"
-      ],
+      origin: corsOrigins,
       credentials: true,
     })
   );
 
   apiApp.get('/health', (c) => c.text('OK'));
 
-  apiApp.on(['POST', 'GET'], '/api/auth/*', (c) => auth.handler(c.req.raw));
+  apiApp.get('/health/ready', async (c) => {
+    const checks: Record<string, boolean> = {
+      database: false,
+      ai: false,
+    };
+
+    // Check database connectivity
+    try {
+      await db.query.user.findFirst();
+      checks.database = true;
+    } catch (error) {
+      console.error('[Health] Database check failed:', error);
+      checks.database = false;
+    }
+
+    // Check AI service availability (optional dependency)
+    checks.ai = plugins?.status?.available ?? false;
+
+    // Ready if database is connected (AI is optional)
+    const ready = checks.database;
+
+    return c.json(
+      {
+        status: ready ? 'ready' : 'degraded',
+        checks,
+        timestamp: new Date().toISOString(),
+      },
+      ready ? 200 : 503
+    );
+  });
+
+  apiApp.on(['POST', 'GET'], '/api/auth/*', rateLimitAuth, (c) => auth.handler(c.req.raw));
+
+  // Apply rate limiting to chat endpoints
+  apiApp.use('/api/chat', rateLimitChat);
+  apiApp.use('/api/chat/*', rateLimitChat);
+
+  // Apply rate limiting to KV endpoints
+  apiApp.use('/api/kv', rateLimitKV);
+  apiApp.use('/api/kv/*', rateLimitKV);
 
   apiApp.all('/api/rpc/*', async (c) => {
     const req = c.req.raw;
@@ -186,18 +271,16 @@ async function startServer() {
             config: bosConfig,
           });
 
-          const chunks: Uint8Array[] = [];
+          const decoder = new TextDecoder();
+          let bodyContent = '';
           const reader = stream.getReader();
           
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            chunks.push(value);
+            bodyContent += decoder.decode(value, { stream: true });
           }
-          
-          const bodyContent = new TextDecoder().decode(
-            new Uint8Array(chunks.reduce((acc, chunk) => [...acc, ...chunk], [] as number[]))
-          );
+          bodyContent += decoder.decode();
           
           const html = createSSRHtml(bodyContent, dehydratedState, bosConfig, headData);
           return c.html(html);

@@ -2,15 +2,15 @@
   "account": "agency.near",
   "app": {
     "host": {
-      "title": "agency",
-      "description": "NEAR AI application",
+      "title": "agent",
+      "description": "template for building NEAR AI applications",
       "development": "http://localhost:3001",
       "production": "https://"
     },
     "ui": {
       "name": "ui",
       "development": "http://localhost:3002",
-      "production": "https://elliot-braem-1278-ui-every-plugin-near-everything-18c1ee2a2-ze.zephyrcloud.app",
+      "production": "https://jlwaugh-73-ui-agency-multiversityai-5854da94d-ze.zephyrcloud.app",
       "exposes": {
         "App": "./App",
         "components": "./components",
@@ -21,11 +21,16 @@
     "api": {
       "name": "api",
       "development": "http://localhost:3014",
-      "production": "https://elliot-braem-1241-api-every-plugin-near-everythin-7ff3de0c9-ze.zephyrcloud.app",
+      "production": "https://jlwaugh-74-api-agency-multiversityai-18dcc54b0-ze.zephyrcloud.app",
       "variables": {
         "NEAR_AI_MODEL": "deepseek-ai/DeepSeek-V3.1"
       },
-      "secrets": ["API_DATABASE_URL", "API_DATABASE_AUTH_TOKEN", "NEAR_AI_API_KEY", "NEAR_AI_BASE_URL"]
+      "secrets": [
+        "API_DATABASE_URL",
+        "API_DATABASE_AUTH_TOKEN",
+        "NEAR_AI_API_KEY",
+        "NEAR_AI_BASE_URL"
+      ]
     }
   }
 }

@@ -1,6 +1,6 @@
 # Contributing Guide
 
-Thank you for contributing to the NEAR Merch Store! 🎉
+Thank you for contributing to this project! 🎉
 
 ## Quick Setup
 
@@ -12,7 +12,7 @@ bun dev                  # Start all services
 
 Visit http://localhost:3001 to see the application.
 
-**Need more details?** See [README.md](./README.md) for architecture overview and [LLM.txt](./LLM.txt) for technical deep-dive.
+**Need more details?** See [README.md](./README.md) for architecture overview, [CLAUDE.md](./CLAUDE.md) for quick reference, or [LLM.txt](./LLM.txt) for comprehensive technical documentation.
 
 ## Development Workflow
 
@@ -36,7 +36,8 @@ Secrets go in `.env` (see [.env.example](./.env.example) for required variables)
 ### Project Documentation
 
 - **[README.md](./README.md)** - Architecture, tech stack, and quick start
-- **[LLM.txt](./LLM.txt)** - Technical guide for LLMs and developers
+- **[CLAUDE.md](./CLAUDE.md)** - Quick reference for Claude Code (commands, key files, patterns)
+- **[LLM.txt](./LLM.txt)** - Comprehensive technical guide for LLMs and developers
 - **[api/README.md](./api/README.md)** - API plugin documentation
 - **[api/LLM.txt](./api/LLM.txt)** - Plugin development guide (every-plugin)
 - **[ui/README.md](./ui/README.md)** - Frontend documentation
@@ -62,7 +63,7 @@ Secrets go in `.env` (see [.env.example](./.env.example) for required variables)
 
 ## Reporting Issues
 
-Use [GitHub Issues](https://github.com/NEARBuilders/near-merch-store/issues) with:
+Use [GitHub Issues](https://github.com/nearbuilders/cyborg/issues) with:
 
 - **Clear description** of the problem
 - **Steps to reproduce** the issue

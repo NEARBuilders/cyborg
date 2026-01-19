@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a **Module Federation monorepo** demonstrating every-plugin architecture, runtime-loaded configuration, and NEAR Protocol integration. The architecture enables independent deployment of UI, API, and Host components.
+This is a **Module Federation monorepo** featuring every-plugin architecture, runtime-loaded configuration, NEAR Protocol authentication, AI chat with streaming (via NEAR AI Cloud), and per-user key-value storage. The architecture enables independent deployment of UI, API, and Host components.
 
-**Account:** agency.near
+**Account:** agency.near (customize in bos.config.json for your deployment)
 
 ## Commands
 
@@ -32,6 +32,9 @@ bun typecheck            # Type checking across all workspaces
 bun db:push              # Push schema changes
 bun db:studio            # Open Drizzle Studio
 bun db:generate          # Generate migrations
+
+# Role Management
+bun run promote-admin <near-account-id>  # Promote user to admin
 
 # Single workspace commands
 cd api && bun test       # Run API tests only

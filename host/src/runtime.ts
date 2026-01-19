@@ -19,7 +19,7 @@ function secretsFromEnv(keys: string[]): Record<string, string> {
 
 export interface PluginResult {
   runtime: ReturnType<typeof createPluginRuntime> | null;
-  api: any | null;
+  api: any | null;  // Plugin types loaded dynamically
   status: PluginStatus;
 }
 
@@ -50,9 +50,9 @@ export async function initializePlugins(): Promise<PluginResult> {
     const variables = pluginConfig.variables ?? {};
 
     const api = await runtime.usePlugin(pluginName, {
-       // @ts-expect-error no plugin types loaded
+      // @ts-expect-error no plugin types loaded
       variables,
-       // @ts-expect-error no plugin types loaded
+      // @ts-expect-error no plugin types loaded
       secrets,
     });
 

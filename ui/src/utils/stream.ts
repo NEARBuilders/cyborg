@@ -4,46 +4,17 @@
 
 export interface StreamEvent {
   id: string;
-  type: 'chunk' | 'trajectory_event' | 'complete' | 'error';
+  type: 'chunk' | 'complete' | 'error';
   data: unknown;
 }
 
 export interface ChunkData {
   content: string;
-  fullContent: string;
-}
-
-export interface TrajectoryEventData {
-  trajectoryId?: string;
-  conversationId?: string;
-  eventType: 'trajectory_start' | 'touch' | 'reason' | 'discover' | 'decide' | 'simulate';
-  entityId?: string;
-  name?: string;
-  entityType?: string;
-  source?: string;
-  action?: string;
-  // Simulation-specific fields
-  outcomeCount?: number;
-  differentiatorCount?: number;
-  resolvedCount?: number;
-  unresolvedCount?: number;
-  hasPatterns?: boolean;
-  // Decision event fields
-  entitiesReferenced?: number;
-  newEntities?: number;
-  simulationUsed?: boolean;
 }
 
 export interface CompleteData {
   conversationId: string;
   messageId: string;
-  trajectoryId: string;
-  simulationUsed?: boolean;
-  trajectory: {
-    entitiesDiscovered: Array<{ id: string; name: string; entityType?: string }>;
-    entitiesTouched: Array<{ id: string; name: string; entityType?: string }>;
-    edgesTraversed: Array<{ id: string; sourceEntityId: string; targetEntityId: string }>;
-  };
 }
 
 export interface ErrorData {
@@ -59,14 +30,12 @@ export async function* streamChat(
   message: string,
   conversationId?: string,
   options?: {
-    lastEventId?: string;
     signal?: AbortSignal;
   }
 ): AsyncGenerator<StreamEvent> {
   const body = {
     message,
     conversationId,
-    lastEventId: options?.lastEventId,
   };
 
   const response = await fetch('/api/chat/stream', {
@@ -91,8 +60,42 @@ export async function* streamChat(
 
   const decoder = new TextDecoder();
   let buffer = '';
+  let currentEvent: Partial<StreamEvent> = {};
 
   try {
+    const processLine = (line: string): StreamEvent | null => {
+      if (line.startsWith('id:')) {
+        currentEvent.id = line.slice(3).trim();
+      } else if (line.startsWith('event:')) {
+        // oRPC uses 'message' event type, data contains our event
+        const eventType = line.slice(6).trim();
+        if (eventType && eventType !== 'message') {
+          currentEvent.type = eventType as StreamEvent['type'];
+        }
+      } else if (line.startsWith('data:')) {
+        const dataStr = line.slice(5).trim();
+        if (dataStr) {
+          try {
+            const parsed = JSON.parse(dataStr);
+            // oRPC wraps the event in the data field
+            if (parsed.type && parsed.id && parsed.data !== undefined) {
+              currentEvent = parsed;
+            } else {
+              currentEvent.data = parsed;
+            }
+          } catch {
+            // Ignore parse errors
+          }
+        }
+      } else if (line === '' && currentEvent.type && currentEvent.id) {
+        const readyEvent = currentEvent as StreamEvent;
+        currentEvent = {};
+        return readyEvent;
+      }
+
+      return null;
+    };
+
     while (true) {
       const { done, value } = await reader.read();
 
@@ -104,38 +107,28 @@ export async function* streamChat(
       const lines = buffer.split('\n');
       buffer = lines.pop() || ''; // Keep incomplete line in buffer
 
-      let currentEvent: Partial<StreamEvent> = {};
-
       for (const line of lines) {
-        if (line.startsWith('id:')) {
-          currentEvent.id = line.slice(3).trim();
-        } else if (line.startsWith('event:')) {
-          // oRPC uses 'message' event type, data contains our event
-          const eventType = line.slice(6).trim();
-          if (eventType && eventType !== 'message') {
-            currentEvent.type = eventType as StreamEvent['type'];
-          }
-        } else if (line.startsWith('data:')) {
-          const dataStr = line.slice(5).trim();
-          if (dataStr) {
-            try {
-              const parsed = JSON.parse(dataStr);
-              // oRPC wraps the event in the data field
-              if (parsed.type && parsed.id && parsed.data !== undefined) {
-                currentEvent = parsed;
-              } else {
-                currentEvent.data = parsed;
-              }
-            } catch {
-              // Ignore parse errors
-            }
-          }
-        } else if (line === '' && currentEvent.type && currentEvent.id) {
-          // Empty line = end of event
-          yield currentEvent as StreamEvent;
-          currentEvent = {};
+        const readyEvent = processLine(line);
+        if (readyEvent) {
+          yield readyEvent;
         }
       }
+    }
+
+    if (buffer.length > 0) {
+      const lines = buffer.split('\n');
+      buffer = '';
+      for (const line of lines) {
+        const readyEvent = processLine(line);
+        if (readyEvent) {
+          yield readyEvent;
+        }
+      }
+    }
+
+    if (currentEvent.type && currentEvent.id) {
+      yield currentEvent as StreamEvent;
+      currentEvent = {};
     }
   } finally {
     reader.releaseLock();
@@ -149,12 +142,8 @@ export function isChunkData(data: unknown): data is ChunkData {
   return typeof data === 'object' && data !== null && 'content' in data;
 }
 
-export function isTrajectoryEventData(data: unknown): data is TrajectoryEventData {
-  return typeof data === 'object' && data !== null && 'eventType' in data;
-}
-
 export function isCompleteData(data: unknown): data is CompleteData {
-  return typeof data === 'object' && data !== null && 'conversationId' in data && 'trajectory' in data;
+  return typeof data === 'object' && data !== null && 'conversationId' in data && 'messageId' in data;
 }
 
 export function isErrorData(data: unknown): data is ErrorData {

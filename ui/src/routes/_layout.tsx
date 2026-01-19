@@ -21,6 +21,7 @@ function Layout() {
   const router = useRouter();
   const { data: session } = useSuspenseQuery(sessionQueryOptions);
   const accountId = session?.user?.id;
+  const userRole = (session?.user as { role?: string })?.role;
 
   const handleSignOut = async () => {
     try {
@@ -42,6 +43,20 @@ function Layout() {
             <ThemeToggle />
             {accountId ? (
               <>
+                {userRole === "admin" && (
+                  <Link
+                    to="/dashboard"
+                    className="text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
+                  >
+                    admin
+                  </Link>
+                )}
+                <Link
+                  to="/settings"
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
+                >
+                  settings
+                </Link>
                 <span className="text-xs text-muted-foreground font-mono">
                   {accountId}
                 </span>

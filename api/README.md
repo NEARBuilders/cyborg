@@ -20,7 +20,7 @@ Built with **every-plugin** framework (Rspack + Module Federation):
 ┌─────────────────────────────────────────────────────────┐
 │                   Host Integration                      │
 ├─────────────────────────────────────────────────────────┤
-│  registry.json → plugin URL + secrets                   │
+│  bos.config.json → plugin URL + secrets                 │
 │  runtime.ts → createPluginRuntime().usePlugin()         │
 │  routers/index.ts → merge plugin.router into AppRouter  │
 └─────────────────────────────────────────────────────────┘
@@ -30,9 +30,9 @@ Built with **every-plugin** framework (Rspack + Module Federation):
 
 - `contract.ts` - oRPC contract definition (routes, schemas)
 - `index.ts` - Plugin initialization + router handlers
-- `schema.ts` - Zod schemas for input/output validation
-- `services/` - Business logic (products, orders, stripe, fulfillment)
-- `db/` - Database schema and migrations
+- `db/schema.ts` - Database schema (conversations, messages, KV store)
+- `services/` - Business logic (agent service for AI chat)
+- `db/migrations/` - Database migrations
 
 **Extending with more plugins:**
 
@@ -59,19 +59,25 @@ Each domain can be its own plugin with independent:
 
 ## Configuration
 
-**Host registry** (`host/registry.json`):
+**Root config** (`bos.config.json`):
 
 ```json
 {
-  "api": {
-    "development": "http://localhost:3014/remoteEntry.js",
-    "production": "https://cdn.example.com/api/remoteEntry.js",
-    "variables": {
-    },
-    "secrets": [
-      "API_DATABASE_URL",
-      "API_DATABASE_AUTH_TOKEN"
-    ]
+  "app": {
+    "api": {
+      "name": "api",
+      "development": "http://localhost:3014",
+      "production": "https://",
+      "variables": {
+        "NEAR_AI_MODEL": "deepseek-ai/DeepSeek-V3.1"
+      },
+      "secrets": [
+        "API_DATABASE_URL",
+        "API_DATABASE_AUTH_TOKEN",
+        "NEAR_AI_API_KEY",
+        "NEAR_AI_BASE_URL"
+      ]
+    }
   }
 }
 ```

@@ -17,19 +17,19 @@
     "drizzle-orm": "^0.45.1",
     "nanoid": "^5.1.6",
     "near-kit": "^0.6.3",
-    "openai": "^6.15.0"
+    "openai": "^6.16.0"
   },
   "devDependencies": {
     "@effect/language-service": "^0.41.1",
-    "@module-federation/node": "^2.7.25",
-    "@rspack/cli": "^1.6.8",
-    "@rspack/core": "^1.6.8",
+    "@module-federation/node": "^2.7.27",
+    "@rspack/cli": "^1.7.2",
+    "@rspack/core": "^1.7.2",
     "dotenv": "^17.2.3",
-    "every-plugin": "^0.8.3",
+    "every-plugin": "^0.8.8",
     "tsx": "^4.21.0",
     "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^3.2.4",
-    "zephyr-rspack-plugin": "^0.1.2"
+    "zephyr-rspack-plugin": "^0.1.4"
   },
   "scripts": {
     "build": "rspack build",

@@ -19,11 +19,13 @@ interface BosConfig {
       name: string;
       development: string;
       production: string;
-      variables?: Record<string, any>;
+      variables?: RuntimeVariables;
       secrets?: string[];
     };
   };
 }
+
+type RuntimeVariables = Record<string, string | number | boolean>;
 
 export interface RuntimeConfig {
   env: 'development' | 'production';
@@ -38,7 +40,7 @@ export interface RuntimeConfig {
   api: {
     name: string;
     url: string;
-    variables?: Record<string, any>;
+    variables?: RuntimeVariables;
     secrets?: string[];
   };
 }

@@ -1,6 +1,6 @@
-# checkout-ui
+# ui
 
-Checkout frontend for browsing products, managing cart, and checkout.
+Frontend application for NEAR AI chat with streaming responses and KV store demo.
 
 ## Tech Stack
 
@@ -27,20 +27,22 @@ Exposed as remote module for host consumption via `remoteEntry.js`:
 
 - `react`, `react-dom`
 - `@tanstack/react-query`, `@tanstack/react-router`
-- `@hot-labs/near-connect`, `near-kit`
 
-**Host configuration** (`host/remotes.json`):
+**Configuration** (`bos.config.json`):
 
 ```json
 {
-  "checkout_ui": {
-    "url": "https://...",
-    "exposes": {
-      "App": "./App",
-      "Router": "./Router",
-      "components": "./components",
-      "providers": "./providers",
-      "types": "./types"
+  "app": {
+    "ui": {
+      "name": "ui",
+      "development": "http://localhost:3002",
+      "production": "https://",
+      "exposes": {
+        "App": "./App",
+        "components": "./components",
+        "providers": "./providers",
+        "types": "./types"
+      }
     }
   }
 }
@@ -56,7 +58,11 @@ Exposed as remote module for host consumption via `remoteEntry.js`:
 ## Project Structure
 
 - `src/routes/` - File-based routes (TanStack Router)
+  - `/` - Chat interface (canonical)
+  - `/chat` - Redirect alias to `/`
+  - `/dashboard` - Admin dashboard (role-gated)
 - `src/components/` - UI components (shadcn/ui)
-- `src/integrations/` - API integrations (oRPC client)
-- `src/hooks/` - React hooks (cart, favorites)
-- `src/providers/` - Context providers
+  - `chat/` - Chat UI components
+  - `kv/` - Key-value store demo
+- `src/utils/` - API client (oRPC)
+- `src/lib/` - Auth client (Better-Auth + NEAR)

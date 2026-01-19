@@ -152,6 +152,9 @@ web_modules/
 # dotenv environment variables file
 .env
 
+# Local SQLite databases
+api/*.db*
+
 # parcel-bundler cache (https://parceljs.org/)
 .cache
 .parcel-cache
@@ -294,3 +297,4 @@ fabric.properties
 /**/*.db
 
 .turbo
+**/*.sqlite

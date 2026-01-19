@@ -1,3 +1,4 @@
+import { CommonPluginErrors } from 'every-plugin';
 import { oc, eventIterator } from 'every-plugin/orpc';
 import { z } from 'every-plugin/zod';
 
@@ -5,113 +6,58 @@ import { z } from 'every-plugin/zod';
 // SHARED SCHEMAS
 // =============================================================================
 
-const EventSchema = z.object({
-  id: z.string(),
-  sequenceNum: z.number(),
-  timestamp: z.iso.datetime(),
-  eventType: z.enum(['touch', 'reason', 'decide', 'discover']),
-  entityId: z.string().nullable(),
-  data: z.any().nullable(),
-});
-
-const EntitySchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  entityType: z.string().nullable(),
-  description: z.string().nullable(),
-  touchCount: z.number(),
-});
-
-const EdgeSchema = z.object({
-  id: z.string(),
-  sourceEntityId: z.string(),
-  targetEntityId: z.string(),
-  relationshipType: z.string().nullable(),
-  weight: z.number(),
-});
-
-const TrajectorySchema = z.object({
-  id: z.string(),
-  inputText: z.string(),
-  summary: z.string().nullable(),
-  startedAt: z.iso.datetime(),
-  completedAt: z.iso.datetime().nullable(),
-});
-
 const MessageSchema = z.object({
   id: z.string(),
   role: z.enum(['user', 'assistant', 'system']),
   content: z.string(),
-  trajectoryId: z.string().nullable(),
   createdAt: z.iso.datetime(),
 });
 
 const ConversationSchema = z.object({
   id: z.string(),
   title: z.string().nullable(),
+  nearAccountId: z.string(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
 
-// Graph Reasoner Schemas
-const EntityInputSchema = z.object({
-  name: z.string(),
-  type: z.string().optional(),
+const KeyValueSchema = z.object({
+  key: z.string(),
+  value: z.string(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
 });
 
-const ResolvedEntitySchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  entityType: z.string().nullable(),
-  touchCount: z.number(),
-  trajectoryCount: z.number(),
-  contributorCount: z.number(),
+const StreamChunkSchema = z.object({
+  content: z.string(),
 });
 
-const OutcomeProjectionSchema = z.object({
-  outcome: z.string(),
-  outcomeId: z.string(),
-  probability: z.number(),
-  evidence: z.object({
-    edgeWeight: z.number(),
-    positiveCount: z.number(),
-    negativeCount: z.number(),
-    mixedCount: z.number(),
-    contributorCount: z.number(),
-  }),
+const StreamCompleteSchema = z.object({
+  conversationId: z.string(),
+  messageId: z.string(),
 });
 
-const DifferentiatorSchema = z.object({
-  entity: ResolvedEntitySchema,
-  role: z.enum(['context', 'constraint', 'strategy']),
-  effect: z.enum(['improves', 'reduces', 'mixed']),
-  magnitude: z.number(),
-  cooccurrenceStrength: z.number(),
-  outcomeShift: z.object({
-    withEntity: z.object({
-      positiveRate: z.number(),
-      totalWeight: z.number(),
-    }),
-    withoutEntity: z.object({
-      positiveRate: z.number(),
-      totalWeight: z.number(),
-    }),
-  }),
+const StreamErrorSchema = z.object({
+  message: z.string(),
 });
 
-const SimulationResultSchema = z.object({
-  input: z.object({
-    resolved: z.array(ResolvedEntitySchema),
-    unresolved: z.array(z.string()),
+const StreamEventSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('chunk'),
+    id: z.string(),
+    data: StreamChunkSchema,
   }),
-  outcomes: z.array(OutcomeProjectionSchema),
-  differentiators: z.array(DifferentiatorSchema),
-  evidence: z.object({
-    totalObservations: z.number(),
-    outcomeCount: z.number(),
-    hasPatterns: z.boolean(),
+  z.object({
+    type: z.literal('complete'),
+    id: z.string(),
+    data: StreamCompleteSchema,
   }),
-});
+  z.object({
+    type: z.literal('error'),
+    id: z.string(),
+    data: StreamErrorSchema,
+  }),
+]);
 
 // =============================================================================
 // CONTRACT
@@ -127,7 +73,8 @@ export const contract = oc.router({
     .output(z.object({
       status: z.literal('ok'),
       timestamp: z.iso.datetime(),
-    })),
+    }))
+    .errors(CommonPluginErrors),
 
   protected: oc
     .route({ method: 'GET', path: '/protected' })
@@ -135,205 +82,88 @@ export const contract = oc.router({
       message: z.string(),
       accountId: z.string(),
       timestamp: z.iso.datetime(),
-    })),
+    }))
+    .errors(CommonPluginErrors),
 
   // ===========================================================================
-  // CHAT - Primary interface for the agent
+  // KEY VALUE
   // ===========================================================================
 
-  // Send a message and get a response with trajectory
+  getValue: oc
+    .route({ method: 'GET', path: '/kv/{key}' })
+    .input(z.object({
+      key: z.string().min(1).max(256).regex(/^[a-zA-Z0-9_\-\.]+$/, "Key must be alphanumeric with _ - ."),
+    }))
+    .output(KeyValueSchema)
+    .errors(CommonPluginErrors),
+
+  setValue: oc
+    .route({ method: 'POST', path: '/kv/{key}' })
+    .input(z.object({
+      key: z.string().min(1).max(256).regex(/^[a-zA-Z0-9_\-\.]+$/, "Key must be alphanumeric with _ - ."),
+      value: z.string().max(100000),
+    }))
+    .output(KeyValueSchema)
+    .errors(CommonPluginErrors),
+
+  // ===========================================================================
+  // ADMIN
+  // ===========================================================================
+
+  adminStats: oc
+    .route({ method: 'GET', path: '/admin/stats' })
+    .output(z.object({
+      conversations: z.number(),
+      messages: z.number(),
+      kvEntries: z.number(),
+    }))
+    .errors(CommonPluginErrors),
+
+  // ===========================================================================
+  // CHAT
+  // ===========================================================================
+
+  // Send a message and get a response
   chat: oc
     .route({ method: 'POST', path: '/chat' })
     .input(z.object({
-      message: z.string().min(1),
+      message: z.string().min(1).max(10000),
       conversationId: z.string().optional(),
     }))
     .output(z.object({
       conversationId: z.string(),
       message: MessageSchema,
-      trajectory: z.object({
-        id: z.string(),
-        entitiesDiscovered: z.array(EntitySchema),
-        entitiesTouched: z.array(EntitySchema),
-        edgesTraversed: z.array(EdgeSchema),
-      }),
-    })),
+    }))
+    .errors(CommonPluginErrors),
 
   // Streaming chat endpoint
   chatStream: oc
     .route({ method: 'POST', path: '/chat/stream' })
     .input(z.object({
-      message: z.string().min(1),
+      message: z.string().min(1).max(10000),
       conversationId: z.string().optional(),
-      lastEventId: z.string().optional(), // For resume support
     }))
-    .output(eventIterator(z.object({
-      type: z.enum(['chunk', 'trajectory_event', 'complete', 'error']),
-      id: z.string(), // Event ID for resume
-      data: z.any(),
-    }))),
-
-  // List all conversations for the user
-  listConversations: oc
-    .route({ method: 'GET', path: '/conversations' })
-    .output(z.array(z.object({
-      id: z.string(),
-      title: z.string().nullable(),
-      messageCount: z.number(),
-      lastMessageAt: z.iso.datetime().nullable(),
-    }))),
+    .output(eventIterator(StreamEventSchema))
+    .errors(CommonPluginErrors),
 
   // Get a specific conversation with messages
   getConversation: oc
     .route({ method: 'GET', path: '/conversations/{id}' })
     .input(z.object({
       id: z.string(),
+      limit: z.number().int().min(1).max(200).default(100),
+      offset: z.number().int().min(0).default(0),
     }))
     .output(z.object({
       conversation: ConversationSchema,
       messages: z.array(MessageSchema),
-    })),
-
-  // ===========================================================================
-  // TRAJECTORIES - The event clock
-  // ===========================================================================
-
-  // Get trajectory details (the walk)
-  getTrajectory: oc
-    .route({ method: 'GET', path: '/trajectories/{id}' })
-    .input(z.object({
-      id: z.string(),
-    }))
-    .output(z.object({
-      trajectory: TrajectorySchema,
-      events: z.array(EventSchema),
-      entitiesTouched: z.array(EntitySchema),
-    })),
-
-  // List recent trajectories
-  listTrajectories: oc
-    .route({ method: 'GET', path: '/trajectories' })
-    .input(z.object({
-      limit: z.number().min(1).max(100).default(20),
-      conversationId: z.string().optional(),
-    }))
-    .output(z.array(TrajectorySchema)),
-
-  // ===========================================================================
-  // GRAPH - Emergent structure
-  // ===========================================================================
-
-  // Get graph data for visualization
-  getGraph: oc
-    .route({ method: 'GET', path: '/graph' })
-    .input(z.object({
-      centerEntityId: z.string().optional(),
-      depth: z.number().min(1).max(5).default(2),
-      minWeight: z.number().min(0).default(0),
-    }))
-    .output(z.object({
-      nodes: z.array(z.object({
-        id: z.string(),
-        name: z.string(),
-        entityType: z.string().nullable(),
-        touchCount: z.number(),
-      })),
-      edges: z.array(z.object({
-        id: z.string(),
-        source: z.string(),
-        target: z.string(),
-        relationshipType: z.string().nullable(),
-        weight: z.number(),
-      })),
-    })),
-
-  // Get entity details
-  getEntity: oc
-    .route({ method: 'GET', path: '/entities/{id}' })
-    .input(z.object({
-      id: z.string(),
-    }))
-    .output(z.object({
-      entity: EntitySchema.extend({
-        metadata: z.any().nullable(),
-        firstSeen: z.iso.datetime(),
-        lastSeen: z.iso.datetime(),
-      }),
-      connectedEntities: z.array(z.object({
-        entity: EntitySchema,
-        relationship: z.string().nullable(),
-        weight: z.number(),
-      })),
-      recentTrajectories: z.array(TrajectorySchema),
-    })),
-
-  // ===========================================================================
-  // SIMULATION - "What if" queries over graph structure
-  // ===========================================================================
-
-  // Graph Reasoner: Simulate outcomes from graph structure (world model)
-  simulate: oc
-    .route({ method: 'POST', path: '/simulate' })
-    .input(z.object({
-      entities: z.array(EntityInputSchema),
-    }))
-    .output(SimulationResultSchema),
-
-  // Graph Reasoner: Counterfactual analysis ("What if X instead of Y?")
-  counterfactual: oc
-    .route({ method: 'POST', path: '/counterfactual' })
-    .input(z.object({
-      baseEntities: z.array(EntityInputSchema),
-      change: z.object({
-        from: EntityInputSchema,
-        to: EntityInputSchema,
+      pagination: z.object({
+        limit: z.number(),
+        offset: z.number(),
+        hasMore: z.boolean(),
       }),
     }))
-    .output(z.object({
-      original: SimulationResultSchema,
-      alternative: SimulationResultSchema,
-      change: z.object({
-        from: EntityInputSchema,
-        to: EntityInputSchema,
-      }),
-      comparison: z.object({
-        outcomeShifts: z.array(z.object({
-          outcome: z.string(),
-          originalProbability: z.number(),
-          alternativeProbability: z.number(),
-          delta: z.number(),
-        })),
-        netEffect: z.enum(['positive', 'negative', 'neutral', 'uncertain']),
-        recommendation: z.string(),
-      }),
-    })),
-
-  // ===========================================================================
-  // LEGACY: Key-Value Store
-  // ===========================================================================
-
-  getValue: oc
-    .route({ method: 'GET', path: '/kv/{key}' })
-    .input(z.object({
-      key: z.string(),
-    }))
-    .output(z.object({
-      key: z.string(),
-      value: z.string(),
-      updatedAt: z.iso.datetime(),
-    })),
-
-  setValue: oc
-    .route({ method: 'POST', path: '/kv/{key}' })
-    .input(z.object({
-      key: z.string(),
-      value: z.string(),
-    }))
-    .output(z.object({
-      key: z.string(),
-      value: z.string(),
-      created: z.boolean(),
-    })),
+    .errors(CommonPluginErrors),
 });
 
 export type ContractType = typeof contract;

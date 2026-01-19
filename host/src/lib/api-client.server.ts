@@ -1,4 +1,4 @@
-import { createRouterClient, type RouterClient } from '@orpc/server';
+import { createRouterClient, type RouterClient } from 'every-plugin/orpc';
 import type { AppRouter } from '../routers';
 
 declare global {

@@ -14,7 +14,7 @@ Review the `ui/` package for quality, consistency, and best practices.
 ```
 ui/
 ├── src/
-│   ├── components/     # React components (chat, graph, simulate)
+│   ├── components/     # React components (chat)
 │   ├── routes/         # TanStack Router file-based routes
 │   ├── integrations/   # API client setup
 │   └── utils/          # Utilities (orpc client)
@@ -53,11 +53,11 @@ ui/
 ## Key Files to Check
 
 1. `src/routes/_layout/_authenticated/chat/index.tsx` - Main chat page
-2. `src/components/chat/ChatInput.tsx` - Chat input component
-3. `src/components/chat/ChatMessage.tsx` - Message display
-4. `src/components/graph/GraphPanel.tsx` - React Flow visualization
-5. `src/components/simulate/SimulatePanel.tsx` - What-if modal
-6. `src/utils/orpc.ts` - API client setup
+2. `src/components/chat/ChatPage.tsx` - Chat page component
+3. `src/components/chat/ChatInput.tsx` - Chat input component
+4. `src/components/chat/ChatMessage.tsx` - Message display
+5. `src/utils/orpc.ts` - API client setup
+6. `src/utils/stream.ts` - Streaming utilities
 
 ## Output Format
 

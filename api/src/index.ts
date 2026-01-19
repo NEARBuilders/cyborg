@@ -1,96 +1,105 @@
-import { eq } from 'drizzle-orm';
-import { createPlugin } from 'every-plugin';
-import { Effect } from 'every-plugin/effect';
-import { ORPCError } from 'every-plugin/orpc';
-import { z } from 'every-plugin/zod';
-import { contract } from './contract';
-import { kvStore } from './db/schema';
-import { Database, DatabaseLive } from './store';
-import {
-  TrajectoryEngine,
-  EmbeddingService,
-  AgentService,
-  GraphService,
-  GraphReasoner,
-} from './services';
+import { createPlugin } from "every-plugin";
+import { Effect } from "every-plugin/effect";
+import type { Scope } from "every-plugin/effect";
+import { ORPCError } from "every-plugin/orpc";
+import { z } from "every-plugin/zod";
+import { and, eq, count, desc } from "drizzle-orm";
+import { contract } from "./contract";
+import * as schema from "./db/schema";
+import { DatabaseContext, DatabaseLive } from "./db";
+import { AgentService, AgentContext, AgentLive } from "./services";
+import type { Database as DrizzleDatabase } from "./db";
 
+type PluginDeps = {
+  db: DrizzleDatabase;
+  agentService: AgentService | null;
+};
 export default createPlugin({
   variables: z.object({
-    NEAR_AI_MODEL: z.string().default('deepseek-ai/DeepSeek-V3.1'),
+    NEAR_AI_MODEL: z.string().default("deepseek-ai/DeepSeek-V3.1"),
+    NEAR_AI_BASE_URL: z.string().default("https://cloud-api.near.ai/v1"),
   }),
 
   secrets: z.object({
-    API_DATABASE_URL: z.string().default('file:./api.db'),
+    API_DATABASE_URL: z.string().default("file:./api.db"),
     API_DATABASE_AUTH_TOKEN: z.string().optional(),
     NEAR_AI_API_KEY: z.string().optional(),
-    NEAR_AI_BASE_URL: z.string().default('https://cloud-api.near.ai/v1'),
   }),
 
   context: z.object({
     nearAccountId: z.string().optional(),
+    role: z.string().optional(),
   }),
 
   contract,
 
-  initialize: (config) =>
-    Effect.gen(function* () {
-      const dbLayer = DatabaseLive(config.secrets.API_DATABASE_URL, config.secrets.API_DATABASE_AUTH_TOKEN);
-      const db = yield* Effect.provide(Database, dbLayer);
+  initialize: (config): Effect.Effect<PluginDeps, Error, Scope.Scope> => {
+    return Effect.gen(function* () {
+      const dbLayer = DatabaseLive(
+        config.secrets.API_DATABASE_URL,
+        config.secrets.API_DATABASE_AUTH_TOKEN
+      );
+      const db = yield* Effect.provide(DatabaseContext, dbLayer);
 
-      // Initialize services
-      const trajectoryEngine = new TrajectoryEngine(db);
-      const embeddings = new EmbeddingService(db);
-      const graphService = new GraphService(db);
-      const graphReasoner = new GraphReasoner(db);
+      // Initialize agent service using Effect Layer
+      const agentLayer = AgentLive(db, {
+        apiKey: config.secrets.NEAR_AI_API_KEY,
+        baseUrl: config.variables.NEAR_AI_BASE_URL,
+        model: config.variables.NEAR_AI_MODEL,
+      });
+      const agentService = yield* Effect.provide(AgentContext, agentLayer);
 
-      // Initialize agent service if API key is provided
-      let agentService: AgentService | null = null;
-      if (config.secrets.NEAR_AI_API_KEY) {
-        agentService = new AgentService(
-          db,
-          {
-            apiKey: config.secrets.NEAR_AI_API_KEY,
-            baseUrl: config.secrets.NEAR_AI_BASE_URL,
-            model: config.variables.NEAR_AI_MODEL,
-          },
-          graphReasoner  // Pass graphReasoner as third argument
-        );
-        console.log('[API] Agent service initialized with NEAR AI + GraphReasoner');
-      } else {
-        console.log('[API] NEAR_AI_API_KEY not provided - chat will return mock responses');
-      }
-
-      console.log('[API] Plugin initialized');
+      console.log("[API] Plugin initialized");
 
       return {
         db,
-        trajectoryEngine,
-        embeddings,
-        graphService,
-        graphReasoner,
         agentService,
       };
-    }),
+    });
+  },
 
   shutdown: (_context) =>
     Effect.gen(function* () {
-      yield* Effect.promise(async () => console.log('[API] Plugin shutdown'));
+      yield* Effect.promise(async () => console.log("[API] Plugin shutdown"));
     }),
 
   createRouter: (context, builder) => {
-    const { db, trajectoryEngine, embeddings, graphService, graphReasoner, agentService } = context;
+    const { agentService, db } = context;
 
     const requireAuth = builder.middleware(async ({ context, next }) => {
       if (!context.nearAccountId) {
-        throw new ORPCError('UNAUTHORIZED', {
-          message: 'Authentication required',
-          data: { authType: 'nearAccountId' }
+        throw new ORPCError("UNAUTHORIZED", {
+          message: "Authentication required",
+          data: { authType: "nearAccountId" },
         });
       }
       return next({
         context: {
+          ...context,
           nearAccountId: context.nearAccountId,
-        }
+          db,
+        },
+      });
+    });
+
+    const requireAdmin = builder.middleware(async ({ context, next }) => {
+      if (!context.nearAccountId) {
+        throw new ORPCError("UNAUTHORIZED", {
+          message: "Authentication required",
+          data: { authType: "nearAccountId" },
+        });
+      }
+      if (context.role !== "admin") {
+        throw new ORPCError("FORBIDDEN", {
+          message: "Admin role required",
+        });
+      }
+      return next({
+        context: {
+          ...context,
+          nearAccountId: context.nearAccountId,
+          db,
+        },
       });
     });
 
@@ -101,7 +110,7 @@ export default createPlugin({
 
       ping: builder.ping.handler(async () => {
         return {
-          status: 'ok' as const,
+          status: "ok" as const,
           timestamp: new Date().toISOString(),
         };
       }),
@@ -110,9 +119,110 @@ export default createPlugin({
         .use(requireAuth)
         .handler(async ({ context }) => {
           return {
-            message: 'This is a protected endpoint',
+            message: "This is a protected endpoint",
             accountId: context.nearAccountId,
             timestamp: new Date().toISOString(),
+          };
+        }),
+
+      // ===========================================================================
+      // ADMIN
+      // ===========================================================================
+
+      adminStats: builder.adminStats
+        .use(requireAdmin)
+        .handler(async ({ context }) => {
+          // Count conversations
+          const [conversationCount] = await context.db
+            .select({ value: count() })
+            .from(schema.conversation);
+
+          // Count messages
+          const [messageCount] = await context.db
+            .select({ value: count() })
+            .from(schema.message);
+
+          // Count KV entries
+          const [kvCount] = await context.db
+            .select({ value: count() })
+            .from(schema.kvStore);
+
+          return {
+            conversations: conversationCount?.value ?? 0,
+            messages: messageCount?.value ?? 0,
+            kvEntries: kvCount?.value ?? 0,
+          };
+        }),
+
+      // ===========================================================================
+      // KEY VALUE
+      // ===========================================================================
+
+      getValue: builder.getValue
+        .use(requireAuth)
+        .handler(async ({ input, context }) => {
+          const entry = await context.db.query.kvStore.findFirst({
+            where: and(
+              eq(schema.kvStore.key, input.key),
+              eq(schema.kvStore.nearAccountId, context.nearAccountId)
+            ),
+          });
+
+          if (!entry) {
+            throw new ORPCError("NOT_FOUND", {
+              message: "Key not found",
+            });
+          }
+
+          return {
+            key: entry.key,
+            value: entry.value,
+            createdAt: new Date(entry.createdAt).toISOString(),
+            updatedAt: new Date(entry.updatedAt).toISOString(),
+          };
+        }),
+
+      setValue: builder.setValue
+        .use(requireAuth)
+        .handler(async ({ input, context }) => {
+          const now = new Date();
+
+          await context.db
+            .insert(schema.kvStore)
+            .values({
+              key: input.key,
+              value: input.value,
+              nearAccountId: context.nearAccountId,
+              createdAt: now,
+              updatedAt: now,
+            })
+            .onConflictDoUpdate({
+              target: [schema.kvStore.key, schema.kvStore.nearAccountId],
+              set: {
+                value: input.value,
+                updatedAt: now,
+              },
+            });
+
+          // Fetch the actual stored entry to get correct timestamps
+          const entry = await context.db.query.kvStore.findFirst({
+            where: and(
+              eq(schema.kvStore.key, input.key),
+              eq(schema.kvStore.nearAccountId, context.nearAccountId)
+            ),
+          });
+
+          if (!entry) {
+            throw new ORPCError("INTERNAL_SERVER_ERROR", {
+              message: "Failed to persist key value entry",
+            });
+          }
+
+          return {
+            key: entry.key,
+            value: entry.value,
+            createdAt: new Date(entry.createdAt).toISOString(),
+            updatedAt: new Date(entry.updatedAt).toISOString(),
           };
         }),
 
@@ -124,30 +234,18 @@ export default createPlugin({
         .use(requireAuth)
         .handler(async ({ input, context }) => {
           if (!agentService) {
-            // Return mock response if no API key
-            const mockResponse = {
-              conversationId: 'mock-conv-' + Date.now(),
-              message: {
-                id: 'mock-msg-' + Date.now(),
-                role: 'assistant' as const,
-                content: `[Mock Response] You asked: "${input.message}". Configure NEAR_AI_API_KEY to enable real AI responses.`,
-                trajectoryId: null,
-                createdAt: new Date().toISOString(),
-              },
-              trajectory: {
-                id: 'mock-trajectory',
-                entitiesDiscovered: [],
-                entitiesTouched: [],
-                edgesTraversed: [],
-              },
-            };
-            return mockResponse;
+            throw new ORPCError("SERVICE_UNAVAILABLE", {
+              message: "NEAR AI not connected. Configure NEAR_AI_API_KEY.",
+              data: { retryAfter: 0 }
+            });
           }
 
-          return agentService.processMessage(
-            context.nearAccountId,
-            input.message,
-            input.conversationId
+          return await Effect.runPromise(
+            agentService.processMessage(
+              context.nearAccountId,
+              input.message,
+              input.conversationId
+            )
           );
         }),
 
@@ -155,26 +253,26 @@ export default createPlugin({
         .use(requireAuth)
         .handler(async function* ({ input, context, signal }) {
           if (!agentService) {
-            // Mock streaming response if no API key
-            yield {
-              type: 'error' as const,
-              id: 'mock-error-' + Date.now(),
-              data: {
-                message: 'NEAR_AI_API_KEY not configured. Please configure to enable AI responses.',
-              },
-            };
-            return;
+            throw new ORPCError("SERVICE_UNAVAILABLE", {
+              message: "NEAR AI not connected. Configure NEAR_AI_API_KEY.",
+              data: { retryAfter: 0 }
+            });
           }
 
-          // Use the streaming method from agent service
-          for await (const event of agentService.processMessageStream(
-            context.nearAccountId,
-            input.message,
-            input.conversationId
-          )) {
+          // Get the async generator from the Effect
+          const generator = await Effect.runPromise(
+            agentService.processMessageStream(
+              context.nearAccountId,
+              input.message,
+              input.conversationId
+            )
+          );
+
+          // Stream events from the generator
+          for await (const event of generator) {
             // Check if client has disconnected
             if (signal?.aborted) {
-              console.log('[API] Client disconnected, stopping stream');
+              console.log("[API] Client disconnected, stopping stream");
               break;
             }
 
@@ -182,202 +280,57 @@ export default createPlugin({
           }
         }),
 
-      listConversations: builder.listConversations
-        .use(requireAuth)
-        .handler(async ({ context }) => {
-          if (!agentService) {
-            return [];
-          }
-          return agentService.listConversations(context.nearAccountId);
-        }),
-
       getConversation: builder.getConversation
         .use(requireAuth)
-        .handler(async ({ input }) => {
-          if (!agentService) {
-            throw new ORPCError('NOT_FOUND', { message: 'Conversation not found' });
-          }
-          const result = await agentService.getConversation(input.id);
-          if (!result) {
-            throw new ORPCError('NOT_FOUND', { message: 'Conversation not found' });
-          }
-          return result;
-        }),
-
-      // ===========================================================================
-      // TRAJECTORIES
-      // ===========================================================================
-
-      getTrajectory: builder.getTrajectory
-        .use(requireAuth)
-        .handler(async ({ input }) => {
-          const result = await trajectoryEngine.getTrajectory(input.id);
-          if (!result) {
-            throw new ORPCError('NOT_FOUND', { message: 'Trajectory not found' });
-          }
-          return {
-            trajectory: {
-              id: result.trajectory.id,
-              inputText: result.trajectory.inputText,
-              summary: result.trajectory.summary,
-              startedAt: result.trajectory.startedAt.toISOString(),
-              completedAt: result.trajectory.completedAt?.toISOString() ?? null,
-            },
-            events: result.events.map(e => ({
-              id: e.id,
-              sequenceNum: e.sequenceNum,
-              timestamp: e.timestamp.toISOString(),
-              eventType: e.eventType,
-              entityId: e.entityId,
-              data: e.data,
-            })),
-            entitiesTouched: result.entitiesTouched,
-          };
-        }),
-
-      listTrajectories: builder.listTrajectories
-        .use(requireAuth)
         .handler(async ({ input, context }) => {
-          const trajectories = await trajectoryEngine.listTrajectories(
-            context.nearAccountId,
-            input.limit,
-            input.conversationId
-          );
-          return trajectories.map(t => ({
-            id: t.id,
-            inputText: t.inputText,
-            summary: t.summary,
-            startedAt: t.startedAt.toISOString(),
-            completedAt: t.completedAt?.toISOString() ?? null,
-          }));
-        }),
-
-      // ===========================================================================
-      // GRAPH
-      // ===========================================================================
-
-      getGraph: builder.getGraph
-        .use(requireAuth)
-        .handler(async ({ input, context }) => {
-          const graph = await graphService.getGraph(context.nearAccountId, {
-            centerEntityId: input.centerEntityId,
-            depth: input.depth,
-            minWeight: input.minWeight,
+          // Access DB directly - no AI service needed for reading conversation history
+          const conversation = await context.db.query.conversation.findFirst({
+            where: eq(schema.conversation.id, input.id),
           });
+
+          if (!conversation) {
+            throw new ORPCError("NOT_FOUND", {
+              message: "Conversation not found",
+            });
+          }
+
+          // Verify ownership
+          if (conversation.nearAccountId !== context.nearAccountId) {
+            throw new ORPCError("FORBIDDEN", { message: "Access denied" });
+          }
+
+          // Fetch limit + 1 to check if there are more messages
+          const messages = await context.db.query.message.findMany({
+            where: eq(schema.message.conversationId, input.id),
+            orderBy: [desc(schema.message.createdAt)],
+            limit: input.limit + 1,
+            offset: input.offset,
+          });
+
+          const hasMore = messages.length > input.limit;
+          const messagesToReturn = hasMore ? messages.slice(0, input.limit) : messages;
+
           return {
-            nodes: graph.nodes,
-            edges: graph.edges.map(e => ({
-              id: e.id,
-              source: e.source,
-              target: e.target,
-              relationshipType: e.relationshipType,
-              weight: e.weight,
+            conversation: {
+              id: conversation.id,
+              title: conversation.title,
+              nearAccountId: conversation.nearAccountId,
+              createdAt: conversation.createdAt.toISOString(),
+              updatedAt: conversation.updatedAt.toISOString(),
+            },
+            messages: messagesToReturn.reverse().map((msg) => ({
+              id: msg.id,
+              role: msg.role,
+              content: msg.content,
+              createdAt: msg.createdAt.toISOString(),
             })),
+            pagination: {
+              limit: input.limit,
+              offset: input.offset,
+              hasMore,
+            },
           };
         }),
-
-      getEntity: builder.getEntity
-        .use(requireAuth)
-        .handler(async ({ input, context }) => {
-          const result = await graphService.getEntity(context.nearAccountId, input.id);
-          if (!result) {
-            throw new ORPCError('NOT_FOUND', { message: 'Entity not found' });
-          }
-          return result;
-        }),
-
-      // ===========================================================================
-      // SIMULATION - Graph Reasoner (world model inference)
-      // ===========================================================================
-
-      simulate: builder.simulate
-        .use(requireAuth)
-        .handler(async ({ input }) => {
-          return graphReasoner.simulate(input.entities);
-        }),
-
-      counterfactual: builder.counterfactual
-        .use(requireAuth)
-        .handler(async ({ input }) => {
-          return graphReasoner.counterfactual(input.baseEntities, input.change);
-        }),
-
-      // ===========================================================================
-      // LEGACY: Key-Value Store
-      // ===========================================================================
-
-      getValue: builder.getValue
-        .use(requireAuth)
-        .handler(async ({ input, context }) => {
-          const [record] = await db
-            .select()
-            .from(kvStore)
-            .where(eq(kvStore.key, input.key))
-            .limit(1);
-
-          if (!record) {
-            throw new ORPCError('NOT_FOUND', {
-              message: 'Key not found',
-            });
-          }
-
-          if (record.nearAccountId !== context.nearAccountId) {
-            throw new ORPCError('FORBIDDEN', {
-              message: 'Access denied',
-            });
-          }
-
-          return {
-            key: record.key,
-            value: record.value,
-            updatedAt: record.updatedAt.toISOString(),
-          };
-        }),
-
-      setValue: builder.setValue
-        .use(requireAuth)
-        .handler(async ({ input, context }) => {
-          const now = new Date();
-
-          const [existing] = await db
-            .select()
-            .from(kvStore)
-            .where(eq(kvStore.key, input.key))
-            .limit(1);
-
-          let created = false;
-
-          if (existing) {
-            if (existing.nearAccountId !== context.nearAccountId) {
-              throw new ORPCError('FORBIDDEN', {
-                message: 'Access denied',
-              });
-            }
-
-            await db
-              .update(kvStore)
-              .set({
-                value: input.value,
-                updatedAt: now,
-              })
-              .where(eq(kvStore.key, input.key));
-          } else {
-            await db.insert(kvStore).values({
-              key: input.key,
-              value: input.value,
-              nearAccountId: context.nearAccountId,
-              createdAt: now,
-              updatedAt: now,
-            });
-            created = true;
-          }
-
-          return {
-            key: input.key,
-            value: input.value,
-            created,
-          };
-        }),
-    }
+    };
   },
 });

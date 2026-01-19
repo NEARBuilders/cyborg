@@ -1,22 +1,47 @@
-# Module Federation Monorepo
+# NEAR AI Foundation
 
-A production-ready Module Federation monorepo demonstrating every-plugin architecture, runtime-loaded configuration, and NEAR Protocol integration.
+## Module Federation Monorepo
 
-Built with React, Hono.js, oRPC, Better-Auth, and Module Federation.
+A production-ready Module Federation monorepo featuring every-plugin architecture, runtime-loaded configuration, better-near-auth sessions, NEAR AI Cloud integration with streaming chat, and per-user key-value storage.
 
-## Quick Start
+Built with React, Hono.js, oRPC, Better-Auth, Module Federation, and NEAR AI Cloud.
+
+## First Time Setup
 
 ```bash
-bun install       # Install dependencies
-bun db:migrate    # Run database migrations
-bun dev           # Start all services (API, UI, Host)
+# 1. Clone and install
+git clone <repo> && cd mythic
+bun install
+
+# 2. Create environment files
+cp host/.env.example host/.env
+cp api/.env.example api/.env
+
+# 3. Initialize database
+bun db:migrate
+
+# 4. Start development server
+bun dev
+
+# 5. Open http://localhost:3001
 ```
 
-Visit http://localhost:3001 to see the application.
+> **Note:** In development, `BETTER_AUTH_SECRET` is auto-generated if missing.
+> For production, generate one with: `openssl rand -hex 32`
+
+### Optional: Enable AI Chat
+
+AI features work without configuration but return "service unavailable".
+To enable NEAR AI chat:
+
+1. Get an API key from [cloud.near.ai](https://cloud.near.ai)
+2. Add to `api/.env`: `NEAR_AI_API_KEY=your_key_here`
+3. Restart with `bun dev`
 
 ## Documentation
 
-- **[LLM.txt](./LLM.txt)** - Technical guide for LLMs and developers (architecture, patterns, examples)
+- **[CLAUDE.md](./CLAUDE.md)** - Quick reference for Claude Code and AI assistants
+- **[LLM.txt](./LLM.txt)** - Comprehensive technical guide (architecture, patterns, examples)
 - **[CONTRIBUTING.md](./CONTRIBUTING.md)** - Contribution guidelines and development workflow
 - **[API README](./api/README.md)** - API plugin documentation
 - **[UI README](./ui/README.md)** - Frontend documentation
@@ -46,6 +71,10 @@ Visit http://localhost:3001 to see the application.
 ```
 
 **Key Features:**
+
+- ✅ **AI Chat** - Streaming chat with NEAR AI Cloud (OpenAI-compatible)
+- ✅ **NEAR Authentication** - Wallet-based sign-in with Better-Auth
+- ✅ **Key-Value Storage** - Per-user persistent storage demo
 - ✅ **Runtime Configuration** - All URLs loaded from `bos.config.json` (no rebuild needed!)
 - ✅ **Independent Deployment** - UI, API, and Host deploy separately
 - ✅ **Type Safety** - End-to-end with oRPC contracts
@@ -56,16 +85,19 @@ See [LLM.txt](./LLM.txt) for complete architecture details.
 ## Tech Stack
 
 **Frontend:**
+
 - React 19 + TanStack Router (file-based) + TanStack Query
 - Tailwind CSS v4 + shadcn/ui components
 - Module Federation for microfrontend architecture
 
 **Backend:**
+
 - Hono.js server + oRPC (type-safe RPC + OpenAPI)
 - every-plugin architecture for modular APIs
 - Effect-TS for service composition
 
 **Database & Auth:**
+
 - SQLite (libsql) + Drizzle ORM
 - Better-Auth with NEAR Protocol support
 
@@ -99,9 +131,51 @@ All runtime configuration lives in `bos.config.json`:
 ```
 
 **Benefits:**
+
 - Switch environments via `NODE_ENV` (no rebuild)
 - Update CDN URLs without code changes
 - Template injection for secrets
+
+## Rate Limiting
+
+Built-in rate limiting protects against abuse:
+
+| Endpoint | Limit | Window |
+|----------|-------|--------|
+| Chat/AI | 20 requests | 1 minute |
+| Key-Value | 100 requests | 1 minute |
+| Auth | 10 requests | 1 minute |
+| Global | 1000 requests | 1 minute |
+
+Rate limit headers included in responses:
+- `X-RateLimit-Limit`: Maximum requests allowed
+- `X-RateLimit-Remaining`: Requests remaining
+- `X-RateLimit-Reset`: Unix timestamp when window resets
+
+### Production: Redis-backed Rate Limiting
+
+For multi-instance deployments, swap the in-memory store for Redis. See `host/src/lib/rate-limit.ts` for implementation notes.
+
+## Health Checks
+
+Two health endpoints are available:
+
+- `GET /health` - Basic liveness check (always returns 200 if server is running)
+- `GET /health/ready` - Readiness check with dependency status
+
+Example readiness response:
+```json
+{
+  "status": "ready",
+  "checks": {
+    "database": true,
+    "ai": true
+  },
+  "timestamp": "2025-01-17T12:00:00.000Z"
+}
+```
+
+Use `/health/ready` for load balancer health checks.
 
 ## Available Scripts
 
@@ -128,6 +202,46 @@ bun test             # Run all tests
 bun typecheck        # Type checking
 ```
 
+## Troubleshooting
+
+### Port Already in Use
+
+```bash
+# Kill processes on default ports
+lsof -ti:3001 | xargs kill -9  # Host
+lsof -ti:3002 | xargs kill -9  # UI
+lsof -ti:3014 | xargs kill -9  # API plugin
+```
+
+### Database Reset
+
+```bash
+rm api/api.db host/host.db
+bun db:migrate
+```
+
+### Module Federation Errors
+
+```bash
+rm -rf */dist */.rsbuild
+bun build
+```
+
+### CORS Errors in Browser
+
+Ensure `CORS_ORIGIN` in `host/.env` includes your frontend URL:
+
+```bash
+CORS_ORIGIN=http://localhost:3001,http://localhost:3002
+```
+
+### "authToken required" Error
+
+This shouldn't happen with local SQLite. Check that:
+
+- `API_DATABASE_URL` starts with `file:./`
+- `API_DATABASE_AUTH_TOKEN` is empty (not set), not an empty string
+
 ## Development Workflow
 
 1. **Make changes** to any workspace (ui/, api/, host/)
@@ -138,6 +252,52 @@ bun typecheck        # Type checking
    - Host automatically loads new versions!
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed development workflow.
+
+## Migrating from Template
+
+This project evolved from the [every-plugin template](https://github.com/near-everything/every-plugin). Key customizations include:
+
+### AI Chat Integration
+
+- **AgentService** in `api/src/services/agent.ts` - AI-powered chat with streaming
+- **NEAR AI Cloud** integration (OpenAI-compatible API)
+- **Database schema** - `conversation` and `message` tables with optimized indices
+- **Streaming endpoints** - `/chat` and `/chat/stream` with SSE
+
+### Authentication & Roles
+
+- **Better-Auth** with admin plugin (`host/src/lib/auth.ts`)
+- **User roles** - "user" (default) and "admin"
+- **Admin routes** - Protected via TanStack Router (`ui/src/routes/_layout/_authenticated/_admin.tsx`)
+- **Role management** - Promote users via: `bun run promote-admin <near-account-id>`
+
+### Database
+
+- **Schema** - `api/src/db/schema.ts` (conversations, messages, kvStore)
+- **Migrations** - Drizzle Kit workflow (generate → push → migrate)
+- **Indices** - Optimized for conversation and message queries
+- **Per-user isolation** - Composite primary key on kvStore `(key, nearAccountId)`
+
+### Architectural Differences
+
+| Template             | Cyborg                                |
+| -------------------- | ------------------------------------- |
+| Simple KV store demo | Full chat application                 |
+| No user roles        | Admin role support                    |
+| Global KV namespace  | Per-user KV isolation                 |
+| No AI integration    | NEAR AI Cloud streaming chat          |
+| Basic Effect-TS      | Consistent Layer pattern for services |
+
+### Building Your Own
+
+To customize this template for your use case:
+
+1. **Define your domain** - Replace chat/conversation logic with your domain models
+2. **Update schema** - Modify `api/src/db/schema.ts` with your tables
+3. **Add services** - Create services in `api/src/services/` following Effect-TS Layer patterns
+4. **Update contract** - Define API routes in `api/src/contract.ts`
+5. **UI routes** - Add pages in `ui/src/routes/` with TanStack Router
+6. **Configuration** - Update `bos.config.json` with your deployment URLs
 
 ## Related Projects
 
