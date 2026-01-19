@@ -2,15 +2,15 @@
 
 ## Module Federation Monorepo
 
-A production-ready Module Federation monorepo featuring every-plugin architecture, runtime-loaded configuration, better-near-auth sessions, NEAR AI Cloud integration with streaming chat, and per-user key-value storage.
+A Module Federation monorepo featuring every-plugin architecture, runtime-loaded configuration, better-near-auth sessions, NEAR AI Cloud API integration with streaming chat, and per-user key-value storage.
 
 Built with React, Hono.js, oRPC, Better-Auth, Module Federation, and NEAR AI Cloud.
 
-## First Time Setup
+## Quick Start
 
 ```bash
 # 1. Clone and install
-git clone https://github.com/NEARBuilders/cyborg.git && cd mythic
+git clone https://github.com/NEARBuilders/cyborg.git && cd cyborg
 bun install
 
 # 2. Create environment files
@@ -22,17 +22,11 @@ bun db:migrate
 
 # 4. Start development server
 bun dev
-
-# 5. Open http://localhost:3001
 ```
 
-> **Note:** In development, `BETTER_AUTH_SECRET` is auto-generated if missing.
-> For production, generate one with: `openssl rand -hex 32`
+Visit [http://localhost:3001](http://localhost:3001) to see the application.
 
-### Optional: Enable AI Chat
-
-AI features work without configuration but return "service unavailable".
-To enable NEAR AI chat:
+### Enable AI Chat
 
 1. Get an API key from [cloud.near.ai](https://cloud.near.ai)
 2. Add to `api/.env`: `NEAR_AI_API_KEY=your_key_here`
@@ -72,10 +66,10 @@ To enable NEAR AI chat:
 
 **Key Features:**
 
-- ✅ **AI Chat** - Streaming chat with NEAR AI Cloud (OpenAI-compatible)
+- ✅ **AI Chat** - Streaming chat built on NEAR AI Cloud (OpenAI-compatible)
 - ✅ **NEAR Authentication** - Wallet-based sign-in with Better-Auth
 - ✅ **Key-Value Storage** - Per-user persistent storage demo
-- ✅ **Runtime Configuration** - All URLs loaded from `bos.config.json` (no rebuild needed!)
+- ✅ **Runtime Configuration** - All URLs loaded from `bos.config.json`
 - ✅ **Independent Deployment** - UI, API, and Host deploy separately
 - ✅ **Type Safety** - End-to-end with oRPC contracts
 - ✅ **CDN-Ready** - Module Federation with automatic CDN deployment
@@ -144,7 +138,7 @@ Built-in rate limiting protects against abuse:
 | --------- | ------------- | -------- |
 | Chat/AI   | 20 requests   | 1 minute |
 | Key-Value | 100 requests  | 1 minute |
-| Auth      | 10 requests   | 1 minute |
+| Auth      | 100 requests  | 1 minute |
 | Global    | 1000 requests | 1 minute |
 
 Rate limit headers included in responses:
@@ -152,10 +146,6 @@ Rate limit headers included in responses:
 - `X-RateLimit-Limit`: Maximum requests allowed
 - `X-RateLimit-Remaining`: Requests remaining
 - `X-RateLimit-Reset`: Unix timestamp when window resets
-
-### Production: Redis-backed Rate Limiting
-
-For multi-instance deployments, swap the in-memory store for Redis. See `host/src/lib/rate-limit.ts` for implementation notes.
 
 ## Health Checks
 
@@ -204,46 +194,6 @@ bun test             # Run all tests
 bun typecheck        # Type checking
 ```
 
-## Troubleshooting
-
-### Port Already in Use
-
-```bash
-# Kill processes on default ports
-lsof -ti:3001 | xargs kill -9  # Host
-lsof -ti:3002 | xargs kill -9  # UI
-lsof -ti:3014 | xargs kill -9  # API plugin
-```
-
-### Database Reset
-
-```bash
-rm api/api.db host/host.db
-bun db:migrate
-```
-
-### Module Federation Errors
-
-```bash
-rm -rf */dist */.rsbuild
-bun build
-```
-
-### CORS Errors in Browser
-
-Ensure `CORS_ORIGIN` in `host/.env` includes your frontend URL:
-
-```bash
-CORS_ORIGIN=http://localhost:3001,http://localhost:3002
-```
-
-### "authToken required" Error
-
-This shouldn't happen with local SQLite. Check that:
-
-- `API_DATABASE_URL` starts with `file:./`
-- `API_DATABASE_AUTH_TOKEN` is empty (not set), not an empty string
-
 ## Development Workflow
 
 1. **Make changes** to any workspace (ui/, api/, host/)
@@ -279,16 +229,6 @@ This project evolved from the [every-plugin template](https://github.com/near-ev
 - **Migrations** - Drizzle Kit workflow (generate → push → migrate)
 - **Indices** - Optimized for conversation and message queries
 - **Per-user isolation** - Composite primary key on kvStore `(key, nearAccountId)`
-
-### Architectural Differences
-
-| Template             | Cyborg                                |
-| -------------------- | ------------------------------------- |
-| Simple KV store demo | Full chat application                 |
-| No user roles        | Admin role support                    |
-| Global KV namespace  | Per-user KV isolation                 |
-| No AI integration    | NEAR AI Cloud streaming chat          |
-| Basic Effect-TS      | Consistent Layer pattern for services |
 
 ### Building Your Own
 
