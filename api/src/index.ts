@@ -7,17 +7,21 @@ import { and, eq, count, desc } from "drizzle-orm";
 import { contract } from "./contract";
 import * as schema from "./db/schema";
 import { DatabaseContext, DatabaseLive } from "./db";
-import { AgentService, AgentContext, AgentLive } from "./services";
+import { AgentService, AgentContext, AgentLive, NearService, NearContext, NearLive } from "./services";
 import type { Database as DrizzleDatabase } from "./db";
 
 type PluginDeps = {
   db: DrizzleDatabase;
   agentService: AgentService | null;
+  nearService: NearService | null;
 };
 export default createPlugin({
   variables: z.object({
     NEAR_AI_MODEL: z.string().default("deepseek-ai/DeepSeek-V3.1"),
     NEAR_AI_BASE_URL: z.string().default("https://cloud-api.near.ai/v1"),
+    NEAR_RPC_URL: z.string().default("https://rpc.mainnet.near.org"),
+    NEAR_LEGION_CONTRACT: z.string().default("nearlegion.nfts.tg"),
+    NEAR_INITIATE_CONTRACT: z.string().default("initiate.nearlegion.near"),
   }),
 
   secrets: z.object({
@@ -41,12 +45,20 @@ export default createPlugin({
       );
       const db = yield* Effect.provide(DatabaseContext, dbLayer);
 
-      // Initialize agent service using Effect Layer
+      // Initialize NEAR service
+      const nearLayer = NearLive(db, {
+        rpcUrl: config.variables.NEAR_RPC_URL,
+        contractId: config.variables.NEAR_LEGION_CONTRACT,
+        initiateContractId: config.variables.NEAR_INITIATE_CONTRACT,
+      });
+      const nearService = yield* Effect.provide(NearContext, nearLayer);
+
+      // Initialize agent service with NEAR service
       const agentLayer = AgentLive(db, {
         apiKey: config.secrets.NEAR_AI_API_KEY,
         baseUrl: config.variables.NEAR_AI_BASE_URL,
         model: config.variables.NEAR_AI_MODEL,
-      });
+      }, nearService);
       const agentService = yield* Effect.provide(AgentContext, agentLayer);
 
       console.log("[API] Plugin initialized");
@@ -54,6 +66,7 @@ export default createPlugin({
       return {
         db,
         agentService,
+        nearService,
       };
     });
   },
@@ -64,7 +77,7 @@ export default createPlugin({
     }),
 
   createRouter: (context, builder) => {
-    const { agentService, db } = context;
+    const { agentService, db, nearService } = context;
 
     const requireAuth = builder.middleware(async ({ context, next }) => {
       if (!context.nearAccountId) {
@@ -152,6 +165,47 @@ export default createPlugin({
             messages: messageCount?.value ?? 0,
             kvEntries: kvCount?.value ?? 0,
           };
+        }),
+
+      // ===========================================================================
+      // USER
+      // ===========================================================================
+
+      getUserRank: builder.getUserRank
+        .use(requireAuth)
+        .handler(async ({ context }) => {
+          if (!nearService) {
+            return {
+              rank: null,
+              tokenId: null,
+              hasNft: false,
+              hasInitiate: false,
+            };
+          }
+
+          try {
+            // Check both initiate token and rank skillcapes
+            const [hasInitiate, rankData] = await Promise.all([
+              nearService.hasInitiateToken(context.nearAccountId),
+              nearService.getUserRank(context.nearAccountId),
+            ]);
+
+            return {
+              rank: rankData?.rank ?? null,
+              tokenId: rankData?.tokenId ?? null,
+              hasNft: rankData !== null,
+              hasInitiate,
+            };
+          } catch (error) {
+            console.error("[API] Error fetching user rank:", error);
+            // Graceful fallback
+            return {
+              rank: null,
+              tokenId: null,
+              hasNft: false,
+              hasInitiate: false,
+            };
+          }
         }),
 
       // ===========================================================================

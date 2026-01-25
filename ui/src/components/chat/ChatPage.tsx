@@ -13,6 +13,7 @@ import {
 } from "../../utils/stream";
 import { ChatMessage } from "../../components/chat/ChatMessage";
 import { ChatInput } from "../../components/chat/ChatInput";
+import { RankBadge } from "../../components/chat/RankBadge";
 
 interface Message {
   id: string;
@@ -189,6 +190,7 @@ export function ChatPage() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          <RankBadge />
           <button
             onClick={handleNewConversation}
             className="px-3 py-1.5 text-xs font-mono border border-border hover:border-primary/50 bg-muted/20 hover:bg-muted/40 transition-all rounded-lg"

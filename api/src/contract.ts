@@ -120,6 +120,20 @@ export const contract = oc.router({
     .errors(CommonPluginErrors),
 
   // ===========================================================================
+  // USER
+  // ===========================================================================
+
+  getUserRank: oc
+    .route({ method: 'GET', path: '/user/rank' })
+    .output(z.object({
+      rank: z.enum(['legendary', 'epic', 'rare', 'common']).nullable(),
+      tokenId: z.string().nullable(),
+      hasNft: z.boolean(),
+      hasInitiate: z.boolean(),
+    }))
+    .errors(CommonPluginErrors),
+
+  // ===========================================================================
   // CHAT
   // ===========================================================================
 

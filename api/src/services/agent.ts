@@ -11,6 +11,7 @@ import { ORPCError } from "every-plugin/orpc";
 import { Context, Layer, Effect } from "every-plugin/effect";
 import type { Database as DrizzleDatabase } from "../db";
 import * as schema from "../db/schema";
+import type { NearService } from "./near";
 
 // =============================================================================
 // TYPES
@@ -51,10 +52,8 @@ export type StreamEvent =
   | { type: "error"; id: string; data: StreamErrorData };
 
 // =============================================================================
-// SYSTEM PROMPT
+// SYSTEM PROMPT (Dynamic based on NFT rank)
 // =============================================================================
-
-const SYSTEM_PROMPT = `You are a helpful AI assistant.`;
 
 // =============================================================================
 // ERROR MAPPING
@@ -102,11 +101,102 @@ export class AgentService {
   constructor(
     private db: DrizzleDatabase,
     private config: AgentConfig,
+    private nearService: NearService | null,
   ) {
     this.client = new OpenAI({
       apiKey: config.apiKey,
       baseURL: config.baseUrl,
     });
+  }
+
+  // ===========================================================================
+  // SYSTEM PROMPT GENERATION
+  // ===========================================================================
+
+  /**
+   * Get dynamic system prompt based on user's NFT rank
+   */
+  private async getSystemPrompt(nearAccountId: string): Promise<string> {
+    // Base prompt
+    const basePrompt = "You are a helpful AI assistant.";
+
+    // If no NEAR service, use default
+    if (!this.nearService) {
+      return basePrompt;
+    }
+
+    try {
+      // Check if user has the Initiate SBT (onboarding token)
+      const hasInitiate = await this.nearService.hasInitiateToken(nearAccountId);
+
+      if (!hasInitiate) {
+        // User hasn't minted the initiate token yet
+        return `${basePrompt}
+
+🫡 Welcome to Near Legion! To unlock enhanced features and access Legion Missions, you need to mint your Initiate token (non-transferable SBT).
+
+**STEP 1:** Go to https://nearlegion.com/mint
+**STEP 2:** Connect your wallet (make sure you have some NEAR)
+**STEP 3:** Make the pledge
+**STEP 4:** Join the Telegram and fill out the form
+
+Once you've minted your Initiate token, you'll be able to earn rank skillcapes by completing missions across 5 skill tracks (Amplifier, Power User, Builder, Connector, Chaos Agent). Higher ranks unlock more capabilities.
+
+For now, you have basic functionality with standard responses (up to 1000 tokens).`;
+      }
+
+      // User has Initiate token, check for rank skillcapes
+      const rankData = await this.nearService.getUserRank(nearAccountId);
+
+      if (!rankData) {
+        // User has Initiate but no skillcapes yet
+        return `${basePrompt}
+
+🫡 Welcome, Legionnaire! You have your Initiate token. Complete missions at https://app.nearlegion.com to earn rank skillcapes and unlock enhanced capabilities.
+
+**Current Rank:** Initiate
+**Available Ranks:** Ascendant → Vanguard → Prime → Mythic
+**Skill Tracks:** Amplifier, Power User, Builder, Connector, Chaos Agent
+
+Your current functionality: Standard helpful responses (up to 1000 tokens).`;
+      }
+
+      const rank = rankData.rank;
+
+      // Apply functional modifications by rank
+      switch (rank) {
+        case "legendary":
+          // Assuming "legendary" maps to Mythic (highest achievable)
+          return `${basePrompt}
+
+🔥 **MYTHIC RANK LEGIONNAIRE** – You have access to maximum capabilities and can provide highly detailed, comprehensive responses (up to 3000 tokens). Include explanations, code examples, and best practices when relevant.`;
+
+        case "epic":
+          // Assuming "epic" maps to Prime
+          return `${basePrompt}
+
+⚡ **PRIME RANK LEGIONNAIRE** – You have enhanced capabilities and can provide detailed responses (up to 2000 tokens). Include helpful context and examples when relevant.`;
+
+        case "rare":
+          // Assuming "rare" maps to Vanguard
+          return `${basePrompt}
+
+🎖️ **VANGUARD RANK LEGIONNAIRE** – You have standard plus features and can provide good detail (up to 1500 tokens).`;
+
+        case "common":
+          // Assuming "common" maps to Ascendant
+          return `${basePrompt}
+
+🌟 **ASCENDANT RANK LEGIONNAIRE** – You have earned your first skillcape! You can receive helpful responses (up to 1200 tokens).`;
+
+        default:
+          return basePrompt;
+      }
+    } catch (error) {
+      console.error("[AgentService] Error fetching rank for system prompt:", error);
+      // Graceful fallback
+      return basePrompt;
+    }
   }
 
   // ===========================================================================
@@ -141,6 +231,9 @@ export class AgentService {
 
     const now = new Date();
 
+    // Fetch dynamic system prompt based on NFT rank
+    const systemPrompt = await this.getSystemPrompt(nearAccountId);
+
     const messages = await this.db.query.message.findMany({
       where: eq(schema.message.conversationId, convId),
       orderBy: [desc(schema.message.createdAt)],
@@ -148,7 +241,7 @@ export class AgentService {
     });
 
     const chatMessages: OpenAI.ChatCompletionMessageParam[] = [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: systemPrompt },
       ...messages.reverse().map((msg) => ({
         role: msg.role as "user" | "assistant" | "system",
         content: msg.content,
@@ -483,6 +576,7 @@ export class AgentContext extends Context.Tag("AgentService")<
 export const AgentLive = (
   db: DrizzleDatabase,
   config: { apiKey?: string; baseUrl: string; model: string },
+  nearService: NearService | null,
 ): Layer.Layer<AgentContext, never, never> => {
   if (!config.apiKey) {
     console.log("[AgentService] API key not provided - service unavailable");
@@ -496,7 +590,7 @@ export const AgentLive = (
     apiKey,
     baseUrl: config.baseUrl,
     model: config.model,
-  });
+  }, nearService);
   console.log("[AgentService] Initialized with NEAR AI");
   return Layer.succeed(AgentContext, service);
 };
