@@ -1,5 +1,5 @@
 /**
- * Shared Chat Page Component
+ * Chat Page Component
  * Used by both / and /chat routes
  */
 
@@ -11,9 +11,9 @@ import {
   isCompleteData,
   isErrorData,
 } from "../../utils/stream";
-import { ChatMessage } from "../../components/chat/ChatMessage";
-import { ChatInput } from "../../components/chat/ChatInput";
-import { RankBadge } from "../../components/chat/RankBadge";
+import { ChatHeader } from "./ChatHeader";
+import { ChatMessages } from "./ChatMessages";
+import { ChatInput } from "./ChatInput";
 
 interface Message {
   id: string;
@@ -96,7 +96,6 @@ export function ChatPage() {
           case 'chunk':
             if (isChunkData(event.data)) {
               const chunkData = event.data;
-              // Append chunk to assistant message
               pendingContentRef.current += chunkData.content;
               scheduleFlush();
             }
@@ -107,12 +106,10 @@ export function ChatPage() {
               const completeData = event.data;
               flushPendingContent();
 
-              // Update conversation ID if new
               if (!conversationId) {
                 setConversationId(completeData.conversationId);
               }
 
-              // Update message with final data
               setMessages(prev => prev.map(msg =>
                 msg.id === assistantMessageId
                   ? {
@@ -128,7 +125,6 @@ export function ChatPage() {
           case 'error':
             if (isErrorData(event.data)) {
               toast.error(event.data.message);
-              // Remove streaming message on error
               pendingContentRef.current = "";
               setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId));
             }
@@ -137,7 +133,6 @@ export function ChatPage() {
       }
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
-        // User cancelled, remove incomplete message
         pendingContentRef.current = "";
         setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId));
       } else {
@@ -172,65 +167,25 @@ export function ChatPage() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] -mx-4 sm:-mx-6 flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
-        <div className="flex items-center gap-3">
-          <h1 className="text-sm font-medium">Chat</h1>
-          {conversationId && (
-            <span className="text-xs text-muted-foreground font-mono">
-              {conversationId.slice(0, 8)}...
-            </span>
-          )}
-          {isStreaming && (
-            <span className="flex items-center gap-1.5 text-xs text-primary">
-              <span className="w-2 h-2 bg-primary rounded-full animate-pulse" />
-              streaming
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <RankBadge />
-          <button
-            onClick={handleNewConversation}
-            className="px-3 py-1.5 text-xs font-mono border border-border hover:border-primary/50 bg-muted/20 hover:bg-muted/40 transition-all rounded-lg"
-          >
-            new chat
-          </button>
-        </div>
-      </div>
+    <div className="h-full flex flex-col">
+      <ChatHeader
+        conversationId={conversationId}
+        isStreaming={isStreaming}
+        onNewConversation={handleNewConversation}
+      />
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-        {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full max-w-2xl mx-auto px-4">
-            <h2 className="text-lg font-medium mb-2">Start a conversation</h2>
-            <p className="text-sm text-muted-foreground text-center">
-              Ask a question or start typing below.
-            </p>
-          </div>
-        ) : (
-          messages.map((message) => (
-            <ChatMessage
-              key={message.id}
-              message={message}
-              isStreaming={message.isStreaming}
-            />
-          ))
-        )}
-        <div ref={messagesEndRef} />
-      </div>
+      <ChatMessages
+        messages={messages}
+        messagesEndRef={messagesEndRef}
+      />
 
-      {/* Input */}
-      <div className="px-4 py-3 border-t border-border/50">
-        <ChatInput
-          onSend={handleSendMessage}
-          onStop={handleStopStreaming}
-          disabled={false}
-          isStreaming={isStreaming}
-          placeholder="Type a message..."
-        />
-      </div>
+      <ChatInput
+        onSend={handleSendMessage}
+        onStop={handleStopStreaming}
+        disabled={false}
+        isStreaming={isStreaming}
+        placeholder="Type a message..."
+      />
     </div>
   );
 }

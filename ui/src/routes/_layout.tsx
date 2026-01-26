@@ -1,11 +1,10 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
 import {
   createFileRoute,
-  Link,
   Outlet,
   useRouter,
 } from "@tanstack/react-router";
-import { ThemeToggle } from "../components/theme-toggle";
+import { Header, Footer } from "../components/layout";
 import { authClient } from "../lib/auth-client";
 import { sessionQueryOptions } from "../lib/session";
 import { queryClient } from "../utils/orpc";
@@ -37,65 +36,18 @@ function Layout() {
 
   return (
     <div className="h-dvh w-full flex flex-col bg-background text-foreground overflow-hidden">
-      <header className="shrink-0 border-b border-border/50">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 sm:py-4">
-          <div className="flex items-center justify-end gap-4">
-            <ThemeToggle />
-            {accountId ? (
-              <>
-                {userRole === "admin" && (
-                  <Link
-                    to="/dashboard"
-                    className="text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
-                  >
-                    admin
-                  </Link>
-                )}
-                <Link
-                  to="/settings"
-                  className="text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
-                >
-                  settings
-                </Link>
-                <span className="text-xs text-muted-foreground font-mono">
-                  {accountId}
-                </span>
-                <button
-                  type="button"
-                  onClick={handleSignOut}
-                  className="text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
-                >
-                  sign out
-                </button>
-              </>
-            ) : (
-              <Link
-                to="/login"
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
-              >
-                login
-              </Link>
-            )}
-          </div>
-        </div>
-      </header>
+      <Header
+        accountId={accountId}
+        userRole={userRole}
+        onSignOut={handleSignOut}
+      />
 
-      <main className="flex-1 w-full min-h-0 overflow-auto flex justify-center">
-        <div className="w-full max-w-3xl px-4 sm:px-6 py-8 sm:py-12">
-          <Outlet />
-        </div>
+      {/* Main content area - this is the ONLY scroll container */}
+      <main className="flex-1 min-h-0 overflow-hidden">
+        <Outlet />
       </main>
 
-      <footer className="shrink-0 border-t border-border/50">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 sm:py-4">
-          <a
-            href="/api"
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
-          >
-            api
-          </a>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }

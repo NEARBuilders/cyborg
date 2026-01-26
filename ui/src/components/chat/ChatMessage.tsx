@@ -1,7 +1,6 @@
 /**
- * ChatMessage Component
- *
- * Displays a single chat message.
+ * Chat Message Component
+ * Displays a single chat message
  */
 
 import { cn } from "../../lib/utils";
@@ -23,39 +22,41 @@ export function ChatMessage({ message, isStreaming }: ChatMessageProps) {
   const isUser = message.role === "user";
 
   return (
-    <div className={cn("flex gap-3", isUser && "flex-row-reverse")}>
+    <div className={cn("flex gap-2", isUser && "flex-row-reverse")}>
       {/* Avatar */}
       <div
         className={cn(
-          "flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-xs font-mono",
-          isUser ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
+          "shrink-0 w-6 h-6 flex items-center justify-center text-[9px] font-mono font-bold uppercase",
+          isUser
+            ? "bg-primary/15 text-primary/80"
+            : "bg-muted/30 text-muted-foreground/60"
         )}
       >
         {isUser ? "you" : "ai"}
       </div>
 
       {/* Message Content */}
-      <div className={cn("flex-1 max-w-[85%]", isUser && "flex flex-col items-end")}>
+      <div className={cn("flex-1 max-w-[90%]", isUser && "flex flex-col items-end")}>
         <div
           className={cn(
-            "rounded-lg px-4 py-3 text-sm",
+            "px-2.5 py-1.5 text-sm",
             isUser
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted/50 border border-border/50"
+              ? "bg-primary/80 text-primary-foreground"
+              : "bg-muted/20 text-foreground/90"
           )}
         >
           <div className="whitespace-pre-wrap break-words leading-relaxed">
             {message.content}
             {isStreaming && (
-              <span className="inline-block w-2 h-4 ml-1 bg-primary/60 animate-pulse rounded-sm" />
+              <span className="inline-block w-1 h-3 ml-0.5 bg-primary/50 animate-pulse" />
             )}
           </div>
         </div>
 
         {/* Timestamp */}
-        <div className="mt-1 text-xs text-muted-foreground/50 font-mono">
+        <div className="mt-0.5 text-[9px] text-muted-foreground/30 font-mono">
           {isStreaming ? (
-            <span className="text-primary">generating...</span>
+            <span className="text-primary/40">generating...</span>
           ) : (
             new Date(message.createdAt).toLocaleTimeString([], {
               hour: "2-digit",

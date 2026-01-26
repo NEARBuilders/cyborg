@@ -17,6 +17,7 @@ import { Route as LayoutAuthenticatedRouteImport } from './routes/_layout/_authe
 import { Route as LayoutAuthenticatedIndexRouteImport } from './routes/_layout/_authenticated/index'
 import { Route as LayoutPageTermsOfServiceRouteImport } from './routes/_layout/_page/terms-of-service'
 import { Route as LayoutPagePrivacyPolicyRouteImport } from './routes/_layout/_page/privacy-policy'
+import { Route as LayoutPageBuildersRouteImport } from './routes/_layout/_page/builders'
 import { Route as LayoutAuthenticatedSettingsRouteImport } from './routes/_layout/_authenticated/settings'
 import { Route as LayoutAuthenticatedAdminRouteImport } from './routes/_layout/_authenticated/_admin'
 import { Route as LayoutAuthenticatedChatIndexRouteImport } from './routes/_layout/_authenticated/chat/index'
@@ -62,6 +63,11 @@ const LayoutPagePrivacyPolicyRoute = LayoutPagePrivacyPolicyRouteImport.update({
   path: '/privacy-policy',
   getParentRoute: () => LayoutPageRoute,
 } as any)
+const LayoutPageBuildersRoute = LayoutPageBuildersRouteImport.update({
+  id: '/builders',
+  path: '/builders',
+  getParentRoute: () => LayoutPageRoute,
+} as any)
 const LayoutAuthenticatedSettingsRoute =
   LayoutAuthenticatedSettingsRouteImport.update({
     id: '/settings',
@@ -97,6 +103,7 @@ export interface FileRoutesByFullPath {
   '/test-colors': typeof TestColorsRoute
   '/login': typeof LayoutLoginRoute
   '/settings': typeof LayoutAuthenticatedSettingsRoute
+  '/builders': typeof LayoutPageBuildersRoute
   '/privacy-policy': typeof LayoutPagePrivacyPolicyRoute
   '/terms-of-service': typeof LayoutPageTermsOfServiceRoute
   '/dashboard': typeof LayoutAuthenticatedAdminDashboardRoute
@@ -108,6 +115,7 @@ export interface FileRoutesByTo {
   '/test-colors': typeof TestColorsRoute
   '/login': typeof LayoutLoginRoute
   '/settings': typeof LayoutAuthenticatedSettingsRoute
+  '/builders': typeof LayoutPageBuildersRoute
   '/privacy-policy': typeof LayoutPagePrivacyPolicyRoute
   '/terms-of-service': typeof LayoutPageTermsOfServiceRoute
   '/dashboard': typeof LayoutAuthenticatedAdminDashboardRoute
@@ -123,6 +131,7 @@ export interface FileRoutesById {
   '/_layout/login': typeof LayoutLoginRoute
   '/_layout/_authenticated/_admin': typeof LayoutAuthenticatedAdminRouteWithChildren
   '/_layout/_authenticated/settings': typeof LayoutAuthenticatedSettingsRoute
+  '/_layout/_page/builders': typeof LayoutPageBuildersRoute
   '/_layout/_page/privacy-policy': typeof LayoutPagePrivacyPolicyRoute
   '/_layout/_page/terms-of-service': typeof LayoutPageTermsOfServiceRoute
   '/_layout/_authenticated/': typeof LayoutAuthenticatedIndexRoute
@@ -137,6 +146,7 @@ export interface FileRouteTypes {
     | '/test-colors'
     | '/login'
     | '/settings'
+    | '/builders'
     | '/privacy-policy'
     | '/terms-of-service'
     | '/dashboard'
@@ -148,6 +158,7 @@ export interface FileRouteTypes {
     | '/test-colors'
     | '/login'
     | '/settings'
+    | '/builders'
     | '/privacy-policy'
     | '/terms-of-service'
     | '/dashboard'
@@ -162,6 +173,7 @@ export interface FileRouteTypes {
     | '/_layout/login'
     | '/_layout/_authenticated/_admin'
     | '/_layout/_authenticated/settings'
+    | '/_layout/_page/builders'
     | '/_layout/_page/privacy-policy'
     | '/_layout/_page/terms-of-service'
     | '/_layout/_authenticated/'
@@ -231,6 +243,13 @@ declare module '@tanstack/react-router' {
       path: '/privacy-policy'
       fullPath: '/privacy-policy'
       preLoaderRoute: typeof LayoutPagePrivacyPolicyRouteImport
+      parentRoute: typeof LayoutPageRoute
+    }
+    '/_layout/_page/builders': {
+      id: '/_layout/_page/builders'
+      path: '/builders'
+      fullPath: '/builders'
+      preLoaderRoute: typeof LayoutPageBuildersRouteImport
       parentRoute: typeof LayoutPageRoute
     }
     '/_layout/_authenticated/settings': {
@@ -306,11 +325,13 @@ const LayoutAuthenticatedRouteWithChildren =
   LayoutAuthenticatedRoute._addFileChildren(LayoutAuthenticatedRouteChildren)
 
 interface LayoutPageRouteChildren {
+  LayoutPageBuildersRoute: typeof LayoutPageBuildersRoute
   LayoutPagePrivacyPolicyRoute: typeof LayoutPagePrivacyPolicyRoute
   LayoutPageTermsOfServiceRoute: typeof LayoutPageTermsOfServiceRoute
 }
 
 const LayoutPageRouteChildren: LayoutPageRouteChildren = {
+  LayoutPageBuildersRoute: LayoutPageBuildersRoute,
   LayoutPagePrivacyPolicyRoute: LayoutPagePrivacyPolicyRoute,
   LayoutPageTermsOfServiceRoute: LayoutPageTermsOfServiceRoute,
 }

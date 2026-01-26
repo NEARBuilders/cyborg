@@ -48,40 +48,39 @@ export function RankBadge() {
   let badgeColor: string;
 
   if (!data.hasNft || !data.rank) {
-    // User has Initiate but no skillcapes
     displayRank = 'INITIATE';
-    badgeColor = 'bg-muted text-muted-foreground';
+    badgeColor = 'bg-muted/20 text-muted-foreground/50';
   } else {
-    // User has earned a skillcape
     switch (data.rank) {
       case 'legendary':
         displayRank = 'MYTHIC';
-        badgeColor = 'bg-yellow-500 text-yellow-900 dark:bg-yellow-600 dark:text-yellow-50';
+        badgeColor = 'bg-yellow-500/10 text-yellow-500/80';
         break;
       case 'epic':
         displayRank = 'PRIME';
-        badgeColor = 'bg-purple-500 text-purple-900 dark:bg-purple-600 dark:text-purple-50';
+        badgeColor = 'bg-purple-500/10 text-purple-400/80';
         break;
       case 'rare':
         displayRank = 'VANGUARD';
-        badgeColor = 'bg-blue-500 text-blue-900 dark:bg-blue-600 dark:text-blue-50';
+        badgeColor = 'bg-blue-500/10 text-blue-400/80';
         break;
       case 'common':
         displayRank = 'ASCENDANT';
-        badgeColor = 'bg-green-500 text-green-900 dark:bg-green-600 dark:text-green-50';
+        badgeColor = 'bg-primary/10 text-primary/80';
         break;
       default:
         displayRank = 'INITIATE';
-        badgeColor = 'bg-muted text-muted-foreground';
+        badgeColor = 'bg-muted/20 text-muted-foreground/50';
     }
   }
 
   return (
     <div
-      className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${badgeColor}`}
+      className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold font-mono uppercase tracking-wide ${badgeColor}`}
       title="Your NEAR Legion rank"
     >
-      🫡 {displayRank}
+      <span>🫡</span>
+      <span>{displayRank}</span>
     </div>
   );
 }
