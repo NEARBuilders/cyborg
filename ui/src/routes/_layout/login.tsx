@@ -16,7 +16,7 @@ export const Route = createFileRoute("/_layout/login")({
   beforeLoad: async ({ search }) => {
     const { data: session } = await authClient.getSession();
     if (session?.user) {
-      throw redirect({ to: search.redirect || "/" });
+      throw redirect({ to: search.redirect || "/chat" });
     }
   },
   component: LoginPage,

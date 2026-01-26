@@ -24,9 +24,13 @@ export function UserNav() {
   if (accountId) {
     return (
       <>
-        <span className="text-xs text-muted-foreground font-mono">
+        <Link
+          to="/profile/$accountId"
+          params={{ accountId }}
+          className="text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
+        >
           {accountId}
-        </span>
+        </Link>
         <button
           type="button"
           onClick={handleSignOut}

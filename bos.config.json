@@ -30,7 +30,7 @@
         "providers": "./providers",
         "types": "./types"
       },
-      "ssr": "https://elliot-braem-1787-ui-cyborg-nearbuilders-3be8dde30-ze.zephyrcloud.app"
+      "ssr": "https://elliot-braem-1798-ui-cyborg-nearbuilders-b44adc4f7-ze.zephyrcloud.app"
     },
     "api": {
       "name": "api",
