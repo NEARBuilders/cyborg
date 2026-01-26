@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TestColorsRouteImport } from './routes/test-colors'
 import { Route as LayoutRouteImport } from './routes/_layout'
 import { Route as LayoutLoginRouteImport } from './routes/_layout/login'
 import { Route as LayoutPageRouteImport } from './routes/_layout/_page'
@@ -22,6 +23,11 @@ import { Route as LayoutAuthenticatedChatIndexRouteImport } from './routes/_layo
 import { Route as LayoutAuthenticatedKeysKeyRouteImport } from './routes/_layout/_authenticated/keys/$key'
 import { Route as LayoutAuthenticatedAdminDashboardRouteImport } from './routes/_layout/_authenticated/_admin/dashboard'
 
+const TestColorsRoute = TestColorsRouteImport.update({
+  id: '/test-colors',
+  path: '/test-colors',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LayoutRoute = LayoutRouteImport.update({
   id: '/_layout',
   getParentRoute: () => rootRouteImport,
@@ -88,6 +94,7 @@ const LayoutAuthenticatedAdminDashboardRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof LayoutAuthenticatedIndexRoute
+  '/test-colors': typeof TestColorsRoute
   '/login': typeof LayoutLoginRoute
   '/settings': typeof LayoutAuthenticatedSettingsRoute
   '/privacy-policy': typeof LayoutPagePrivacyPolicyRoute
@@ -98,6 +105,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof LayoutAuthenticatedIndexRoute
+  '/test-colors': typeof TestColorsRoute
   '/login': typeof LayoutLoginRoute
   '/settings': typeof LayoutAuthenticatedSettingsRoute
   '/privacy-policy': typeof LayoutPagePrivacyPolicyRoute
@@ -109,6 +117,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_layout': typeof LayoutRouteWithChildren
+  '/test-colors': typeof TestColorsRoute
   '/_layout/_authenticated': typeof LayoutAuthenticatedRouteWithChildren
   '/_layout/_page': typeof LayoutPageRouteWithChildren
   '/_layout/login': typeof LayoutLoginRoute
@@ -125,6 +134,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/test-colors'
     | '/login'
     | '/settings'
     | '/privacy-policy'
@@ -135,6 +145,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/test-colors'
     | '/login'
     | '/settings'
     | '/privacy-policy'
@@ -145,6 +156,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/_layout'
+    | '/test-colors'
     | '/_layout/_authenticated'
     | '/_layout/_page'
     | '/_layout/login'
@@ -160,10 +172,18 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   LayoutRoute: typeof LayoutRouteWithChildren
+  TestColorsRoute: typeof TestColorsRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/test-colors': {
+      id: '/test-colors'
+      path: '/test-colors'
+      fullPath: '/test-colors'
+      preLoaderRoute: typeof TestColorsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_layout': {
       id: '/_layout'
       path: ''
@@ -316,6 +336,7 @@ const LayoutRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   LayoutRoute: LayoutRouteWithChildren,
+  TestColorsRoute: TestColorsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -29,6 +29,20 @@
         }
       })();
     </script>
+
+    <!-- Dev runtime config fallback (when not served via host) -->
+    <script>
+      if (!window.__RUNTIME_CONFIG__ && window.location.port === '3002') {
+        window.__RUNTIME_CONFIG__ = {
+          env: 'development',
+          title: 'agent',
+          hostUrl: 'http://localhost:3001',
+          ui: { url: 'http://localhost:3002' },
+          apiBase: '/api',
+          rpcBase: '/api/rpc'
+        };
+      }
+    </script>
     
     <style>
       /* Minimal shell reset - matches host for dev consistency */
