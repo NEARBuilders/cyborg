@@ -7,15 +7,15 @@ export const Route = createFileRoute("/_layout/_authenticated/settings")({
 
 function SettingsPage() {
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold mb-2">Settings</h1>
-        <p className="text-sm text-muted-foreground">
-          Manage your preferences and default values
+    <div className="w-full">
+      <div className="mb-4">
+        <h1 className="text-lg sm:text-xl font-bold text-primary mb-1">Settings</h1>
+        <p className="text-sm text-muted-foreground/70">
+          Manage your preferences
         </p>
       </div>
 
-      <div className="space-y-6">
+      <div className="space-y-4">
         <section>
           <KVEditor />
         </section>

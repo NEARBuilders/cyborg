@@ -6,7 +6,7 @@ export const Route = createFileRoute("/_layout/_page")({
 
 function PageLayout() {
   return (
-    <div className="max-w-4xl mx-auto px-4 md:px-8 py-12">
+    <div className="h-full flex flex-col px-3 sm:px-4 lg:px-6 py-4 sm:py-6">
       <Outlet />
     </div>
   );

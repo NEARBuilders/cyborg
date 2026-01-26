@@ -2,96 +2,154 @@
 
 @import 'tw-animate-css';
 
-@import url('https://fonts.googleapis.com/css2?family=Red+Hat+Mono:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Afacad:ital,wght@0,400;0,700;1,700&family=Inter:wght@400&family=Roboto+Mono:wght@400;500;700&display=swap');
 
 @custom-variant dark (&:is(.dark *));
 
+/* ============================================
+   NEAR LEGION - Global Styles
+   ============================================ */
+
 body {
   @apply m-0;
-  font-family: 'Red Hat Mono', monospace;
+  font-family: 'Roboto Mono', ui-monospace, monospace;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 code {
-  font-family:
-    source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+  font-family: 'Roboto Mono', source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
 }
+
+/* ============================================
+   CSS Custom Properties - NEAR Legion Theme
+   ============================================ */
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.141 0.005 285.823);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.141 0.005 285.823);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.141 0.005 285.823);
-  --primary: oklch(0.21 0.006 285.885);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.967 0.001 286.375);
-  --secondary-foreground: oklch(0.21 0.006 285.885);
-  --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
-  --accent: oklch(0.967 0.001 286.375);
-  --accent-foreground: oklch(0.21 0.006 285.885);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.577 0.245 27.325);
-  --border: oklch(0.92 0.004 286.32);
-  --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.871 0.006 286.286);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --radius: 0.625rem;
-  --near-green: #00ec97;
-  --near-green-hover: #00d66f;
-  --near-green-light: #d4fced;
-  --near-blue: #3d7fff;
-  --near-purple: #635bff;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.141 0.005 285.823);
-  --sidebar-primary: oklch(0.21 0.006 285.885);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.967 0.001 286.375);
-  --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
-  --sidebar-border: oklch(0.92 0.004 286.32);
-  --sidebar-ring: oklch(0.871 0.006 286.286);
+  /* Core colors - Dark theme by default */
+  --background: oklch(0.07 0 0);
+  --foreground: oklch(1 0 0);
+
+  /* Card surfaces */
+  --card: oklch(0.12 0.005 260);
+  --card-foreground: oklch(1 0 0);
+
+  /* Popover/dropdown */
+  --popover: oklch(0.09 0 0);
+  --popover-foreground: oklch(1 0 0);
+
+  /* Primary - NEAR Legion Green */
+  --primary: oklch(0.85 0.25 145);
+  --primary-foreground: oklch(0.07 0 0);
+
+  /* Secondary */
+  --secondary: oklch(0.15 0 0);
+  --secondary-foreground: oklch(1 0 0);
+
+  /* Muted */
+  --muted: oklch(0.15 0 0);
+  --muted-foreground: oklch(0.7 0 0);
+
+  /* Accent - Orange */
+  --accent: oklch(0.75 0.18 50);
+  --accent-foreground: oklch(0.07 0 0);
+
+  /* Destructive */
+  --destructive: oklch(0.6 0.25 25);
+  --destructive-foreground: oklch(1 0 0);
+
+  /* Border & Input - using semi-transparent green */
+  --border: oklch(0.85 0.25 145 / 0.3);
+  --input: oklch(0.85 0.25 145 / 0.2);
+  --ring: oklch(0.85 0.25 145 / 0.5);
+
+  /* Chart colors */
+  --chart-1: oklch(0.85 0.25 145);
+  --chart-2: oklch(0.75 0.18 50);
+  --chart-3: oklch(0.6 0.2 250);
+  --chart-4: oklch(0.55 0.25 290);
+  --chart-5: oklch(0.7 0.2 145);
+
+  /* Radius - sharp edges for cyberpunk look */
+  --radius: 0rem;
+
+  /* NEAR brand colors */
+  --near-green: oklch(0.85 0.25 145);
+  --near-green-hover: oklch(0.9 0.28 145);
+  --near-green-light: oklch(0.85 0.25 145 / 0.15);
+  --near-orange: oklch(0.75 0.18 50);
+  --near-blue: oklch(0.6 0.2 250);
+  --near-purple: oklch(0.55 0.25 290);
+
+  /* Sidebar */
+  --sidebar: oklch(0.09 0 0);
+  --sidebar-foreground: oklch(1 0 0);
+  --sidebar-primary: oklch(0.85 0.25 145);
+  --sidebar-primary-foreground: oklch(0.07 0 0);
+  --sidebar-accent: oklch(0.15 0 0);
+  --sidebar-accent-foreground: oklch(1 0 0);
+  --sidebar-border: oklch(0.85 0.25 145 / 0.2);
+  --sidebar-ring: oklch(0.85 0.25 145 / 0.5);
 }
 
+/* Light mode overrides (if needed) */
+.light {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.07 0 0);
+  --card: oklch(0.97 0 0);
+  --card-foreground: oklch(0.07 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.07 0 0);
+  --primary: oklch(0.6 0.2 155);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.95 0 0);
+  --secondary-foreground: oklch(0.07 0 0);
+  --muted: oklch(0.95 0 0);
+  --muted-foreground: oklch(0.4 0 0);
+  --accent: oklch(0.75 0.18 50);
+  --accent-foreground: oklch(1 0 0);
+  --border: oklch(0.6 0.2 155 / 0.3);
+  --input: oklch(0.6 0.2 155 / 0.2);
+  --ring: oklch(0.6 0.2 155 / 0.5);
+  --sidebar: oklch(0.97 0 0);
+  --sidebar-foreground: oklch(0.07 0 0);
+  --sidebar-primary: oklch(0.6 0.2 155);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.92 0 0);
+  --sidebar-accent-foreground: oklch(0.07 0 0);
+  --sidebar-border: oklch(0.6 0.2 155 / 0.2);
+  --sidebar-ring: oklch(0.6 0.2 155 / 0.5);
+}
+
+/* Dark mode (default for NEAR Legion) */
 .dark {
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.141 0.005 285.823);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.141 0.005 285.823);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.21 0.006 285.885);
-  --secondary: oklch(0.274 0.006 286.033);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.396 0.141 25.723);
-  --destructive-foreground: oklch(0.637 0.237 25.331);
-  --border: oklch(0.274 0.006 286.033);
-  --input: oklch(0.274 0.006 286.033);
-  --ring: oklch(0.442 0.017 285.786);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.21 0.006 285.885);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.274 0.006 286.033);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.274 0.006 286.033);
-  --sidebar-ring: oklch(0.442 0.017 285.786);
+  --background: oklch(0.07 0 0);
+  --foreground: oklch(1 0 0);
+  --card: oklch(0.12 0.005 260);
+  --card-foreground: oklch(1 0 0);
+  --popover: oklch(0.09 0 0);
+  --popover-foreground: oklch(1 0 0);
+  --primary: oklch(0.85 0.25 145);
+  --primary-foreground: oklch(0.07 0 0);
+  --secondary: oklch(0.15 0 0);
+  --secondary-foreground: oklch(1 0 0);
+  --muted: oklch(0.15 0 0);
+  --muted-foreground: oklch(0.7 0 0);
+  --accent: oklch(0.75 0.18 50);
+  --accent-foreground: oklch(0.07 0 0);
+  --destructive: oklch(0.6 0.25 25);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.85 0.25 145 / 0.3);
+  --input: oklch(0.85 0.25 145 / 0.2);
+  --ring: oklch(0.85 0.25 145 / 0.5);
+  --sidebar: oklch(0.09 0 0);
+  --sidebar-foreground: oklch(1 0 0);
+  --sidebar-primary: oklch(0.85 0.25 145);
+  --sidebar-primary-foreground: oklch(0.07 0 0);
+  --sidebar-accent: oklch(0.15 0 0);
+  --sidebar-accent-foreground: oklch(1 0 0);
+  --sidebar-border: oklch(0.85 0.25 145 / 0.2);
+  --sidebar-ring: oklch(0.85 0.25 145 / 0.5);
 }
 
 @theme inline {
@@ -131,6 +189,12 @@ code {
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  /* NEAR Legion custom colors */
+  --color-near-green: var(--near-green);
+  --color-near-orange: var(--near-orange);
+  --color-near-blue: var(--near-blue);
+  --color-near-purple: var(--near-purple);
 }
 
 @layer base {
@@ -141,11 +205,249 @@ code {
   html {
     height: 100%;
     height: 100dvh;
+    /* Better base font size for readability */
+    font-size: 16px;
   }
 
   body {
     @apply bg-background text-foreground;
     min-height: 100%;
     min-height: 100dvh;
+    line-height: 1.5;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
   }
+
+  #app {
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  /* Compact typography */
+  h1 {
+    @apply text-xl sm:text-2xl font-bold tracking-tight;
+  }
+
+  h2 {
+    @apply text-lg sm:text-xl font-bold tracking-tight;
+  }
+
+  h3 {
+    @apply text-base sm:text-lg font-semibold;
+  }
+
+  h4 {
+    @apply text-sm sm:text-base font-semibold;
+  }
+
+  p {
+    @apply text-sm leading-relaxed;
+  }
+
+  /* Selection styling */
+  ::selection {
+    background: var(--border);
+    color: var(--foreground);
+  }
+
+  /* Minimal scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: oklch(0.85 0.25 145 / 0.2);
+    border-radius: 0;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.85 0.25 145 / 0.4);
+  }
+
+  /* Firefox scrollbar */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: oklch(0.85 0.25 145 / 0.2) transparent;
+  }
+
+}
+
+/* ============================================
+   NEAR Legion - Utility Classes
+   ============================================ */
+
+@layer utilities {
+  /* Glow effects */
+  .glow-primary {
+    box-shadow: 0 0 20px oklch(0.85 0.25 145 / 0.5);
+  }
+
+  .glow-accent {
+    box-shadow: 0 0 20px oklch(0.75 0.18 50 / 0.5);
+  }
+
+  .text-glow-primary {
+    text-shadow: 0 0 8px oklch(0.85 0.25 145 / 0.7);
+  }
+
+  .text-glow-accent {
+    text-shadow: 0 0 8px oklch(0.75 0.18 50 / 0.7);
+  }
+
+  /* Cyberpunk border effect */
+  .border-cyber {
+    position: relative;
+  }
+
+  .border-cyber::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: 2px solid var(--ring);
+    transform: translate(4px, 4px);
+    pointer-events: none;
+    transition: transform 0.3s ease;
+  }
+
+  .border-cyber:hover::after {
+    transform: translate(0, 0);
+  }
+
+  /* Grid pattern background */
+  .bg-grid {
+    background-image:
+      linear-gradient(oklch(0.85 0.25 145 / 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, oklch(0.85 0.25 145 / 0.03) 1px, transparent 1px);
+    background-size: 50px 50px;
+  }
+
+  /* Scanline effect */
+  .scanlines::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      oklch(0 0 0 / 0.1) 2px,
+      oklch(0 0 0 / 0.1) 4px
+    );
+    pointer-events: none;
+  }
+}
+
+/* ============================================
+   Animations
+   ============================================ */
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 5px oklch(0.85 0.25 145 / 0.5);
+  }
+  50% {
+    box-shadow: 0 0 20px oklch(0.85 0.25 145 / 0.8);
+  }
+}
+
+@keyframes flicker {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
+}
+
+@keyframes typing {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+@keyframes blink-caret {
+  from, to { border-color: transparent; }
+  50% { border-color: var(--primary); }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.animate-flicker {
+  animation: flicker 0.15s ease-in-out infinite;
+}
+
+/* ============================================
+   Wallet Connector Popup Styles
+   ============================================ */
+
+.hot-connector-popup * {
+  box-sizing: border-box;
+  font-family: 'Roboto Mono', ui-monospace, monospace;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  color: #fff;
+}
+
+.hot-connector-popup *::-webkit-scrollbar {
+  display: none;
+}
+
+.hot-connector-popup .modal-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 100000000;
+  background-color: oklch(0 0 0 / 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  backdrop-filter: blur(4px);
+}
+
+.hot-connector-popup .modal-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 420px;
+  width: 100%;
+  border: 2px solid var(--border);
+  background: var(--popover);
+}
+
+.hot-connector-popup .modal-header {
+  display: flex;
+  padding: 16px;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  border-bottom: 1px solid var(--sidebar-border);
+  width: 100%;
+}
+
+.hot-connector-popup .modal-header p {
+  color: var(--primary);
+  font-size: 18px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.hot-connector-popup .connect-item {
+  display: flex;
+  padding: 12px;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+}
+
+.hot-connector-popup .connect-item:hover {
+  background: var(--near-green-light);
+  border-color: var(--border);
 }

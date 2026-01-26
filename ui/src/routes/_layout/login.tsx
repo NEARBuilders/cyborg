@@ -150,14 +150,21 @@ function LoginPage() {
   }
 
   return (
-    <div className="min-h-[80vh] w-full flex items-center justify-center px-6">
-      <div className="w-full max-w-sm space-y-3">
+    <div className="min-h-[60vh] w-full flex items-center justify-center">
+      <div className="w-full max-w-sm space-y-4">
+        <div className="text-center mb-6">
+          <h1 className="text-xl sm:text-2xl font-bold text-primary mb-1">Welcome</h1>
+          <p className="text-sm text-muted-foreground/70">
+            Connect your NEAR wallet to continue
+          </p>
+        </div>
+
         {!accountId ? (
           <button
             type="button"
             onClick={handleWalletConnect}
             disabled={isLoading}
-            className="w-full px-6 py-4 text-sm font-mono border border-border hover:border-primary/50 bg-muted/20 hover:bg-muted/40 transition-all rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full px-4 py-3 text-sm font-mono border border-border/50 hover:border-primary/50 bg-muted/10 hover:bg-primary/10 text-foreground hover:text-primary transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isConnectingWallet ? "connecting..." : "connect near wallet"}
           </button>
@@ -167,7 +174,7 @@ function LoginPage() {
               type="button"
               onClick={handleNearSignIn}
               disabled={isLoading}
-              className="w-full px-6 py-4 text-sm font-mono border border-border hover:border-primary/50 bg-muted/20 hover:bg-muted/40 transition-all rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-4 py-3 text-sm font-mono border border-primary/40 bg-primary/10 hover:bg-primary/20 text-primary transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSigningInWithNear
                 ? "signing in..."
@@ -177,7 +184,7 @@ function LoginPage() {
               type="button"
               onClick={handleWalletDisconnect}
               disabled={isLoading}
-              className="w-full px-6 py-3 text-xs font-mono text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-4 py-2 text-xs font-mono text-muted-foreground/60 hover:text-muted-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isDisconnectingWallet ? "disconnecting..." : "disconnect"}
             </button>
