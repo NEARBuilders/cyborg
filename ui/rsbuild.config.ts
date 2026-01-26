@@ -133,6 +133,12 @@ export default defineConfig({
       "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type",
     },
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+    },
   },
   tools: {
     rspack: {
@@ -174,7 +180,7 @@ export default defineConfig({
     //   ? `${bosConfig.app.ui.production}/`
     //   : "auto",
     filename: {
-      css: "static/css/[name].css",
+      css: "[name].css",
     },
     copy: [
       {

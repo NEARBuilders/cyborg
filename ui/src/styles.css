@@ -214,6 +214,13 @@ code {
     min-height: 100%;
     min-height: 100dvh;
     line-height: 1.5;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  #app {
+    min-height: 100vh;
+    min-height: 100dvh;
   }
 
   /* Compact typography */
