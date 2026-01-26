@@ -11,7 +11,7 @@
       "title": "NEAR Agent",
       "description": "Template for building NEAR AI applications",
       "development": "http://localhost:3000",
-      "production": "https://elliot-braem-1733-host-cyborg-near-everythi-33abe003c-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-1785-host-cyborg-nearbuilders-70f3ffd9f-ze.zephyrcloud.app",
       "secrets": [
         "HOST_DATABASE_URL",
         "HOST_DATABASE_AUTH_TOKEN",
