@@ -18,24 +18,24 @@
         "BETTER_AUTH_SECRET",
         "BETTER_AUTH_URL"
       ],
-      "remote": "https://elliot-braem-1742-host-cyborg-near-everythi-0068d5f00-ze.zephyrcloud.app"
+      "remote": "https://elliot-braem-1785-host-cyborg-nearbuilders-70f3ffd9f-ze.zephyrcloud.app"
     },
     "ui": {
       "name": "ui",
       "development": "http://localhost:3002",
-      "production": "https://elliot-braem-1743-ui-cyborg-nearbuilders-a7a278431-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-1786-ui-cyborg-nearbuilders-46d98f16b-ze.zephyrcloud.app",
       "exposes": {
         "App": "./App",
         "components": "./components",
         "providers": "./providers",
         "types": "./types"
       },
-      "ssr": "https://elliot-braem-1784-ui-cyborg-nearbuilders-3d795fd44-ze.zephyrcloud.app"
+      "ssr": "https://elliot-braem-1787-ui-cyborg-nearbuilders-3be8dde30-ze.zephyrcloud.app"
     },
     "api": {
       "name": "api",
       "development": "http://localhost:3014",
-      "production": "https://elliot-braem-1745-api-cyborg-near-everythin-330ba1944-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-1788-api-cyborg-nearbuilders-ac0e7b73a-ze.zephyrcloud.app",
       "variables": {
         "NEAR_AI_MODEL": "deepseek-ai/DeepSeek-V3.1"
       },
