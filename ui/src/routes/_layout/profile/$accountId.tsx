@@ -19,6 +19,14 @@ export const Route = createFileRoute("/_layout/profile/$accountId")({
     return { profile, accountId: params.accountId };
   },
   head: ({ loaderData }) => {
+    if (!loaderData) {
+      return {
+        meta: [
+          { title: "Profile" },
+          { name: "description", content: "View NEAR profile" },
+        ],
+      };
+    }
     const { profile, accountId } = loaderData;
     const name = profile?.name || accountId;
     const description =
