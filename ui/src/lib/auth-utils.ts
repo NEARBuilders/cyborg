@@ -1,20 +1,15 @@
-import type { Account } from "better-auth";
-import type { Dispatch, SetStateAction } from "react";
-
-type LinkedAccount = Pick<Account, "providerId" | "accountId">;
-
-export function getNearAccountId(linkedAccounts: LinkedAccount[]): string | null {
+export function getNearAccountId(linkedAccounts: any[]): string | null {
   const nearAccount = linkedAccounts.find(account => account.providerId === 'siwn');
   return (nearAccount?.accountId)?.split(":")[0] || nearAccount?.providerId || null;
 }
 
-export function getLinkedProviders(linkedAccounts: LinkedAccount[]): string[] {
+export function getLinkedProviders(linkedAccounts: any[]): string[] {
   return linkedAccounts.map(account => account.providerId);
 }
 
 export function handleAccountLinkRefresh(
-  _componentState: unknown,
-  _setLinkedAccounts: Dispatch<SetStateAction<LinkedAccount[]>>,
+  _componentState: any,
+  _setLinkedAccounts: React.Dispatch<React.SetStateAction<any[]>>,
   refreshAccounts: () => Promise<void>
 ) {
   refreshAccounts();

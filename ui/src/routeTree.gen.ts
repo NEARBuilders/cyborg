@@ -11,11 +11,8 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as LayoutRouteImport } from './routes/_layout'
 import { Route as LayoutLoginRouteImport } from './routes/_layout/login'
-import { Route as LayoutPageRouteImport } from './routes/_layout/_page'
 import { Route as LayoutAuthenticatedRouteImport } from './routes/_layout/_authenticated'
 import { Route as LayoutAuthenticatedIndexRouteImport } from './routes/_layout/_authenticated/index'
-import { Route as LayoutPageTermsOfServiceRouteImport } from './routes/_layout/_page/terms-of-service'
-import { Route as LayoutPagePrivacyPolicyRouteImport } from './routes/_layout/_page/privacy-policy'
 import { Route as LayoutAuthenticatedSettingsRouteImport } from './routes/_layout/_authenticated/settings'
 import { Route as LayoutAuthenticatedAdminRouteImport } from './routes/_layout/_authenticated/_admin'
 import { Route as LayoutAuthenticatedChatIndexRouteImport } from './routes/_layout/_authenticated/chat/index'
@@ -31,10 +28,6 @@ const LayoutLoginRoute = LayoutLoginRouteImport.update({
   path: '/login',
   getParentRoute: () => LayoutRoute,
 } as any)
-const LayoutPageRoute = LayoutPageRouteImport.update({
-  id: '/_page',
-  getParentRoute: () => LayoutRoute,
-} as any)
 const LayoutAuthenticatedRoute = LayoutAuthenticatedRouteImport.update({
   id: '/_authenticated',
   getParentRoute: () => LayoutRoute,
@@ -45,17 +38,6 @@ const LayoutAuthenticatedIndexRoute =
     path: '/',
     getParentRoute: () => LayoutAuthenticatedRoute,
   } as any)
-const LayoutPageTermsOfServiceRoute =
-  LayoutPageTermsOfServiceRouteImport.update({
-    id: '/terms-of-service',
-    path: '/terms-of-service',
-    getParentRoute: () => LayoutPageRoute,
-  } as any)
-const LayoutPagePrivacyPolicyRoute = LayoutPagePrivacyPolicyRouteImport.update({
-  id: '/privacy-policy',
-  path: '/privacy-policy',
-  getParentRoute: () => LayoutPageRoute,
-} as any)
 const LayoutAuthenticatedSettingsRoute =
   LayoutAuthenticatedSettingsRouteImport.update({
     id: '/settings',
@@ -90,8 +72,6 @@ export interface FileRoutesByFullPath {
   '/': typeof LayoutAuthenticatedIndexRoute
   '/login': typeof LayoutLoginRoute
   '/settings': typeof LayoutAuthenticatedSettingsRoute
-  '/privacy-policy': typeof LayoutPagePrivacyPolicyRoute
-  '/terms-of-service': typeof LayoutPageTermsOfServiceRoute
   '/dashboard': typeof LayoutAuthenticatedAdminDashboardRoute
   '/keys/$key': typeof LayoutAuthenticatedKeysKeyRoute
   '/chat/': typeof LayoutAuthenticatedChatIndexRoute
@@ -100,8 +80,6 @@ export interface FileRoutesByTo {
   '/': typeof LayoutAuthenticatedIndexRoute
   '/login': typeof LayoutLoginRoute
   '/settings': typeof LayoutAuthenticatedSettingsRoute
-  '/privacy-policy': typeof LayoutPagePrivacyPolicyRoute
-  '/terms-of-service': typeof LayoutPageTermsOfServiceRoute
   '/dashboard': typeof LayoutAuthenticatedAdminDashboardRoute
   '/keys/$key': typeof LayoutAuthenticatedKeysKeyRoute
   '/chat': typeof LayoutAuthenticatedChatIndexRoute
@@ -110,12 +88,9 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_layout': typeof LayoutRouteWithChildren
   '/_layout/_authenticated': typeof LayoutAuthenticatedRouteWithChildren
-  '/_layout/_page': typeof LayoutPageRouteWithChildren
   '/_layout/login': typeof LayoutLoginRoute
   '/_layout/_authenticated/_admin': typeof LayoutAuthenticatedAdminRouteWithChildren
   '/_layout/_authenticated/settings': typeof LayoutAuthenticatedSettingsRoute
-  '/_layout/_page/privacy-policy': typeof LayoutPagePrivacyPolicyRoute
-  '/_layout/_page/terms-of-service': typeof LayoutPageTermsOfServiceRoute
   '/_layout/_authenticated/': typeof LayoutAuthenticatedIndexRoute
   '/_layout/_authenticated/_admin/dashboard': typeof LayoutAuthenticatedAdminDashboardRoute
   '/_layout/_authenticated/keys/$key': typeof LayoutAuthenticatedKeysKeyRoute
@@ -127,31 +102,18 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/settings'
-    | '/privacy-policy'
-    | '/terms-of-service'
     | '/dashboard'
     | '/keys/$key'
     | '/chat/'
   fileRoutesByTo: FileRoutesByTo
-  to:
-    | '/'
-    | '/login'
-    | '/settings'
-    | '/privacy-policy'
-    | '/terms-of-service'
-    | '/dashboard'
-    | '/keys/$key'
-    | '/chat'
+  to: '/' | '/login' | '/settings' | '/dashboard' | '/keys/$key' | '/chat'
   id:
     | '__root__'
     | '/_layout'
     | '/_layout/_authenticated'
-    | '/_layout/_page'
     | '/_layout/login'
     | '/_layout/_authenticated/_admin'
     | '/_layout/_authenticated/settings'
-    | '/_layout/_page/privacy-policy'
-    | '/_layout/_page/terms-of-service'
     | '/_layout/_authenticated/'
     | '/_layout/_authenticated/_admin/dashboard'
     | '/_layout/_authenticated/keys/$key'
@@ -178,13 +140,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutLoginRouteImport
       parentRoute: typeof LayoutRoute
     }
-    '/_layout/_page': {
-      id: '/_layout/_page'
-      path: ''
-      fullPath: '/'
-      preLoaderRoute: typeof LayoutPageRouteImport
-      parentRoute: typeof LayoutRoute
-    }
     '/_layout/_authenticated': {
       id: '/_layout/_authenticated'
       path: ''
@@ -198,20 +153,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof LayoutAuthenticatedIndexRouteImport
       parentRoute: typeof LayoutAuthenticatedRoute
-    }
-    '/_layout/_page/terms-of-service': {
-      id: '/_layout/_page/terms-of-service'
-      path: '/terms-of-service'
-      fullPath: '/terms-of-service'
-      preLoaderRoute: typeof LayoutPageTermsOfServiceRouteImport
-      parentRoute: typeof LayoutPageRoute
-    }
-    '/_layout/_page/privacy-policy': {
-      id: '/_layout/_page/privacy-policy'
-      path: '/privacy-policy'
-      fullPath: '/privacy-policy'
-      preLoaderRoute: typeof LayoutPagePrivacyPolicyRouteImport
-      parentRoute: typeof LayoutPageRoute
     }
     '/_layout/_authenticated/settings': {
       id: '/_layout/_authenticated/settings'
@@ -285,29 +226,13 @@ const LayoutAuthenticatedRouteChildren: LayoutAuthenticatedRouteChildren = {
 const LayoutAuthenticatedRouteWithChildren =
   LayoutAuthenticatedRoute._addFileChildren(LayoutAuthenticatedRouteChildren)
 
-interface LayoutPageRouteChildren {
-  LayoutPagePrivacyPolicyRoute: typeof LayoutPagePrivacyPolicyRoute
-  LayoutPageTermsOfServiceRoute: typeof LayoutPageTermsOfServiceRoute
-}
-
-const LayoutPageRouteChildren: LayoutPageRouteChildren = {
-  LayoutPagePrivacyPolicyRoute: LayoutPagePrivacyPolicyRoute,
-  LayoutPageTermsOfServiceRoute: LayoutPageTermsOfServiceRoute,
-}
-
-const LayoutPageRouteWithChildren = LayoutPageRoute._addFileChildren(
-  LayoutPageRouteChildren,
-)
-
 interface LayoutRouteChildren {
   LayoutAuthenticatedRoute: typeof LayoutAuthenticatedRouteWithChildren
-  LayoutPageRoute: typeof LayoutPageRouteWithChildren
   LayoutLoginRoute: typeof LayoutLoginRoute
 }
 
 const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutAuthenticatedRoute: LayoutAuthenticatedRouteWithChildren,
-  LayoutPageRoute: LayoutPageRouteWithChildren,
   LayoutLoginRoute: LayoutLoginRoute,
 }
 

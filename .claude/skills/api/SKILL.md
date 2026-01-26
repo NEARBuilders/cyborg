@@ -14,14 +14,17 @@ Review the `api/` package for quality, consistency, and every-plugin best practi
 ```
 api/
 ├── src/
-│   ├── contract.ts     # oRPC route definitions
-│   ├── index.ts        # Plugin definition (createPlugin)
+│   ├── contract.ts         # oRPC route definitions
+│   ├── index.ts            # Plugin definition (createPlugin)
 │   ├── db/
-│   │   └── schema.ts   # Drizzle ORM schema
-│   ├── services/
-│   │   └── agent.ts        # NEAR AI integration
-│   └── store.ts        # Database connection
-├── plugin.dev.ts       # Local dev configuration
+│   │   ├── index.ts        # Database connection layer
+│   │   ├── schema.ts       # Drizzle ORM schema
+│   │   └── migrations/     # SQL migration files
+│   └── services/
+│       ├── index.ts        # Service exports
+│       └── agent.ts        # NEAR AI integration
+├── plugin.dev.ts           # Local dev configuration
+├── drizzle.config.ts       # Drizzle config
 └── package.json
 ```
 
@@ -35,40 +38,43 @@ api/
 
 ### 2. Plugin Structure
 - [ ] Uses `createPlugin()` from every-plugin
-- [ ] Variables and secrets properly typed
-- [ ] Context schema defined
-- [ ] Initialize/shutdown handlers implemented
+- [ ] Variables and secrets properly typed with Zod schemas
+- [ ] Context schema defined (nearAccountId, role)
+- [ ] Initialize returns `{ db, agentService }`
+- [ ] Shutdown handler implemented
 
 ### 3. Database Schema
-- [ ] Tables defined for core features (conversations, messages, key-value store)
+- [ ] Tables defined: `conversation`, `message`, `kvStore`
 - [ ] Proper indexes for query performance
 - [ ] Relations defined correctly with cascading deletes
-- [ ] Timestamps use Date type
+- [ ] Per-user isolation via `nearAccountId`
 
 ### 4. Services
-- [ ] AgentService integrates NEAR AI Cloud
+- [ ] AgentService integrates NEAR AI Cloud via OpenAI SDK
 - [ ] Streaming chat implementation with async generators
 - [ ] Conversation history management (context window)
 - [ ] Graceful fallback when API key not configured
 
 ### 5. Router Handlers
-- [ ] Authentication middleware applied
+- [ ] `requireAuth` middleware for protected routes
+- [ ] `requireAdmin` middleware for admin routes
 - [ ] Proper error handling with ORPCError
 - [ ] Input validation via contract
 - [ ] Date serialization to ISO strings
 
 ### 6. Configuration
 - [ ] `plugin.dev.ts` matches production config
-- [ ] Secrets loaded from environment
-- [ ] Default values are sensible
+- [ ] Secrets: `API_DATABASE_URL`, `API_DATABASE_AUTH_TOKEN`, `NEAR_AI_API_KEY`, `NEAR_AI_BASE_URL`
+- [ ] Variables: `NEAR_AI_MODEL`, `NEAR_AI_BASE_URL`
 
 ## Key Files to Check
 
 1. `src/contract.ts` - API contract definitions
 2. `src/index.ts` - Plugin implementation
 3. `src/db/schema.ts` - Database tables
-4. `src/services/agent.ts` - NEAR AI integration
-5. `plugin.dev.ts` - Development configuration
+4. `src/db/index.ts` - Database connection
+5. `src/services/agent.ts` - NEAR AI integration
+6. `plugin.dev.ts` - Development configuration
 
 ## Output Format
 
