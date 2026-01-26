@@ -1,15 +1,6 @@
 # ui
 
-Frontend application for NEAR AI chat with streaming responses and KV store demo.
-
-## Tech Stack
-
-- **Framework**: React 19
-- **Routing**: TanStack Router (file-based)
-- **Data**: TanStack Query + oRPC client
-- **Styling**: Tailwind CSS v4
-- **Build**: Rsbuild + Module Federation
-- **Auth**: better-auth client
+Remote frontend module with TanStack Router and SSR support.
 
 ## Module Federation
 
@@ -17,18 +8,72 @@ Exposed as remote module for host consumption via `remoteEntry.js`:
 
 | Export | Path | Description |
 |--------|------|-------------|
-| `./App` | `bootstrap.tsx` | Main app component |
-| `./Router` | `router.tsx` | TanStack Router instance |
+| `./Router` | `router.tsx` | TanStack Router instance (client) |
+| `./Hydrate` | `hydrate.tsx` | Client hydration entry |
 | `./components` | `components/index.ts` | Reusable UI components |
 | `./providers` | `providers/index.tsx` | Context providers |
+| `./hooks` | `hooks/index.ts` | React hooks |
 | `./types` | `types/index.ts` | TypeScript types |
+
+**SSR Build** also exposes:
+- `./Router` → `router.server.tsx` (server-side rendering)
 
 **Shared dependencies** (singleton):
 
 - `react`, `react-dom`
 - `@tanstack/react-query`, `@tanstack/react-router`
+- `@hot-labs/near-connect`, `near-kit`
 
-**Configuration** (`bos.config.json`):
+## Route Protection
+
+File-based routing with auth guards via TanStack Router:
+
+- `_authenticated.tsx` - Requires login, redirects to `/login`
+- `_authenticated/_admin.tsx` - Requires admin role
+
+## Directory Structure
+
+```
+ui/
+├── src/
+│   ├── router.tsx          # Client router
+│   ├── router.server.tsx   # Server router (SSR)
+│   ├── hydrate.tsx         # Client hydration entry
+│   ├── components/
+│   │   ├── index.ts        # Public component exports
+│   │   ├── chat/           # Chat feature components
+│   │   ├── kv/             # Key-value editor
+│   │   └── ui/             # shadcn/ui primitives
+│   ├── hooks/              # React hooks
+│   ├── lib/                # Utilities (auth-client, utils)
+│   ├── providers/          # Context providers
+│   ├── routes/             # TanStack file-based routes
+│   ├── types/              # TypeScript types
+│   └── utils/              # API client (oRPC, streaming)
+├── rsbuild.config.ts       # Build configuration
+└── package.json
+```
+
+## Tech Stack
+
+- **Framework**: React 19
+- **Routing**: TanStack Router (file-based)
+- **Data**: TanStack Query + oRPC client
+- **Styling**: Tailwind CSS v4 + shadcn/ui
+- **Build**: Rsbuild + Module Federation
+- **Auth**: better-auth client
+
+## Available Scripts
+
+- `bun dev` - Start dev server (port 3002)
+- `bun build` - Build for production (client + server)
+- `bun build:client` - Build client bundle only
+- `bun build:server` - Build SSR bundle only
+- `bun typecheck` - Type checking
+
+## Configuration
+
+**bos.config.json**:
 
 ```json
 {
@@ -36,7 +81,8 @@ Exposed as remote module for host consumption via `remoteEntry.js`:
     "ui": {
       "name": "ui",
       "development": "http://localhost:3002",
-      "production": "https://",
+      "production": "https://cdn.example.com/ui",
+      "ssr": "https://cdn.example.com/ui-ssr",
       "exposes": {
         "App": "./App",
         "components": "./components",
@@ -48,21 +94,9 @@ Exposed as remote module for host consumption via `remoteEntry.js`:
 }
 ```
 
-## Available Scripts
+## Component Conventions
 
-- `bun dev` - Start dev server (port 3002)
-- `bun build` - Build for production
-- `bun preview` - Preview production build
-- `bun typecheck` - Type checking
-
-## Project Structure
-
-- `src/routes/` - File-based routes (TanStack Router)
-  - `/` - Chat interface (canonical)
-  - `/chat` - Redirect alias to `/`
-  - `/dashboard` - Admin dashboard (role-gated)
-- `src/components/` - UI components (shadcn/ui)
-  - `chat/` - Chat UI components
-  - `kv/` - Key-value store demo
-- `src/utils/` - API client (oRPC)
-- `src/lib/` - Auth client (Better-Auth + NEAR)
+- All component files use **kebab-case** naming: `chat-input.tsx`, `user-nav.tsx`
+- UI primitives in `components/ui/` (shadcn/ui)
+- Feature components in `components/<feature>/`
+- Export public components via `components/index.ts`

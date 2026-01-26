@@ -11,8 +11,8 @@ import {
   isCompleteData,
   isErrorData,
 } from "../../utils/stream";
-import { ChatMessage } from "../../components/chat/ChatMessage";
-import { ChatInput } from "../../components/chat/ChatInput";
+import { ChatMessage } from "./chat-message";
+import { ChatInput } from "./chat-input";
 
 interface Message {
   id: string;

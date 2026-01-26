@@ -292,9 +292,11 @@ fabric.properties
 
 # near
 .near/data
+.bos
 
 # db
 /**/*.db
 
 .turbo
 **/*.sqlite
+

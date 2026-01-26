@@ -9,27 +9,28 @@
     }
   },
   "peerDependencies": {
-    "typescript": "^5.9.3"
+    "typescript": "catalog:"
   },
   "dependencies": {
-    "@libsql/client": "^0.15.15",
-    "drizzle-kit": "^0.31.8",
-    "drizzle-orm": "^0.45.1",
+    "@libsql/client": "catalog:",
+    "drizzle-kit": "catalog:",
+    "drizzle-orm": "catalog:",
+    "effect": "catalog:",
     "nanoid": "^5.1.6",
-    "near-kit": "^0.6.3",
+    "near-kit": "catalog:",
     "openai": "^6.16.0"
   },
   "devDependencies": {
-    "@effect/language-service": "^0.41.1",
-    "@module-federation/node": "^2.7.27",
-    "@rspack/cli": "^1.7.2",
-    "@rspack/core": "^1.7.2",
+    "@effect/language-service": "^0.72.0",
+    "@module-federation/node": "^2.7.25",
+    "@rspack/cli": "^1.7.3",
+    "@rspack/core": "^1.7.3",
+    "@types/node": "catalog:",
     "dotenv": "^17.2.3",
-    "every-plugin": "^0.8.8",
-    "tsx": "^4.21.0",
-    "vite-tsconfig-paths": "^5.1.4",
-    "vitest": "^3.2.4",
-    "zephyr-rspack-plugin": "^0.1.4"
+    "every-plugin": "0.8.8",
+    "vite-tsconfig-paths": "^6.0.5",
+    "vitest": "catalog:",
+    "zephyr-rspack-plugin": "^0.1.2"
   },
   "scripts": {
     "build": "rspack build",
@@ -41,7 +42,6 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio",
-    "db:seed": "tsx src/seed.ts"
+    "db:studio": "drizzle-kit studio"
   }
 }

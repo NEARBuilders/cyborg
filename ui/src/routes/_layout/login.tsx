@@ -4,33 +4,12 @@ import { toast } from "sonner";
 import { authClient } from "../../lib/auth-client";
 import { queryClient } from "../../utils/orpc";
 
-type AuthErrorLike = {
-  code?: string;
-  message?: string;
-};
-
-function getErrorCode(error: unknown): string | undefined {
-  if (typeof error === "object" && error) {
-    const code = (error as AuthErrorLike).code;
-    if (typeof code === "string") return code;
-  }
-  return undefined;
-}
-
-function getErrorMessage(error: unknown): string | undefined {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "object" && error) {
-    const message = (error as AuthErrorLike).message;
-    if (typeof message === "string") return message;
-  }
-  return undefined;
-}
-
 type SearchParams = {
   redirect?: string;
 };
 
 export const Route = createFileRoute("/_layout/login")({
+  ssr: false,
   validateSearch: (search: Record<string, unknown>): SearchParams => ({
     redirect: typeof search.redirect === "string" ? search.redirect : undefined,
   }),
@@ -58,20 +37,19 @@ function LoginPage() {
     setIsConnectingWallet(true);
     try {
       await authClient.requestSignIn.near(
-        { recipient: import.meta.env.PUBLIC_ACCOUNT_ID || "every.near" },
+        { recipient: window.__RUNTIME_CONFIG__?.account ?? "every.near" },
         {
           onSuccess: () => {
             setIsConnectingWallet(false);
             toast.success("Wallet connected");
           },
-          onError: (error: unknown) => {
+          onError: (error: any) => {
             setIsConnectingWallet(false);
             console.error("Wallet connection failed:", error);
-            const errorCode = getErrorCode(error);
             const errorMessage =
-              errorCode === "SIGNER_NOT_AVAILABLE"
+              error.code === "SIGNER_NOT_AVAILABLE"
                 ? "NEAR wallet not available"
-                : getErrorMessage(error) || "Failed to connect wallet";
+                : error.message || "Failed to connect wallet";
             toast.error(errorMessage);
           },
         }
@@ -87,7 +65,7 @@ function LoginPage() {
     setIsSigningInWithNear(true);
     try {
       await authClient.signIn.near(
-        { recipient: import.meta.env.PUBLIC_ACCOUNT_ID || "every.near" },
+        { recipient: window.__RUNTIME_CONFIG__?.account ?? "every.near" },
         {
           onSuccess: () => {
             setIsSigningInWithNear(false);
@@ -96,17 +74,19 @@ function LoginPage() {
             navigate({ to: redirect ?? "/", replace: true });
             toast.success(`Signed in as: ${accountId}`);
           },
-          onError: (error: unknown) => {
+          onError: (error: any) => {
             setIsSigningInWithNear(false);
             console.error("NEAR sign in error:", error);
 
-            if (getErrorCode(error) === "NONCE_NOT_FOUND") {
+            if ((error as any)?.code === "NONCE_NOT_FOUND") {
               toast.error("Session expired. Please reconnect your wallet.");
               handleWalletDisconnect();
               return;
             }
 
-            toast.error(getErrorMessage(error) || "Authentication failed");
+            toast.error(
+              error instanceof Error ? error.message : "Authentication failed"
+            );
           },
         }
       );
@@ -114,7 +94,7 @@ function LoginPage() {
       setIsSigningInWithNear(false);
       console.error("NEAR sign in error:", error);
 
-      if (getErrorCode(error) === "NONCE_NOT_FOUND") {
+      if ((error as any)?.code === "NONCE_NOT_FOUND") {
         toast.error("Session expired. Please reconnect your wallet.");
         handleWalletDisconnect();
         return;
@@ -144,10 +124,6 @@ function LoginPage() {
     isConnectingWallet ||
     isSigningInWithNear ||
     isDisconnectingWallet;
-
-  if (!authClient) {
-    return null;
-  }
 
   return (
     <div className="min-h-[80vh] w-full flex items-center justify-center px-6">
