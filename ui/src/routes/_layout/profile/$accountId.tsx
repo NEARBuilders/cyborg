@@ -77,7 +77,8 @@ function ProfilePage() {
         toast.success(`Poked ${profile?.name || accountId}!`);
       },
       onError: (error) => {
-        toast.error(error.message || "Failed to poke");
+        const message = error instanceof Error ? error.message : "Failed to poke";
+        toast.error(message);
       },
     });
   };
