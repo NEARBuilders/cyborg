@@ -33,7 +33,7 @@ function updateBosConfig(field: "production" | "ssr", url: string) {
   } catch (err) {
     console.error(
       "   ❌ Failed to update bos.config.json:",
-      (err as Error).message
+      (err as Error).message,
     );
   }
 }
@@ -68,7 +68,7 @@ function createClientConfig() {
             updateBosConfig("production", info.url);
           },
         },
-      })
+      }),
     );
   }
 
@@ -98,6 +98,16 @@ function createClientConfig() {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type",
+      },
+      proxy: {
+        "/api": {
+          target: "http://localhost:3000",
+          changeOrigin: true,
+        },
+        "/auth": {
+          target: "http://localhost:3000",
+          changeOrigin: true,
+        },
       },
       publicDir: {
         name: "dist",
@@ -141,7 +151,7 @@ function createServerConfig() {
             updateBosConfig("ssr", info.url);
           },
         },
-      })
+      }),
     );
   }
 
@@ -167,9 +177,7 @@ function createServerConfig() {
           publicPath: "/",
           library: { type: "commonjs-module" },
         },
-        externals: [
-          /^node:/,
-        ],
+        externals: [/^node:/],
         infrastructureLogging: { level: "error" },
         stats: "errors-warnings",
         plugins: [
@@ -178,7 +186,9 @@ function createServerConfig() {
             name: normalizedName,
             filename: "remoteEntry.server.js",
             dts: false,
-            runtimePlugins: [require.resolve("@module-federation/node/runtimePlugin")],
+            runtimePlugins: [
+              require.resolve("@module-federation/node/runtimePlugin"),
+            ],
             library: { type: "commonjs-module" },
             exposes: { "./Router": "./src/router.server.tsx" },
             shared: uiSharedDeps,

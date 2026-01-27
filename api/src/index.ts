@@ -38,37 +38,61 @@ export default createPlugin({
   contract,
 
   initialize: (config): Effect.Effect<PluginDeps, Error, Scope.Scope> => {
+    console.log("[API] Initialize called with config:", {
+      dbUrl: config.secrets.API_DATABASE_URL,
+      hasApiKey: !!config.secrets.NEAR_AI_API_KEY,
+      model: config.variables.NEAR_AI_MODEL,
+    });
+
     return Effect.gen(function* () {
+      console.log("[API] Creating database layer...");
       const dbLayer = DatabaseLive(
         config.secrets.API_DATABASE_URL,
         config.secrets.API_DATABASE_AUTH_TOKEN
       );
       const db = yield* Effect.provide(DatabaseContext, dbLayer);
+      console.log("[API] Database initialized");
 
       // Initialize NEAR service
+      console.log("[API] Creating NEAR service...");
       const nearLayer = NearLive(db, {
         rpcUrl: config.variables.NEAR_RPC_URL,
         contractId: config.variables.NEAR_LEGION_CONTRACT,
         initiateContractId: config.variables.NEAR_INITIATE_CONTRACT,
       });
       const nearService = yield* Effect.provide(NearContext, nearLayer);
+      console.log("[API] NEAR service initialized");
 
       // Initialize agent service with NEAR service
+      console.log("[API] Creating agent service...");
       const agentLayer = AgentLive(db, {
         apiKey: config.secrets.NEAR_AI_API_KEY,
         baseUrl: config.variables.NEAR_AI_BASE_URL,
         model: config.variables.NEAR_AI_MODEL,
       }, nearService);
       const agentService = yield* Effect.provide(AgentContext, agentLayer);
+      console.log("[API] Agent service initialized");
 
-      console.log("[API] Plugin initialized");
+      console.log("[API] Plugin initialized successfully");
 
       return {
         db,
         agentService,
         nearService,
       };
-    });
+    }).pipe(
+      Effect.tapError((error) =>
+        Effect.sync(() => {
+          console.error("[API] Initialize FAILED with error:", error);
+          console.error("[API] Error type:", typeof error);
+          console.error("[API] Error constructor:", error?.constructor?.name);
+          if (error instanceof Error) {
+            console.error("[API] Error message:", error.message);
+            console.error("[API] Error stack:", error.stack);
+          }
+        })
+      )
+    );
   },
 
   shutdown: (_context) =>
@@ -78,9 +102,14 @@ export default createPlugin({
 
   createRouter: (context, builder) => {
     const { agentService, db, nearService } = context;
+    const isDev = process.env.NODE_ENV !== "production";
 
     const requireAuth = builder.middleware(async ({ context, next }) => {
-      if (!context.nearAccountId) {
+      // In dev mode, fall back to DEV_USER if no context is provided
+      // This is needed because every-plugin dev server doesn't extract context from headers
+      const nearAccountId = context.nearAccountId || (isDev ? (process.env.DEV_USER || "test.near") : undefined);
+
+      if (!nearAccountId) {
         throw new ORPCError("UNAUTHORIZED", {
           message: "Authentication required",
           data: { authType: "nearAccountId" },
@@ -89,20 +118,25 @@ export default createPlugin({
       return next({
         context: {
           ...context,
-          nearAccountId: context.nearAccountId,
+          nearAccountId,
           db,
         },
       });
     });
 
     const requireAdmin = builder.middleware(async ({ context, next }) => {
-      if (!context.nearAccountId) {
+      // In dev mode, fall back to DEV_USER if no context is provided
+      const nearAccountId = context.nearAccountId || (isDev ? (process.env.DEV_USER || "test.near") : undefined);
+
+      if (!nearAccountId) {
         throw new ORPCError("UNAUTHORIZED", {
           message: "Authentication required",
           data: { authType: "nearAccountId" },
         });
       }
-      if (context.role !== "admin") {
+      // In dev mode, treat DEV_USER as admin
+      const role = context.role || (isDev ? "admin" : undefined);
+      if (role !== "admin") {
         throw new ORPCError("FORBIDDEN", {
           message: "Admin role required",
         });
@@ -110,7 +144,7 @@ export default createPlugin({
       return next({
         context: {
           ...context,
-          nearAccountId: context.nearAccountId,
+          nearAccountId,
           db,
         },
       });

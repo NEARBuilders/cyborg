@@ -2,9 +2,11 @@
  * SSE streaming utilities for consuming chat stream
  */
 
+const API_BASE_URL = typeof window !== "undefined" ? window.location.origin : "";
+
 export interface StreamEvent {
   id: string;
-  type: 'chunk' | 'complete' | 'error';
+  type: "chunk" | "complete" | "error";
   data: unknown;
 }
 
@@ -31,20 +33,20 @@ export async function* streamChat(
   conversationId?: string,
   options?: {
     signal?: AbortSignal;
-  }
+  },
 ): AsyncGenerator<StreamEvent> {
   const body = {
     message,
     conversationId,
   };
 
-  const response = await fetch('/api/chat/stream', {
-    method: 'POST',
+  const response = await fetch(`${API_BASE_URL}/api/chat/stream`, {
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'text/event-stream',
+      "Content-Type": "application/json",
+      Accept: "text/event-stream",
     },
-    credentials: 'include',
+    credentials: "include",
     body: JSON.stringify(body),
     signal: options?.signal,
   });
@@ -55,29 +57,27 @@ export async function* streamChat(
 
   const reader = response.body?.getReader();
   if (!reader) {
-    throw new Error('No response body');
+    throw new Error("No response body");
   }
 
   const decoder = new TextDecoder();
-  let buffer = '';
+  let buffer = "";
   let currentEvent: Partial<StreamEvent> = {};
 
   try {
     const processLine = (line: string): StreamEvent | null => {
-      if (line.startsWith('id:')) {
+      if (line.startsWith("id:")) {
         currentEvent.id = line.slice(3).trim();
-      } else if (line.startsWith('event:')) {
-        // oRPC uses 'message' event type, data contains our event
+      } else if (line.startsWith("event:")) {
         const eventType = line.slice(6).trim();
-        if (eventType && eventType !== 'message') {
-          currentEvent.type = eventType as StreamEvent['type'];
+        if (eventType && eventType !== "message") {
+          currentEvent.type = eventType as StreamEvent["type"];
         }
-      } else if (line.startsWith('data:')) {
+      } else if (line.startsWith("data:")) {
         const dataStr = line.slice(5).trim();
         if (dataStr) {
           try {
             const parsed = JSON.parse(dataStr);
-            // oRPC wraps the event in the data field
             if (parsed.type && parsed.id && parsed.data !== undefined) {
               currentEvent = parsed;
             } else {
@@ -87,7 +87,7 @@ export async function* streamChat(
             // Ignore parse errors
           }
         }
-      } else if (line === '' && currentEvent.type && currentEvent.id) {
+      } else if (line === "" && currentEvent.type && currentEvent.id) {
         const readyEvent = currentEvent as StreamEvent;
         currentEvent = {};
         return readyEvent;
@@ -103,9 +103,8 @@ export async function* streamChat(
 
       buffer += decoder.decode(value, { stream: true });
 
-      // Parse SSE events from buffer
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || ''; // Keep incomplete line in buffer
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
 
       for (const line of lines) {
         const readyEvent = processLine(line);
@@ -116,8 +115,8 @@ export async function* streamChat(
     }
 
     if (buffer.length > 0) {
-      const lines = buffer.split('\n');
-      buffer = '';
+      const lines = buffer.split("\n");
+      buffer = "";
       for (const line of lines) {
         const readyEvent = processLine(line);
         if (readyEvent) {
@@ -139,13 +138,18 @@ export async function* streamChat(
  * Type guards for event data
  */
 export function isChunkData(data: unknown): data is ChunkData {
-  return typeof data === 'object' && data !== null && 'content' in data;
+  return typeof data === "object" && data !== null && "content" in data;
 }
 
 export function isCompleteData(data: unknown): data is CompleteData {
-  return typeof data === 'object' && data !== null && 'conversationId' in data && 'messageId' in data;
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    "conversationId" in data &&
+    "messageId" in data
+  );
 }
 
 export function isErrorData(data: unknown): data is ErrorData {
-  return typeof data === 'object' && data !== null && 'message' in data;
+  return typeof data === "object" && data !== null && "message" in data;
 }
