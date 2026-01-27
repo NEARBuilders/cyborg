@@ -122,6 +122,9 @@ function createClientConfig() {
         },
         infrastructureLogging: { level: "error" },
         stats: "errors-warnings",
+        watchOptions: {
+          ignored: ["**/routeTree.gen.ts"],
+        },
         plugins: [
           TanStackRouterRspack({
             target: "react",
@@ -180,6 +183,9 @@ function createServerConfig() {
         externals: [/^node:/],
         infrastructureLogging: { level: "error" },
         stats: "errors-warnings",
+        watchOptions: {
+          ignored: ["**/routeTree.gen.ts"],
+        },
         plugins: [
           TanStackRouterRspack({ target: "react", autoCodeSplitting: false }),
           new ModuleFederationPlugin({

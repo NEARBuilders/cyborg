@@ -5,11 +5,17 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { BuilderList, BuilderDetails, BuilderListItem, type Builder } from "@/components/builders";
+import {
+  BuilderList,
+  BuilderDetails,
+  BuilderListItem,
+  type Builder,
+} from "@/components/builders";
 
 export const Route = createFileRoute("/_layout/_page/builders")({
   component: BuildersPage,
 });
+console.log("helo");
 
 // Mock data - replace with API call later
 const mockBuilders: Builder[] = [
@@ -25,7 +31,8 @@ const mockBuilders: Builder[] = [
     projects: [
       {
         name: "LendNEAR",
-        description: "Decentralized lending protocol with dynamic interest rates",
+        description:
+          "Decentralized lending protocol with dynamic interest rates",
         status: "Active",
       },
       {
@@ -137,8 +144,15 @@ const mockBuilders: Builder[] = [
     avatar: null,
     role: "Smart Contract Dev",
     tags: ["Rust", "WASM", "Testing"],
-    description: "Building secure and efficient smart contracts for the NEAR ecosystem.",
-    projects: [{ name: "ContractKit", description: "Smart contract templates", status: "Active" }],
+    description:
+      "Building secure and efficient smart contracts for the NEAR ecosystem.",
+    projects: [
+      {
+        name: "ContractKit",
+        description: "Smart contract templates",
+        status: "Active",
+      },
+    ],
     socials: { github: "frank-contracts" },
   },
   {
@@ -148,8 +162,15 @@ const mockBuilders: Builder[] = [
     avatar: null,
     role: "Product Designer",
     tags: ["Figma", "UX Research", "Prototyping"],
-    description: "Designing intuitive Web3 experiences that bridge complexity with usability.",
-    projects: [{ name: "NEAR Design System", description: "Unified design language", status: "Active" }],
+    description:
+      "Designing intuitive Web3 experiences that bridge complexity with usability.",
+    projects: [
+      {
+        name: "NEAR Design System",
+        description: "Unified design language",
+        status: "Active",
+      },
+    ],
     socials: { twitter: "grace_designs" },
   },
   {
@@ -159,8 +180,15 @@ const mockBuilders: Builder[] = [
     avatar: null,
     role: "Data Engineer",
     tags: ["Analytics", "Python", "SQL"],
-    description: "Building data pipelines and analytics tools for blockchain insights.",
-    projects: [{ name: "ChainMetrics", description: "On-chain analytics dashboard", status: "Beta" }],
+    description:
+      "Building data pipelines and analytics tools for blockchain insights.",
+    projects: [
+      {
+        name: "ChainMetrics",
+        description: "On-chain analytics dashboard",
+        status: "Beta",
+      },
+    ],
     socials: { github: "henry-data" },
   },
   {
@@ -170,8 +198,15 @@ const mockBuilders: Builder[] = [
     avatar: null,
     role: "Community Lead",
     tags: ["Growth", "Events", "Partnerships"],
-    description: "Growing the NEAR community through events, partnerships, and engagement.",
-    projects: [{ name: "NEAR Meetups", description: "Global community events", status: "Active" }],
+    description:
+      "Growing the NEAR community through events, partnerships, and engagement.",
+    projects: [
+      {
+        name: "NEAR Meetups",
+        description: "Global community events",
+        status: "Active",
+      },
+    ],
     socials: { twitter: "iris_community" },
   },
   {
@@ -182,7 +217,13 @@ const mockBuilders: Builder[] = [
     role: "Mobile Developer",
     tags: ["React Native", "iOS", "Android"],
     description: "Building mobile-first experiences for NEAR dApps.",
-    projects: [{ name: "NEAR Wallet Mobile", description: "Mobile wallet app", status: "In Development" }],
+    projects: [
+      {
+        name: "NEAR Wallet Mobile",
+        description: "Mobile wallet app",
+        status: "In Development",
+      },
+    ],
     socials: { github: "jack-mobile" },
   },
   {
@@ -192,8 +233,15 @@ const mockBuilders: Builder[] = [
     avatar: null,
     role: "Technical Writer",
     tags: ["Documentation", "Tutorials", "API Docs"],
-    description: "Making NEAR accessible through clear and comprehensive documentation.",
-    projects: [{ name: "NEAR Docs", description: "Official documentation", status: "Active" }],
+    description:
+      "Making NEAR accessible through clear and comprehensive documentation.",
+    projects: [
+      {
+        name: "NEAR Docs",
+        description: "Official documentation",
+        status: "Active",
+      },
+    ],
     socials: { github: "kate-docs" },
   },
   {
@@ -204,13 +252,17 @@ const mockBuilders: Builder[] = [
     role: "Game Developer",
     tags: ["Unity", "Gaming", "NFTs"],
     description: "Creating blockchain-powered gaming experiences on NEAR.",
-    projects: [{ name: "NEAR Quest", description: "Play-to-earn RPG", status: "Beta" }],
+    projects: [
+      { name: "NEAR Quest", description: "Play-to-earn RPG", status: "Beta" },
+    ],
     socials: { twitter: "leo_games" },
   },
 ];
 
 function BuildersPage() {
-  const [selectedBuilder, setSelectedBuilder] = useState<Builder>(mockBuilders[0]);
+  const [selectedBuilder, setSelectedBuilder] = useState<Builder>(
+    mockBuilders[0],
+  );
   const [showList, setShowList] = useState(true);
 
   return (
