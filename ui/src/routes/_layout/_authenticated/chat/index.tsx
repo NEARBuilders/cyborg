@@ -1,13 +1,14 @@
-/**
- * Chat Route - Alias to canonical "/" route
- */
-
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
+import { ChatPage } from "../../../../components/chat/chat-page";
 
 export const Route = createFileRoute("/_layout/_authenticated/chat/")({
-  beforeLoad: () => {
-    throw redirect({
-      to: "/",
-    });
-  },
+  component: IndexPage,
 });
+
+function IndexPage() {
+  return (
+    <div className="flex flex-col h-full">
+      <ChatPage />
+    </div>
+  );
+}

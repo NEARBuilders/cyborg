@@ -13,23 +13,24 @@ Built with React, Hono.js, oRPC, Better-Auth, Module Federation, and NEAR AI Clo
 git clone https://github.com/NEARBuilders/cyborg.git && cd cyborg
 bun install
 
-# 2. Create environment files
-cp host/.env.example host/.env
-cp api/.env.example api/.env
+# 2. Create environment file
+cp .env.example .env
 
-# 3. Initialize database
-bun db:migrate
+# 3. Initialize (runs database migrations)
+bun init
 
 # 4. Start development server
 bun dev
 ```
 
-Visit [http://localhost:3001](http://localhost:3001) to see the application.
+> **Note:** You may see some warnings during startup - this is normal and the application will still function correctly.
+
+Visit [http://localhost:3000](http://localhost:3000) to see the application.
 
 ### Enable AI Chat
 
 1. Get an API key from [cloud.near.ai](https://cloud.near.ai)
-2. Add to `api/.env`: `NEAR_AI_API_KEY=your_key_here`
+2. Add to `.env`: `NEAR_AI_API_KEY=your_key_here`
 3. Restart with `bun dev`
 
 ## Documentation
@@ -102,23 +103,39 @@ All runtime configuration lives in `bos.config.json`:
 ```json
 {
   "account": "example.near",
+  "create": {
+    "project": "yourorg/yourproject",
+    "ui": "yourorg/yourproject/ui",
+    "api": "yourorg/yourproject/api",
+    "host": "yourorg/yourproject/host"
+  },
   "app": {
     "host": {
       "title": "App Title",
-      "development": "http://localhost:3001",
-      "production": "https://example.com"
+      "description": "App description",
+      "development": "http://localhost:3000",
+      "production": "https://example.com",
+      "secrets": ["HOST_DATABASE_URL", "HOST_DATABASE_AUTH_TOKEN", "BETTER_AUTH_SECRET", "BETTER_AUTH_URL"]
     },
     "ui": {
       "name": "ui",
       "development": "http://localhost:3002",
-      "production": "https://cdn.example.com/ui/remoteEntry.js"
+      "production": "https://cdn.example.com/ui/remoteEntry.js",
+      "exposes": {
+        "App": "./App",
+        "components": "./components",
+        "providers": "./providers",
+        "types": "./types"
+      }
     },
     "api": {
       "name": "api",
       "development": "http://localhost:3014",
       "production": "https://cdn.example.com/api/remoteEntry.js",
-      "variables": {},
-      "secrets": ["API_DATABASE_URL", "API_DATABASE_AUTH_TOKEN"]
+      "variables": {
+        "NEAR_AI_MODEL": "deepseek-ai/DeepSeek-V3.1"
+      },
+      "secrets": ["API_DATABASE_URL", "API_DATABASE_AUTH_TOKEN", "NEAR_AI_API_KEY", "NEAR_AI_BASE_URL"]
     }
   }
 }
@@ -130,53 +147,21 @@ All runtime configuration lives in `bos.config.json`:
 - Update CDN URLs without code changes
 - Template injection for secrets
 
-## Rate Limiting
-
-Built-in rate limiting protects against abuse:
-
-| Endpoint  | Limit         | Window   |
-| --------- | ------------- | -------- |
-| Chat/AI   | 20 requests   | 1 minute |
-| Key-Value | 100 requests  | 1 minute |
-| Auth      | 100 requests  | 1 minute |
-| Global    | 1000 requests | 1 minute |
-
-Rate limit headers included in responses:
-
-- `X-RateLimit-Limit`: Maximum requests allowed
-- `X-RateLimit-Remaining`: Requests remaining
-- `X-RateLimit-Reset`: Unix timestamp when window resets
-
 ## Health Checks
 
-Two health endpoints are available:
+Health endpoint is available:
 
-- `GET /health` - Basic liveness check (always returns 200 if server is running)
-- `GET /health/ready` - Readiness check with dependency status
-
-Example readiness response:
-
-```json
-{
-  "status": "ready",
-  "checks": {
-    "database": true,
-    "ai": true
-  },
-  "timestamp": "2025-01-17T12:00:00.000Z"
-}
-```
-
-Use `/health/ready` for load balancer health checks.
+- `GET /health` - Basic liveness check (returns "OK" if server is running)
 
 ## Available Scripts
 
 ```bash
 # Development
-bun dev              # All services (API: 3014, UI: 3002, Host: 3001)
-bun dev:api          # API plugin only
+bun dev              # All services (API: 3014, UI: 3002, Host: 3000)
 bun dev:ui           # UI remote only
+bun dev:api          # API plugin only
 bun dev:host         # Host server only
+bun dev:proxy        # Host with API proxied to production
 
 # Production
 bun build            # Build all packages
@@ -185,13 +170,14 @@ bun build:ui         # Build UI remote → uploads to CDN
 bun build:host       # Build host server
 
 # Database
+bun init             # Initialize database (runs migrations)
 bun db:migrate       # Run migrations
 bun db:push          # Push schema changes
 bun db:studio        # Open Drizzle Studio
+bun db:generate      # Generate migrations
 
 # Testing
-bun test             # Run all tests
-bun typecheck        # Type checking
+bun typecheck        # Type checking all workspaces
 ```
 
 ## Development Workflow
@@ -218,10 +204,9 @@ This project evolved from the [every-plugin template](https://github.com/near-ev
 
 ### Authentication & Roles
 
-- **Better-Auth** with admin plugin (`host/src/lib/auth.ts`)
+- **Better-Auth** with admin plugin (`host/src/services/auth.ts`)
 - **User roles** - "user" (default) and "admin"
 - **Admin routes** - Protected via TanStack Router (`ui/src/routes/_layout/_authenticated/_admin.tsx`)
-- **Role management** - Promote users via: `bun run promote-admin <near-account-id>`
 
 ### Database
 

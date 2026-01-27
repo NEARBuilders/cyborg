@@ -9,64 +9,39 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as TestColorsRouteImport } from './routes/test-colors'
 import { Route as LayoutRouteImport } from './routes/_layout'
+import { Route as LayoutIndexRouteImport } from './routes/_layout/index'
 import { Route as LayoutLoginRouteImport } from './routes/_layout/login'
-import { Route as LayoutPageRouteImport } from './routes/_layout/_page'
 import { Route as LayoutAuthenticatedRouteImport } from './routes/_layout/_authenticated'
-import { Route as LayoutAuthenticatedIndexRouteImport } from './routes/_layout/_authenticated/index'
-import { Route as LayoutPageTermsOfServiceRouteImport } from './routes/_layout/_page/terms-of-service'
-import { Route as LayoutPagePrivacyPolicyRouteImport } from './routes/_layout/_page/privacy-policy'
-import { Route as LayoutPageBuildersRouteImport } from './routes/_layout/_page/builders'
+import { Route as LayoutProfileAccountIdRouteImport } from './routes/_layout/profile/$accountId'
 import { Route as LayoutAuthenticatedSettingsRouteImport } from './routes/_layout/_authenticated/settings'
 import { Route as LayoutAuthenticatedAdminRouteImport } from './routes/_layout/_authenticated/_admin'
 import { Route as LayoutAuthenticatedChatIndexRouteImport } from './routes/_layout/_authenticated/chat/index'
 import { Route as LayoutAuthenticatedKeysKeyRouteImport } from './routes/_layout/_authenticated/keys/$key'
 import { Route as LayoutAuthenticatedAdminDashboardRouteImport } from './routes/_layout/_authenticated/_admin/dashboard'
 
-const TestColorsRoute = TestColorsRouteImport.update({
-  id: '/test-colors',
-  path: '/test-colors',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const LayoutRoute = LayoutRouteImport.update({
   id: '/_layout',
   getParentRoute: () => rootRouteImport,
+} as any)
+const LayoutIndexRoute = LayoutIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => LayoutRoute,
 } as any)
 const LayoutLoginRoute = LayoutLoginRouteImport.update({
   id: '/login',
   path: '/login',
   getParentRoute: () => LayoutRoute,
 } as any)
-const LayoutPageRoute = LayoutPageRouteImport.update({
-  id: '/_page',
-  getParentRoute: () => LayoutRoute,
-} as any)
 const LayoutAuthenticatedRoute = LayoutAuthenticatedRouteImport.update({
   id: '/_authenticated',
   getParentRoute: () => LayoutRoute,
 } as any)
-const LayoutAuthenticatedIndexRoute =
-  LayoutAuthenticatedIndexRouteImport.update({
-    id: '/',
-    path: '/',
-    getParentRoute: () => LayoutAuthenticatedRoute,
-  } as any)
-const LayoutPageTermsOfServiceRoute =
-  LayoutPageTermsOfServiceRouteImport.update({
-    id: '/terms-of-service',
-    path: '/terms-of-service',
-    getParentRoute: () => LayoutPageRoute,
-  } as any)
-const LayoutPagePrivacyPolicyRoute = LayoutPagePrivacyPolicyRouteImport.update({
-  id: '/privacy-policy',
-  path: '/privacy-policy',
-  getParentRoute: () => LayoutPageRoute,
-} as any)
-const LayoutPageBuildersRoute = LayoutPageBuildersRouteImport.update({
-  id: '/builders',
-  path: '/builders',
-  getParentRoute: () => LayoutPageRoute,
+const LayoutProfileAccountIdRoute = LayoutProfileAccountIdRouteImport.update({
+  id: '/profile/$accountId',
+  path: '/profile/$accountId',
+  getParentRoute: () => LayoutRoute,
 } as any)
 const LayoutAuthenticatedSettingsRoute =
   LayoutAuthenticatedSettingsRouteImport.update({
@@ -99,25 +74,19 @@ const LayoutAuthenticatedAdminDashboardRoute =
   } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof LayoutAuthenticatedIndexRoute
-  '/test-colors': typeof TestColorsRoute
+  '/': typeof LayoutIndexRoute
   '/login': typeof LayoutLoginRoute
   '/settings': typeof LayoutAuthenticatedSettingsRoute
-  '/builders': typeof LayoutPageBuildersRoute
-  '/privacy-policy': typeof LayoutPagePrivacyPolicyRoute
-  '/terms-of-service': typeof LayoutPageTermsOfServiceRoute
+  '/profile/$accountId': typeof LayoutProfileAccountIdRoute
   '/dashboard': typeof LayoutAuthenticatedAdminDashboardRoute
   '/keys/$key': typeof LayoutAuthenticatedKeysKeyRoute
   '/chat/': typeof LayoutAuthenticatedChatIndexRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof LayoutAuthenticatedIndexRoute
-  '/test-colors': typeof TestColorsRoute
+  '/': typeof LayoutIndexRoute
   '/login': typeof LayoutLoginRoute
   '/settings': typeof LayoutAuthenticatedSettingsRoute
-  '/builders': typeof LayoutPageBuildersRoute
-  '/privacy-policy': typeof LayoutPagePrivacyPolicyRoute
-  '/terms-of-service': typeof LayoutPageTermsOfServiceRoute
+  '/profile/$accountId': typeof LayoutProfileAccountIdRoute
   '/dashboard': typeof LayoutAuthenticatedAdminDashboardRoute
   '/keys/$key': typeof LayoutAuthenticatedKeysKeyRoute
   '/chat': typeof LayoutAuthenticatedChatIndexRoute
@@ -125,16 +94,12 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_layout': typeof LayoutRouteWithChildren
-  '/test-colors': typeof TestColorsRoute
   '/_layout/_authenticated': typeof LayoutAuthenticatedRouteWithChildren
-  '/_layout/_page': typeof LayoutPageRouteWithChildren
   '/_layout/login': typeof LayoutLoginRoute
+  '/_layout/': typeof LayoutIndexRoute
   '/_layout/_authenticated/_admin': typeof LayoutAuthenticatedAdminRouteWithChildren
   '/_layout/_authenticated/settings': typeof LayoutAuthenticatedSettingsRoute
-  '/_layout/_page/builders': typeof LayoutPageBuildersRoute
-  '/_layout/_page/privacy-policy': typeof LayoutPagePrivacyPolicyRoute
-  '/_layout/_page/terms-of-service': typeof LayoutPageTermsOfServiceRoute
-  '/_layout/_authenticated/': typeof LayoutAuthenticatedIndexRoute
+  '/_layout/profile/$accountId': typeof LayoutProfileAccountIdRoute
   '/_layout/_authenticated/_admin/dashboard': typeof LayoutAuthenticatedAdminDashboardRoute
   '/_layout/_authenticated/keys/$key': typeof LayoutAuthenticatedKeysKeyRoute
   '/_layout/_authenticated/chat/': typeof LayoutAuthenticatedChatIndexRoute
@@ -143,40 +108,30 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/test-colors'
     | '/login'
     | '/settings'
-    | '/builders'
-    | '/privacy-policy'
-    | '/terms-of-service'
+    | '/profile/$accountId'
     | '/dashboard'
     | '/keys/$key'
     | '/chat/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/test-colors'
     | '/login'
     | '/settings'
-    | '/builders'
-    | '/privacy-policy'
-    | '/terms-of-service'
+    | '/profile/$accountId'
     | '/dashboard'
     | '/keys/$key'
     | '/chat'
   id:
     | '__root__'
     | '/_layout'
-    | '/test-colors'
     | '/_layout/_authenticated'
-    | '/_layout/_page'
     | '/_layout/login'
+    | '/_layout/'
     | '/_layout/_authenticated/_admin'
     | '/_layout/_authenticated/settings'
-    | '/_layout/_page/builders'
-    | '/_layout/_page/privacy-policy'
-    | '/_layout/_page/terms-of-service'
-    | '/_layout/_authenticated/'
+    | '/_layout/profile/$accountId'
     | '/_layout/_authenticated/_admin/dashboard'
     | '/_layout/_authenticated/keys/$key'
     | '/_layout/_authenticated/chat/'
@@ -184,18 +139,10 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   LayoutRoute: typeof LayoutRouteWithChildren
-  TestColorsRoute: typeof TestColorsRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/test-colors': {
-      id: '/test-colors'
-      path: '/test-colors'
-      fullPath: '/test-colors'
-      preLoaderRoute: typeof TestColorsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/_layout': {
       id: '/_layout'
       path: ''
@@ -203,18 +150,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_layout/': {
+      id: '/_layout/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof LayoutIndexRouteImport
+      parentRoute: typeof LayoutRoute
+    }
     '/_layout/login': {
       id: '/_layout/login'
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LayoutLoginRouteImport
-      parentRoute: typeof LayoutRoute
-    }
-    '/_layout/_page': {
-      id: '/_layout/_page'
-      path: ''
-      fullPath: '/'
-      preLoaderRoute: typeof LayoutPageRouteImport
       parentRoute: typeof LayoutRoute
     }
     '/_layout/_authenticated': {
@@ -224,33 +171,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutAuthenticatedRouteImport
       parentRoute: typeof LayoutRoute
     }
-    '/_layout/_authenticated/': {
-      id: '/_layout/_authenticated/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof LayoutAuthenticatedIndexRouteImport
-      parentRoute: typeof LayoutAuthenticatedRoute
-    }
-    '/_layout/_page/terms-of-service': {
-      id: '/_layout/_page/terms-of-service'
-      path: '/terms-of-service'
-      fullPath: '/terms-of-service'
-      preLoaderRoute: typeof LayoutPageTermsOfServiceRouteImport
-      parentRoute: typeof LayoutPageRoute
-    }
-    '/_layout/_page/privacy-policy': {
-      id: '/_layout/_page/privacy-policy'
-      path: '/privacy-policy'
-      fullPath: '/privacy-policy'
-      preLoaderRoute: typeof LayoutPagePrivacyPolicyRouteImport
-      parentRoute: typeof LayoutPageRoute
-    }
-    '/_layout/_page/builders': {
-      id: '/_layout/_page/builders'
-      path: '/builders'
-      fullPath: '/builders'
-      preLoaderRoute: typeof LayoutPageBuildersRouteImport
-      parentRoute: typeof LayoutPageRoute
+    '/_layout/profile/$accountId': {
+      id: '/_layout/profile/$accountId'
+      path: '/profile/$accountId'
+      fullPath: '/profile/$accountId'
+      preLoaderRoute: typeof LayoutProfileAccountIdRouteImport
+      parentRoute: typeof LayoutRoute
     }
     '/_layout/_authenticated/settings': {
       id: '/_layout/_authenticated/settings'
@@ -308,7 +234,6 @@ const LayoutAuthenticatedAdminRouteWithChildren =
 interface LayoutAuthenticatedRouteChildren {
   LayoutAuthenticatedAdminRoute: typeof LayoutAuthenticatedAdminRouteWithChildren
   LayoutAuthenticatedSettingsRoute: typeof LayoutAuthenticatedSettingsRoute
-  LayoutAuthenticatedIndexRoute: typeof LayoutAuthenticatedIndexRoute
   LayoutAuthenticatedKeysKeyRoute: typeof LayoutAuthenticatedKeysKeyRoute
   LayoutAuthenticatedChatIndexRoute: typeof LayoutAuthenticatedChatIndexRoute
 }
@@ -316,7 +241,6 @@ interface LayoutAuthenticatedRouteChildren {
 const LayoutAuthenticatedRouteChildren: LayoutAuthenticatedRouteChildren = {
   LayoutAuthenticatedAdminRoute: LayoutAuthenticatedAdminRouteWithChildren,
   LayoutAuthenticatedSettingsRoute: LayoutAuthenticatedSettingsRoute,
-  LayoutAuthenticatedIndexRoute: LayoutAuthenticatedIndexRoute,
   LayoutAuthenticatedKeysKeyRoute: LayoutAuthenticatedKeysKeyRoute,
   LayoutAuthenticatedChatIndexRoute: LayoutAuthenticatedChatIndexRoute,
 }
@@ -324,32 +248,18 @@ const LayoutAuthenticatedRouteChildren: LayoutAuthenticatedRouteChildren = {
 const LayoutAuthenticatedRouteWithChildren =
   LayoutAuthenticatedRoute._addFileChildren(LayoutAuthenticatedRouteChildren)
 
-interface LayoutPageRouteChildren {
-  LayoutPageBuildersRoute: typeof LayoutPageBuildersRoute
-  LayoutPagePrivacyPolicyRoute: typeof LayoutPagePrivacyPolicyRoute
-  LayoutPageTermsOfServiceRoute: typeof LayoutPageTermsOfServiceRoute
-}
-
-const LayoutPageRouteChildren: LayoutPageRouteChildren = {
-  LayoutPageBuildersRoute: LayoutPageBuildersRoute,
-  LayoutPagePrivacyPolicyRoute: LayoutPagePrivacyPolicyRoute,
-  LayoutPageTermsOfServiceRoute: LayoutPageTermsOfServiceRoute,
-}
-
-const LayoutPageRouteWithChildren = LayoutPageRoute._addFileChildren(
-  LayoutPageRouteChildren,
-)
-
 interface LayoutRouteChildren {
   LayoutAuthenticatedRoute: typeof LayoutAuthenticatedRouteWithChildren
-  LayoutPageRoute: typeof LayoutPageRouteWithChildren
   LayoutLoginRoute: typeof LayoutLoginRoute
+  LayoutIndexRoute: typeof LayoutIndexRoute
+  LayoutProfileAccountIdRoute: typeof LayoutProfileAccountIdRoute
 }
 
 const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutAuthenticatedRoute: LayoutAuthenticatedRouteWithChildren,
-  LayoutPageRoute: LayoutPageRouteWithChildren,
   LayoutLoginRoute: LayoutLoginRoute,
+  LayoutIndexRoute: LayoutIndexRoute,
+  LayoutProfileAccountIdRoute: LayoutProfileAccountIdRoute,
 }
 
 const LayoutRouteWithChildren =
@@ -357,7 +267,6 @@ const LayoutRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   LayoutRoute: LayoutRouteWithChildren,
-  TestColorsRoute: TestColorsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

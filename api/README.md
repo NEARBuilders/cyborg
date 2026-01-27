@@ -1,19 +1,19 @@
 # api
 
-[every-plugin](https://github.com/near-everything/every-plugin) based API.
+[every-plugin](https://github.com/near-everything/every-plugin) based API with NEAR AI Cloud integration.
 
 ## Plugin Architecture
 
 Built with **every-plugin** framework (Rspack + Module Federation):
 
-```
+```bash
 ┌─────────────────────────────────────────────────────────┐
 │                    createPlugin()                       │
 ├─────────────────────────────────────────────────────────┤
-│  variables: {  ... }                │
-│  secrets: { ... }  │
+│  variables: { NEAR_AI_MODEL, NEAR_AI_BASE_URL }         │
+│  secrets: { API_DATABASE_URL, NEAR_AI_API_KEY, ... }    │
 │  contract: oRPC route definitions                       │
-│  initialize(): Effect → services                        │
+│  initialize(): Effect → { db, agentService }            │
 │  createRouter(): handlers using services                │
 └─────────────────────────────────────────────────────────┘
                           ↓
@@ -21,45 +21,51 @@ Built with **every-plugin** framework (Rspack + Module Federation):
 │                   Host Integration                      │
 ├─────────────────────────────────────────────────────────┤
 │  bos.config.json → plugin URL + secrets                 │
-│  runtime.ts → createPluginRuntime().usePlugin()         │
-│  routers/index.ts → merge plugin.router into AppRouter  │
+│  host/src/services/plugins.ts → loadPlugin()            │
+│  host/src/services/router.ts → merge plugin router      │
 └─────────────────────────────────────────────────────────┘
 ```
 
-**Plugin Structure:**
+## Directory Structure
 
-- `contract.ts` - oRPC contract definition (routes, schemas)
-- `index.ts` - Plugin initialization + router handlers
-- `db/schema.ts` - Database schema (conversations, messages, KV store)
-- `services/` - Business logic (agent service for AI chat)
-- `db/migrations/` - Database migrations
-
-**Extending with more plugins:**
-
-Each domain can be its own plugin with independent:
-
-- Contract definition
-- Initialization logic  
-- Router handlers
-- Database schema
+```
+api/
+├── src/
+│   ├── contract.ts         # oRPC contract definition
+│   ├── index.ts            # Plugin definition (createPlugin)
+│   ├── db/
+│   │   ├── index.ts        # Database connection layer
+│   │   ├── schema.ts       # Drizzle ORM schema
+│   │   └── migrations/     # SQL migration files
+│   └── services/
+│       ├── index.ts        # Service exports
+│       └── agent.ts        # NEAR AI integration
+├── plugin.dev.ts           # Local dev configuration
+├── drizzle.config.ts       # Drizzle Kit config
+└── package.json
+```
 
 ## Tech Stack
 
 - **Framework**: every-plugin + oRPC
 - **Effects**: Effect-TS for service composition
 - **Database**: SQLite (libsql) + Drizzle ORM
+- **AI**: OpenAI SDK (NEAR AI Cloud compatible)
 
 ## Available Scripts
 
-- `bun dev` - Start dev server
-- `bun build` - Build plugin
+- `bun dev` - Start dev server (port 3014)
+- `bun build` - Build plugin (deploys to CDN)
 - `bun test` - Run tests
+- `bun typecheck` - Type checking
 - `bun db:push` - Push schema to database
+- `bun db:generate` - Generate migrations
+- `bun db:migrate` - Run migrations
 - `bun db:studio` - Open Drizzle Studio
 
 ## Configuration
 
-**Root config** (`bos.config.json`):
+**bos.config.json**:
 
 ```json
 {
@@ -67,9 +73,10 @@ Each domain can be its own plugin with independent:
     "api": {
       "name": "api",
       "development": "http://localhost:3014",
-      "production": "https://",
+      "production": "https://cdn.example.com/api",
       "variables": {
-        "NEAR_AI_MODEL": "deepseek-ai/DeepSeek-V3.1"
+        "NEAR_AI_MODEL": "deepseek-ai/DeepSeek-V3.1",
+        "NEAR_AI_BASE_URL": "https://cloud-api.near.ai/v1"
       },
       "secrets": [
         "API_DATABASE_URL",
@@ -81,3 +88,22 @@ Each domain can be its own plugin with independent:
   }
 }
 ```
+
+## API Endpoints
+
+| Route | Method | Description |
+|-------|--------|-------------|
+| `/api/ping` | GET | Health check |
+| `/api/protected` | GET | Auth test endpoint |
+| `/api/admin/stats` | GET | Admin statistics |
+| `/api/kv/:key` | GET | Get key-value entry |
+| `/api/kv` | POST | Set key-value entry |
+| `/api/chat` | POST | Send chat message |
+| `/api/chat/stream` | POST | Stream chat response |
+| `/api/conversation/:id` | GET | Get conversation history |
+
+## Database Schema
+
+- **conversation** - Chat conversations per user
+- **message** - Messages within conversations
+- **kvStore** - Per-user key-value storage (composite key: `key + nearAccountId`)

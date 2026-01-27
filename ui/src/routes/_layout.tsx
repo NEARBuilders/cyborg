@@ -1,53 +1,41 @@
-import { useSuspenseQuery } from "@tanstack/react-query";
-import {
-  createFileRoute,
-  Outlet,
-  useRouter,
-} from "@tanstack/react-router";
-import { Header, Footer } from "../components/layout";
-import { authClient } from "../lib/auth-client";
-import { sessionQueryOptions } from "../lib/session";
-import { queryClient } from "../utils/orpc";
+import { ClientOnly, createFileRoute, Outlet } from "@tanstack/react-router";
+import { ThemeToggle } from "../components/theme-toggle";
+import { UserNav } from "../components/user-nav";
 
 export const Route = createFileRoute("/_layout")({
-  beforeLoad: async ({ context }) => {
-    await context.queryClient.ensureQueryData(sessionQueryOptions);
-  },
   component: Layout,
 });
 
 function Layout() {
-  const router = useRouter();
-  const { data: session } = useSuspenseQuery(sessionQueryOptions);
-  const accountId = session?.user?.id;
-  const userRole = (session?.user as { role?: string })?.role;
-
-  const handleSignOut = async () => {
-    try {
-      await authClient.signOut();
-      await authClient.near.disconnect();
-      queryClient.invalidateQueries({ queryKey: ["session"] });
-      router.invalidate();
-      window.location.href = "/";
-    } catch (error) {
-      console.error("Sign out error:", error);
-    }
-  };
-
   return (
     <div className="h-dvh w-full flex flex-col bg-background text-foreground overflow-hidden">
-      <Header
-        accountId={accountId}
-        userRole={userRole}
-        onSignOut={handleSignOut}
-      />
+      <header className="shrink-0 border-b border-border/50">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 sm:py-4">
+          <div className="flex items-center justify-end gap-4">
+            <ThemeToggle />
+            <ClientOnly fallback={<span className="text-xs text-muted-foreground font-mono">...</span>}>
+              <UserNav />
+            </ClientOnly>
+          </div>
+        </div>
+      </header>
 
-      {/* Main content area - this is the ONLY scroll container */}
-      <main className="flex-1 min-h-0 overflow-hidden">
-        <Outlet />
+      <main className="flex-1 w-full min-h-0 overflow-auto flex justify-center">
+        <div className="w-full max-w-3xl px-4 sm:px-6 py-8 sm:py-12">
+          <Outlet />
+        </div>
       </main>
 
-      <Footer />
+      <footer className="shrink-0 border-t border-border/50">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 sm:py-4">
+          <a
+            href="/api"
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
+          >
+            api
+          </a>
+        </div>
+      </footer>
     </div>
   );
 }

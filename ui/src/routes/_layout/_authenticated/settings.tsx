@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { KVEditor } from "../../../components/kv/KVEditor";
+import { KVEditor } from "../../../components/kv/kv-editor";
 
 export const Route = createFileRoute("/_layout/_authenticated/settings")({
   component: SettingsPage,
