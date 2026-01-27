@@ -36,11 +36,13 @@ export async function* streamChat(
   },
 ): AsyncGenerator<StreamEvent> {
   const body = {
-    message,
-    conversationId,
+    json: {
+      message,
+      conversationId,
+    },
   };
 
-  const response = await fetch(`${API_BASE_URL}/api/chat/stream`, {
+  const response = await fetch(`${API_BASE_URL}/api/rpc/chatStream`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -78,10 +80,12 @@ export async function* streamChat(
         if (dataStr) {
           try {
             const parsed = JSON.parse(dataStr);
-            if (parsed.type && parsed.id && parsed.data !== undefined) {
-              currentEvent = parsed;
+            // oRPC wraps response in { json: ... }
+            const unwrapped = parsed.json ?? parsed;
+            if (unwrapped.type && unwrapped.id && unwrapped.data !== undefined) {
+              currentEvent = unwrapped;
             } else {
-              currentEvent.data = parsed;
+              currentEvent.data = unwrapped;
             }
           } catch {
             // Ignore parse errors

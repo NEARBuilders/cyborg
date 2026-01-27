@@ -1,7 +1,7 @@
 import { betterAuth } from "better-auth";
 import { admin } from "better-auth/plugins";
 import { siwn } from "better-near-auth";
-import Database from "bun:sqlite";
+import Database from "better-sqlite3";
 
 const db = new Database(process.env.HOST_DATABASE_URL?.replace("file:", "") || "./database.db");
 
