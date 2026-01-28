@@ -101,7 +101,7 @@ function createClientConfig() {
       },
       proxy: {
         "/api": {
-          target: "http://localhost:3000",
+          target: "http://localhost:3014",
           changeOrigin: true,
         },
         "/auth": {

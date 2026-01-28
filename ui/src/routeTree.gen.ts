@@ -15,8 +15,8 @@ import { Route as LayoutIndexRouteImport } from './routes/_layout/index'
 import { Route as LayoutLoginRouteImport } from './routes/_layout/login'
 import { Route as LayoutAuthenticatedRouteImport } from './routes/_layout/_authenticated'
 import { Route as LayoutProfileAccountIdRouteImport } from './routes/_layout/profile/$accountId'
-import { Route as LayoutPageBuildersRouteImport } from './routes/_layout/_page/builders'
 import { Route as LayoutAuthenticatedSettingsRouteImport } from './routes/_layout/_authenticated/settings'
+import { Route as LayoutAuthenticatedBuildersRouteImport } from './routes/_layout/_authenticated/builders'
 import { Route as LayoutAuthenticatedAdminRouteImport } from './routes/_layout/_authenticated/_admin'
 import { Route as LayoutAuthenticatedChatIndexRouteImport } from './routes/_layout/_authenticated/chat/index'
 import { Route as LayoutAuthenticatedKeysKeyRouteImport } from './routes/_layout/_authenticated/keys/$key'
@@ -50,15 +50,16 @@ const LayoutProfileAccountIdRoute = LayoutProfileAccountIdRouteImport.update({
   path: '/profile/$accountId',
   getParentRoute: () => LayoutRoute,
 } as any)
-const LayoutPageBuildersRoute = LayoutPageBuildersRouteImport.update({
-  id: '/_page/builders',
-  path: '/builders',
-  getParentRoute: () => LayoutRoute,
-} as any)
 const LayoutAuthenticatedSettingsRoute =
   LayoutAuthenticatedSettingsRouteImport.update({
     id: '/settings',
     path: '/settings',
+    getParentRoute: () => LayoutAuthenticatedRoute,
+  } as any)
+const LayoutAuthenticatedBuildersRoute =
+  LayoutAuthenticatedBuildersRouteImport.update({
+    id: '/builders',
+    path: '/builders',
     getParentRoute: () => LayoutAuthenticatedRoute,
   } as any)
 const LayoutAuthenticatedAdminRoute =
@@ -89,8 +90,8 @@ export interface FileRoutesByFullPath {
   '/': typeof LayoutIndexRoute
   '/test-colors': typeof TestColorsRoute
   '/login': typeof LayoutLoginRoute
+  '/builders': typeof LayoutAuthenticatedBuildersRoute
   '/settings': typeof LayoutAuthenticatedSettingsRoute
-  '/builders': typeof LayoutPageBuildersRoute
   '/profile/$accountId': typeof LayoutProfileAccountIdRoute
   '/dashboard': typeof LayoutAuthenticatedAdminDashboardRoute
   '/keys/$key': typeof LayoutAuthenticatedKeysKeyRoute
@@ -100,8 +101,8 @@ export interface FileRoutesByTo {
   '/test-colors': typeof TestColorsRoute
   '/': typeof LayoutIndexRoute
   '/login': typeof LayoutLoginRoute
+  '/builders': typeof LayoutAuthenticatedBuildersRoute
   '/settings': typeof LayoutAuthenticatedSettingsRoute
-  '/builders': typeof LayoutPageBuildersRoute
   '/profile/$accountId': typeof LayoutProfileAccountIdRoute
   '/dashboard': typeof LayoutAuthenticatedAdminDashboardRoute
   '/keys/$key': typeof LayoutAuthenticatedKeysKeyRoute
@@ -115,8 +116,8 @@ export interface FileRoutesById {
   '/_layout/login': typeof LayoutLoginRoute
   '/_layout/': typeof LayoutIndexRoute
   '/_layout/_authenticated/_admin': typeof LayoutAuthenticatedAdminRouteWithChildren
+  '/_layout/_authenticated/builders': typeof LayoutAuthenticatedBuildersRoute
   '/_layout/_authenticated/settings': typeof LayoutAuthenticatedSettingsRoute
-  '/_layout/_page/builders': typeof LayoutPageBuildersRoute
   '/_layout/profile/$accountId': typeof LayoutProfileAccountIdRoute
   '/_layout/_authenticated/_admin/dashboard': typeof LayoutAuthenticatedAdminDashboardRoute
   '/_layout/_authenticated/keys/$key': typeof LayoutAuthenticatedKeysKeyRoute
@@ -128,8 +129,8 @@ export interface FileRouteTypes {
     | '/'
     | '/test-colors'
     | '/login'
-    | '/settings'
     | '/builders'
+    | '/settings'
     | '/profile/$accountId'
     | '/dashboard'
     | '/keys/$key'
@@ -139,8 +140,8 @@ export interface FileRouteTypes {
     | '/test-colors'
     | '/'
     | '/login'
-    | '/settings'
     | '/builders'
+    | '/settings'
     | '/profile/$accountId'
     | '/dashboard'
     | '/keys/$key'
@@ -153,8 +154,8 @@ export interface FileRouteTypes {
     | '/_layout/login'
     | '/_layout/'
     | '/_layout/_authenticated/_admin'
+    | '/_layout/_authenticated/builders'
     | '/_layout/_authenticated/settings'
-    | '/_layout/_page/builders'
     | '/_layout/profile/$accountId'
     | '/_layout/_authenticated/_admin/dashboard'
     | '/_layout/_authenticated/keys/$key'
@@ -210,18 +211,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutProfileAccountIdRouteImport
       parentRoute: typeof LayoutRoute
     }
-    '/_layout/_page/builders': {
-      id: '/_layout/_page/builders'
-      path: '/builders'
-      fullPath: '/builders'
-      preLoaderRoute: typeof LayoutPageBuildersRouteImport
-      parentRoute: typeof LayoutRoute
-    }
     '/_layout/_authenticated/settings': {
       id: '/_layout/_authenticated/settings'
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof LayoutAuthenticatedSettingsRouteImport
+      parentRoute: typeof LayoutAuthenticatedRoute
+    }
+    '/_layout/_authenticated/builders': {
+      id: '/_layout/_authenticated/builders'
+      path: '/builders'
+      fullPath: '/builders'
+      preLoaderRoute: typeof LayoutAuthenticatedBuildersRouteImport
       parentRoute: typeof LayoutAuthenticatedRoute
     }
     '/_layout/_authenticated/_admin': {
@@ -272,6 +273,7 @@ const LayoutAuthenticatedAdminRouteWithChildren =
 
 interface LayoutAuthenticatedRouteChildren {
   LayoutAuthenticatedAdminRoute: typeof LayoutAuthenticatedAdminRouteWithChildren
+  LayoutAuthenticatedBuildersRoute: typeof LayoutAuthenticatedBuildersRoute
   LayoutAuthenticatedSettingsRoute: typeof LayoutAuthenticatedSettingsRoute
   LayoutAuthenticatedKeysKeyRoute: typeof LayoutAuthenticatedKeysKeyRoute
   LayoutAuthenticatedChatIndexRoute: typeof LayoutAuthenticatedChatIndexRoute
@@ -279,6 +281,7 @@ interface LayoutAuthenticatedRouteChildren {
 
 const LayoutAuthenticatedRouteChildren: LayoutAuthenticatedRouteChildren = {
   LayoutAuthenticatedAdminRoute: LayoutAuthenticatedAdminRouteWithChildren,
+  LayoutAuthenticatedBuildersRoute: LayoutAuthenticatedBuildersRoute,
   LayoutAuthenticatedSettingsRoute: LayoutAuthenticatedSettingsRoute,
   LayoutAuthenticatedKeysKeyRoute: LayoutAuthenticatedKeysKeyRoute,
   LayoutAuthenticatedChatIndexRoute: LayoutAuthenticatedChatIndexRoute,
@@ -291,7 +294,6 @@ interface LayoutRouteChildren {
   LayoutAuthenticatedRoute: typeof LayoutAuthenticatedRouteWithChildren
   LayoutLoginRoute: typeof LayoutLoginRoute
   LayoutIndexRoute: typeof LayoutIndexRoute
-  LayoutPageBuildersRoute: typeof LayoutPageBuildersRoute
   LayoutProfileAccountIdRoute: typeof LayoutProfileAccountIdRoute
 }
 
@@ -299,7 +301,6 @@ const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutAuthenticatedRoute: LayoutAuthenticatedRouteWithChildren,
   LayoutLoginRoute: LayoutLoginRoute,
   LayoutIndexRoute: LayoutIndexRoute,
-  LayoutPageBuildersRoute: LayoutPageBuildersRoute,
   LayoutProfileAccountIdRoute: LayoutProfileAccountIdRoute,
 }
 

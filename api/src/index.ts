@@ -7,8 +7,16 @@ import { and, eq, count, desc } from "drizzle-orm";
 import { contract } from "./contract";
 import * as schema from "./db/schema";
 import { DatabaseContext, DatabaseLive } from "./db";
-import { AgentService, AgentContext, AgentLive, NearService, NearContext, NearLive } from "./services";
+import {
+  AgentService,
+  AgentContext,
+  AgentLive,
+  NearService,
+  NearContext,
+  NearLive,
+} from "./services";
 import type { Database as DrizzleDatabase } from "./db";
+import { handleBuildersRequest } from "./builders";
 
 type PluginDeps = {
   db: DrizzleDatabase;
@@ -20,7 +28,7 @@ export default createPlugin({
     NEAR_AI_MODEL: z.string().default("deepseek-ai/DeepSeek-V3.1"),
     NEAR_AI_BASE_URL: z.string().default("https://cloud-api.near.ai/v1"),
     NEAR_RPC_URL: z.string().default("https://rpc.mainnet.near.org"),
-    NEAR_LEGION_CONTRACT: z.string().default("nearlegion.nfts.tg"),
+    NEAR_LEGION_CONTRACT: z.string().default("ascendant.nearlegion.near"),
     NEAR_INITIATE_CONTRACT: z.string().default("initiate.nearlegion.near"),
   }),
 
@@ -48,7 +56,7 @@ export default createPlugin({
       console.log("[API] Creating database layer...");
       const dbLayer = DatabaseLive(
         config.secrets.API_DATABASE_URL,
-        config.secrets.API_DATABASE_AUTH_TOKEN
+        config.secrets.API_DATABASE_AUTH_TOKEN,
       );
       const db = yield* Effect.provide(DatabaseContext, dbLayer);
       console.log("[API] Database initialized");
@@ -65,11 +73,15 @@ export default createPlugin({
 
       // Initialize agent service with NEAR service
       console.log("[API] Creating agent service...");
-      const agentLayer = AgentLive(db, {
-        apiKey: config.secrets.NEAR_AI_API_KEY,
-        baseUrl: config.variables.NEAR_AI_BASE_URL,
-        model: config.variables.NEAR_AI_MODEL,
-      }, nearService);
+      const agentLayer = AgentLive(
+        db,
+        {
+          apiKey: config.secrets.NEAR_AI_API_KEY,
+          baseUrl: config.variables.NEAR_AI_BASE_URL,
+          model: config.variables.NEAR_AI_MODEL,
+        },
+        nearService,
+      );
       const agentService = yield* Effect.provide(AgentContext, agentLayer);
       console.log("[API] Agent service initialized");
 
@@ -81,17 +93,17 @@ export default createPlugin({
         nearService,
       };
     }).pipe(
-      Effect.tapError((error) =>
+      Effect.tapError((error: unknown) =>
         Effect.sync(() => {
           console.error("[API] Initialize FAILED with error:", error);
           console.error("[API] Error type:", typeof error);
-          console.error("[API] Error constructor:", error?.constructor?.name);
           if (error instanceof Error) {
+            console.error("[API] Error constructor:", error.constructor?.name);
             console.error("[API] Error message:", error.message);
             console.error("[API] Error stack:", error.stack);
           }
-        })
-      )
+        }),
+      ),
     );
   },
 
@@ -107,7 +119,9 @@ export default createPlugin({
     const requireAuth = builder.middleware(async ({ context, next }) => {
       // In dev mode, fall back to DEV_USER if no context is provided
       // This is needed because every-plugin dev server doesn't extract context from headers
-      const nearAccountId = context.nearAccountId || (isDev ? (process.env.DEV_USER || "test.near") : undefined);
+      const nearAccountId =
+        context.nearAccountId ||
+        (isDev ? process.env.DEV_USER || "test.near" : undefined);
 
       if (!nearAccountId) {
         throw new ORPCError("UNAUTHORIZED", {
@@ -126,7 +140,9 @@ export default createPlugin({
 
     const requireAdmin = builder.middleware(async ({ context, next }) => {
       // In dev mode, fall back to DEV_USER if no context is provided
-      const nearAccountId = context.nearAccountId || (isDev ? (process.env.DEV_USER || "test.near") : undefined);
+      const nearAccountId =
+        context.nearAccountId ||
+        (isDev ? process.env.DEV_USER || "test.near" : undefined);
 
       if (!nearAccountId) {
         throw new ORPCError("UNAUTHORIZED", {
@@ -252,7 +268,7 @@ export default createPlugin({
           const entry = await context.db.query.kvStore.findFirst({
             where: and(
               eq(schema.kvStore.key, input.key),
-              eq(schema.kvStore.nearAccountId, context.nearAccountId)
+              eq(schema.kvStore.nearAccountId, context.nearAccountId),
             ),
           });
 
@@ -296,7 +312,7 @@ export default createPlugin({
           const entry = await context.db.query.kvStore.findFirst({
             where: and(
               eq(schema.kvStore.key, input.key),
-              eq(schema.kvStore.nearAccountId, context.nearAccountId)
+              eq(schema.kvStore.nearAccountId, context.nearAccountId),
             ),
           });
 
@@ -324,7 +340,7 @@ export default createPlugin({
           if (!agentService) {
             throw new ORPCError("SERVICE_UNAVAILABLE", {
               message: "NEAR AI not connected. Configure NEAR_AI_API_KEY.",
-              data: { retryAfter: 0 }
+              data: { retryAfter: 0 },
             });
           }
 
@@ -332,41 +348,43 @@ export default createPlugin({
             agentService.processMessage(
               context.nearAccountId,
               input.message,
-              input.conversationId
-            )
+              input.conversationId,
+            ),
           );
         }),
 
-      chatStream: builder.chatStream
-        .use(requireAuth)
-        .handler(async function* ({ input, context, signal }) {
-          if (!agentService) {
-            throw new ORPCError("SERVICE_UNAVAILABLE", {
-              message: "NEAR AI not connected. Configure NEAR_AI_API_KEY.",
-              data: { retryAfter: 0 }
-            });
+      chatStream: builder.chatStream.use(requireAuth).handler(async function* ({
+        input,
+        context,
+        signal,
+      }) {
+        if (!agentService) {
+          throw new ORPCError("SERVICE_UNAVAILABLE", {
+            message: "NEAR AI not connected. Configure NEAR_AI_API_KEY.",
+            data: { retryAfter: 0 },
+          });
+        }
+
+        // Get the async generator from the Effect
+        const generator = await Effect.runPromise(
+          agentService.processMessageStream(
+            context.nearAccountId,
+            input.message,
+            input.conversationId,
+          ),
+        );
+
+        // Stream events from the generator
+        for await (const event of generator) {
+          // Check if client has disconnected
+          if (signal?.aborted) {
+            console.log("[API] Client disconnected, stopping stream");
+            break;
           }
 
-          // Get the async generator from the Effect
-          const generator = await Effect.runPromise(
-            agentService.processMessageStream(
-              context.nearAccountId,
-              input.message,
-              input.conversationId
-            )
-          );
-
-          // Stream events from the generator
-          for await (const event of generator) {
-            // Check if client has disconnected
-            if (signal?.aborted) {
-              console.log("[API] Client disconnected, stopping stream");
-              break;
-            }
-
-            yield event;
-          }
-        }),
+          yield event;
+        }
+      }),
 
       getConversation: builder.getConversation
         .use(requireAuth)
@@ -396,7 +414,9 @@ export default createPlugin({
           });
 
           const hasMore = messages.length > input.limit;
-          const messagesToReturn = hasMore ? messages.slice(0, input.limit) : messages;
+          const messagesToReturn = hasMore
+            ? messages.slice(0, input.limit)
+            : messages;
 
           return {
             conversation: {
@@ -419,6 +439,51 @@ export default createPlugin({
             },
           };
         }),
+
+      // ===========================================================================
+      // BUILDERS
+      // ===========================================================================
+
+      getBuilders: builder.getBuilders.handler(async ({ input }) => {
+        const result = await Effect.runPromise(handleBuildersRequest(input));
+
+        if (result.success) {
+          return result.data;
+        } else {
+          throw new ORPCError("INTERNAL_SERVER_ERROR", {
+            message: result.error || "Failed to fetch builders data",
+          });
+        }
+      }),
+
+      postBuilders: builder.postBuilders.handler(async ({ input }) => {
+        const result = await Effect.runPromise(handleBuildersRequest(input));
+
+        if (result.success) {
+          return result.data;
+        } else {
+          throw new ORPCError("INTERNAL_SERVER_ERROR", {
+            message: result.error || "Failed to fetch builders data",
+          });
+        }
+      }),
+
+      getBuilderById: builder.getBuilderById.handler(async ({ input }) => {
+        const request = {
+          path: `collections/${input.id}`,
+          params: input.params,
+        };
+
+        const result = await Effect.runPromise(handleBuildersRequest(request));
+
+        if (result.success) {
+          return result.data;
+        } else {
+          throw new ORPCError("INTERNAL_SERVER_ERROR", {
+            message: result.error || "Failed to fetch builder data",
+          });
+        }
+      }),
     };
   },
 });

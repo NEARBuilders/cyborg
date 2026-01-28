@@ -8,6 +8,7 @@ export function UserNav() {
   const router = useRouter();
   const { data: session } = useQuery(sessionQueryOptions);
   const accountId = session?.user?.id;
+  const nearName = session?.user?.nearAccountId || session?.user?.id;
 
   const handleSignOut = async () => {
     try {
@@ -21,15 +22,21 @@ export function UserNav() {
     }
   };
 
-  if (accountId) {
+  if (nearName) {
     return (
       <>
         <Link
-          to="/profile/$accountId"
-          params={{ accountId }}
+          to="/profile/$nearName"
+          params={{ accountId: nearName }}
           className="text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
         >
-          {accountId}
+          {nearName}
+        </Link>
+        <Link
+          to="/builders"
+          className="text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
+        >
+          builders
         </Link>
         <button
           type="button"

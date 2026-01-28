@@ -30,7 +30,7 @@
   "scripts": {
     "init": "bun run db:migrate",
     "bos": "bos",
-    "dev": "bos dev --no-interactive",
+    "dev": "for port in 3000 3002 3005 3014; do lsof -ti :$port 2>/dev/null | xargs kill -9 2>/dev/null || true; done && bos dev --no-interactive",
     "dev:ui": "bos dev --host=remote --api=remote",
     "dev:api": "bos dev",
     "dev:host": "bos dev",

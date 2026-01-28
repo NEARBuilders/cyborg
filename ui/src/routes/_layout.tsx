@@ -1,4 +1,9 @@
-import { ClientOnly, createFileRoute, Outlet } from "@tanstack/react-router";
+import {
+  ClientOnly,
+  createFileRoute,
+  Link,
+  Outlet,
+} from "@tanstack/react-router";
 import { ThemeToggle } from "../components/theme-toggle";
 import { UserNav } from "../components/user-nav";
 
@@ -11,19 +16,39 @@ function Layout() {
     <div className="h-dvh w-full flex flex-col bg-background text-foreground overflow-hidden">
       <header className="shrink-0 border-b border-border/50">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 sm:py-4">
-          <div className="flex items-center justify-end gap-4">
-            <ThemeToggle />
-            <ClientOnly fallback={<span className="text-xs text-muted-foreground font-mono">...</span>}>
-              <UserNav />
-            </ClientOnly>
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <Link
+                to="/"
+                className="text-sm font-semibold hover:text-primary transition-colors"
+              >
+                Near legion
+              </Link>
+              <Link
+                to="/builders"
+                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                builders
+              </Link>
+            </div>
+            <div className="flex items-center gap-4">
+              <ThemeToggle />
+              <ClientOnly
+                fallback={
+                  <span className="text-xs text-muted-foreground font-mono">
+                    ...
+                  </span>
+                }
+              >
+                <UserNav />
+              </ClientOnly>
+            </div>
           </div>
         </div>
       </header>
 
-      <main className="flex-1 w-full min-h-0 overflow-auto flex justify-center">
-        <div className="w-full max-w-3xl px-4 sm:px-6 py-8 sm:py-12">
-          <Outlet />
-        </div>
+      <main className="flex-1 w-full min-h-0 overflow-hidden">
+        <Outlet />
       </main>
 
       <footer className="shrink-0 border-t border-border/50">
