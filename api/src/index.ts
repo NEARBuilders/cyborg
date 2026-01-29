@@ -223,40 +223,40 @@ export default createPlugin({
 
       getUserRank: builder.getUserRank
         .use(requireAuth)
-        .handler(async ({ context }) => {
-          if (!nearService) {
-            return {
-              rank: null,
-              tokenId: null,
-              hasNft: false,
-              hasInitiate: false,
-            };
-          }
+        .handler(async ({ input }) => {
+        if (!nearService) {
+          return {
+            rank: null,
+            tokenId: null,
+            hasNft: false,
+            hasInitiate: false,
+          };
+        }
 
-          try {
-            // Check both initiate token and rank skillcapes
-            const [hasInitiate, rankData] = await Promise.all([
-              nearService.hasInitiateToken(context.nearAccountId),
-              nearService.getUserRank(context.nearAccountId),
-            ]);
+        try {
+          // Check both initiate token and rank skillcapes
+          const [hasInitiate, rankData] = await Promise.all([
+            nearService.hasInitiateToken(input.accountId),
+            nearService.getUserRank(input.accountId),
+          ]);
 
-            return {
-              rank: rankData?.rank ?? null,
-              tokenId: rankData?.tokenId ?? null,
-              hasNft: rankData !== null,
-              hasInitiate,
-            };
-          } catch (error) {
-            console.error("[API] Error fetching user rank:", error);
-            // Graceful fallback
-            return {
-              rank: null,
-              tokenId: null,
-              hasNft: false,
-              hasInitiate: false,
-            };
-          }
-        }),
+          return {
+            rank: rankData?.rank ?? null,
+            tokenId: rankData?.tokenId ?? null,
+            hasNft: rankData !== null,
+            hasInitiate,
+          };
+        } catch (error) {
+          console.error("[API] Error fetching user rank:", error);
+          // Graceful fallback
+          return {
+            rank: null,
+            tokenId: null,
+            hasNft: false,
+            hasInitiate: false,
+          };
+        }
+      }),
 
       // ===========================================================================
       // KEY VALUE

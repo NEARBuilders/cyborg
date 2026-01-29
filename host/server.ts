@@ -51,6 +51,23 @@ app.all("/api/*", async (c) => {
   return proxyRequest(c, `${API_URL}${fullPath}`, true);
 });
 
+// Helper function to get session from request
+async function getSessionFromRequest(request: Request): Promise<{ nearAccountId?: string; role?: string } | null> {
+  try {
+    const session = await auth.api.getSession({ headers: request.headers });
+    if (session?.user) {
+      // Get nearAccountId from the user's name (set during NEAR sign-in)
+      const nearAccountId = session.user.name;
+      const role = session.user.role || undefined;
+      return { nearAccountId, role };
+    }
+    return null;
+  } catch (error) {
+    console.error("[Auth] Error getting session:", error);
+    return null;
+  }
+}
+
 // Helper function to proxy requests
 async function proxyRequest(c: any, targetUrl: string, injectContext = false) {
   try {
@@ -61,11 +78,21 @@ async function proxyRequest(c: any, targetUrl: string, injectContext = false) {
       }
     });
 
-    // In dev mode, inject a fallback user if no session
-    if (injectContext && isDev) {
-      const devUser = process.env.DEV_USER || "test.near";
-      headers.set("x-near-account-id", devUser);
-      console.log(`[Dev Mode] Using fallback user: ${devUser}`);
+    // Extract session and inject context
+    if (injectContext) {
+      const sessionContext = await getSessionFromRequest(c.req.raw);
+      if (sessionContext?.nearAccountId) {
+        headers.set("x-near-account-id", sessionContext.nearAccountId);
+        if (sessionContext.role) {
+          headers.set("x-user-role", sessionContext.role);
+        }
+        console.log(`[Auth] Injecting context for user: ${sessionContext.nearAccountId}`);
+      } else if (isDev) {
+        // Only fallback in dev mode when no session
+        const devUser = process.env.DEV_USER || "test.near";
+        headers.set("x-near-account-id", devUser);
+        console.log(`[Dev Mode] No session, using fallback user: ${devUser}`);
+      }
     }
 
     const response = await fetch(targetUrl, {

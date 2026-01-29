@@ -38,7 +38,7 @@
       "variables": {
         "NEAR_AI_MODEL": "deepseek-ai/DeepSeek-V3.1",
         "NEAR_RPC_URL": "https://rpc.mainnet.near.org",
-        "NEAR_LEGION_CONTRACT": "nearlegion.nfts.tg",
+        "NEAR_LEGION_CONTRACT": "ascendant.nearlegion.near",
         "NEAR_INITIATE_CONTRACT": "initiate.nearlegion.near"
       },
       "secrets": [

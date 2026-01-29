@@ -142,7 +142,12 @@ export const contract = oc.router({
   // ===========================================================================
 
   getUserRank: oc
-    .route({ method: "GET", path: "/user/rank" })
+    .route({ method: "GET", path: "/user/rank/{accountId}" })
+    .input(
+      z.object({
+        accountId: z.string().min(1),
+      }),
+    )
     .output(
       z.object({
         rank: z.enum(["legendary", "epic", "rare", "common"]).nullable(),
