@@ -2,6 +2,18 @@
  * Types for Builder data from NEAR NFT collections
  */
 
+export interface Project {
+  name: string;
+  slug?: string;
+  description: string;
+  longDescription?: string;
+  status: string;
+  url?: string;
+  github?: string;
+  technologies?: string[];
+  image?: string;
+}
+
 export interface Builder {
   id: string;
   accountId: string;
@@ -10,11 +22,7 @@ export interface Builder {
   role: string;
   tags: string[];
   description: string;
-  projects: {
-    name: string;
-    description: string;
-    status: string;
-  }[];
+  projects: Project[];
   socials: {
     github?: string;
     twitter?: string;

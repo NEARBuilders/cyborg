@@ -1,18 +1,16 @@
-import { useState, useEffect } from "react";
-import { createFileRoute } from "@tanstack/react-router";
-import {
-  BuilderList,
-  BuilderDetails,
-  type Builder,
-} from "@/components/builders";
+import { createFileRoute, Outlet, useParams, useNavigate } from "@tanstack/react-router";
+import { BuilderList, type Builder } from "@/components/builders";
 import { useBuilders } from "@/hooks";
 
 export const Route = createFileRoute("/_layout/_authenticated/builders")({
-  component: BuildersPage,
+  component: BuildersLayout,
 });
 
-function BuildersPage() {
-  const [selectedBuilderId, setSelectedBuilderId] = useState<string>("");
+function BuildersLayout() {
+  const params = useParams({ strict: false });
+  const navigate = useNavigate();
+  const builderId = (params as { builderId?: string }).builderId;
+
   const {
     builders,
     isLoading,
@@ -25,22 +23,9 @@ function BuildersPage() {
     clearLoadMoreError,
   } = useBuilders();
 
-  // Auto-select first builder when builders load (desktop only)
-  useEffect(() => {
-    if (builders.length > 0 && !selectedBuilderId) {
-      // Only auto-select on desktop (lg breakpoint is 1024px)
-      const isDesktop = window.innerWidth >= 1024;
-      if (isDesktop) {
-        setSelectedBuilderId(builders[0].id);
-      }
-    }
-  }, [builders, selectedBuilderId]);
-
   const handleSelectBuilder = (builder: Builder) => {
-    setSelectedBuilderId(builder.id);
+    navigate({ to: "/builders/$builderId", params: { builderId: builder.accountId } });
   };
-
-  const selectedBuilder = builders.find((b) => b.id === selectedBuilderId);
 
   // Error state
   if (error && builders.length === 0) {
@@ -63,15 +48,18 @@ function BuildersPage() {
     );
   }
 
+  // Find selected builder for highlighting in list
+  const selectedBuilder = builders.find(b => b.accountId === builderId);
+
   return (
     <div className="h-full flex flex-col lg:flex-row">
       {/* Builder List - Hidden on mobile when builder is selected */}
       <div
-        className={`${selectedBuilder ? "hidden lg:flex" : "flex"} w-full lg:w-auto h-full`}
+        className={`${builderId ? "hidden lg:flex" : "flex"} w-full lg:w-auto h-full`}
       >
         <BuilderList
           builders={builders}
-          selectedId={selectedBuilderId}
+          selectedId={selectedBuilder?.id || ""}
           onSelect={handleSelectBuilder}
           isLoading={isLoading}
           isLoadingMore={isLoadingMore}
@@ -83,37 +71,22 @@ function BuildersPage() {
         />
       </div>
 
-      {/* Builder Details - Hidden on mobile when no builder selected */}
-      {selectedBuilder ? (
-        <div
-          className={`${selectedBuilder ? "flex" : "hidden lg:flex"} w-full lg:flex-1 h-full flex-col`}
-        >
-          {/* Back button for mobile */}
+      {/* Right panel - Outlet for child routes */}
+      <div className={`${builderId ? "flex" : "hidden lg:flex"} w-full lg:flex-1 h-full flex-col`}>
+        {/* Back button for mobile */}
+        {builderId && (
           <div className="lg:hidden px-4 py-3 border-b border-primary/20 bg-primary/5">
             <button
               type="button"
-              onClick={() => setSelectedBuilderId("")}
+              onClick={() => navigate({ to: "/builders" })}
               className="text-primary hover:text-primary/80 font-mono text-sm flex items-center gap-2"
             >
               <span className="text-xl">‹</span> Back to list
             </button>
           </div>
-          <BuilderDetails builder={selectedBuilder} />
-        </div>
-      ) : (
-        <div className="hidden lg:flex flex-1 items-center justify-center border border-primary/30 bg-background">
-          <div className="text-center space-y-3">
-            <div className="text-6xl text-muted-foreground/30">👥</div>
-            <h3 className="text-lg font-medium text-foreground">
-              Select a builder to view details
-            </h3>
-            <p className="text-muted-foreground">
-              Choose a builder from list to see their profile, projects, and
-              skills
-            </p>
-          </div>
-        </div>
-      )}
+        )}
+        <Outlet />
+      </div>
     </div>
   );
 }
