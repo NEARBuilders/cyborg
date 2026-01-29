@@ -1,14 +1,20 @@
-import { useQuery } from "@tanstack/react-query";
 import { Link, useRouter } from "@tanstack/react-router";
 import { authClient } from "../lib/auth-client";
-import { sessionQueryOptions } from "../lib/session";
 import { queryClient } from "../utils/orpc";
 
 export function UserNav() {
   const router = useRouter();
-  const { data: session } = useQuery(sessionQueryOptions);
-  const accountId = session?.user?.id;
-  const nearName = session?.user?.nearAccountId || session?.user?.id;
+  const { data: session } = authClient.useSession();
+  const nearState = authClient.useNearState();
+
+  // Get account ID from multiple sources:
+  // 1. nearState from wallet connection (most reliable when connected)
+  // 2. session.user.nearAccount from server session
+  // 3. session.user.name as fallback (set to accountId on user creation)
+  const nearName =
+    nearState?.accountId ||
+    session?.user?.nearAccount?.accountId ||
+    session?.user?.name;
 
   const handleSignOut = async () => {
     try {
@@ -22,11 +28,11 @@ export function UserNav() {
     }
   };
 
-  if (nearName) {
+  if (session?.user && nearName) {
     return (
       <>
         <Link
-          to="/profile/$nearName"
+          to="/profile/$accountId"
           params={{ accountId: nearName }}
           className="text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
         >
