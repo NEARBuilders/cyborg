@@ -1,7 +1,9 @@
 import { createFileRoute, Link, useParams, Outlet, useMatches } from "@tanstack/react-router";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { useBuilders } from "@/hooks";
+import { Markdown } from "@/components/ui/markdown";
+import { useBuildersWithProfiles, useUserRank, type RankData } from "@/hooks";
+import { useProfile } from "@/integrations/near-social-js";
 import type { Builder, Project } from "@/types/builders";
 
 export const Route = createFileRoute(
@@ -14,16 +16,46 @@ function BuilderDetailPage() {
   const { builderId } = useParams({
     from: "/_layout/_authenticated/builders/$builderId",
   });
-  const { builders, isLoading } = useBuilders();
+  const { builders, isLoading } = useBuildersWithProfiles();
   const matches = useMatches();
+
+  // If builder not in list, fetch their NEAR Social profile directly
+  const builderInList = builders.find((b) => b.accountId === builderId);
+  const { data: directProfile, isLoading: isLoadingProfile } = useProfile(builderId, {
+    enabled: !builderInList && !isLoading,
+  });
 
   const isOnProjectRoute = matches.some(
     (match) => match.routeId === "/_layout/_authenticated/builders/$builderId/$projectSlug"
   );
 
-  const builder = builders.find((b) => b.accountId === builderId);
+  // Create a builder object from direct profile if not in list
+  const builder: Builder | undefined = builderInList || (directProfile ? {
+    id: builderId,
+    accountId: builderId,
+    displayName: directProfile.name || builderId.split(".")[0],
+    avatar: directProfile.image?.ipfs_cid
+      ? `https://ipfs.near.social/ipfs/${directProfile.image.ipfs_cid}`
+      : directProfile.image?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${builderId}`,
+    backgroundImage: directProfile.backgroundImage?.ipfs_cid
+      ? `https://ipfs.near.social/ipfs/${directProfile.backgroundImage.ipfs_cid}`
+      : directProfile.backgroundImage?.url || null,
+    role: "Builder",
+    tags: directProfile.tags ? Object.keys(directProfile.tags) : ["NEAR Builder"],
+    description: directProfile.description || "A builder in the NEAR ecosystem.",
+    projects: [],
+    socials: {
+      github: directProfile.linktree?.github,
+      twitter: directProfile.linktree?.twitter,
+      website: directProfile.linktree?.website,
+      telegram: directProfile.linktree?.telegram,
+    },
+  } : undefined);
 
-  if (isLoading) {
+  // Fetch rank data for the builder (shared cache across components)
+  const { data: rankData, isLoading: isLoadingRank } = useUserRank(builderId);
+
+  if (isLoading || isLoadingProfile) {
     return <BuilderDetailSkeleton />;
   }
 
@@ -36,7 +68,7 @@ function BuilderDetailPage() {
             Builder not found
           </h3>
           <p className="text-muted-foreground">
-            This builder may no longer exist
+            No profile found for {builderId}
           </p>
           <Link
             to="/builders"
@@ -55,9 +87,24 @@ function BuilderDetailPage() {
 
   return (
     <div className="flex-1 border border-primary/30 bg-background h-full overflow-y-auto animate-in fade-in duration-200">
-      <div className="p-4 sm:p-6 space-y-6">
+      {/* Background Image Banner */}
+      {builder.backgroundImage && (
+        <div className="relative h-32 sm:h-40 overflow-hidden">
+          <img
+            src={builder.backgroundImage}
+            alt=""
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/50 to-transparent" />
+        </div>
+      )}
+
+      <div className={`p-4 sm:p-6 space-y-6 ${builder.backgroundImage ? "-mt-12 relative" : ""}`}>
         {/* Header */}
         <BuilderHeader builder={builder} />
+
+        {/* Legion Rank */}
+        <LegionRankSection rankData={rankData} isLoading={isLoadingRank} />
 
         {/* Skills */}
         <BuilderSkills tags={builder.tags} />
@@ -152,7 +199,7 @@ function BuilderAbout({ description }: { description: string }) {
       <h3 className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
         About
       </h3>
-      <p className="text-foreground text-base leading-relaxed">{description}</p>
+      <Markdown content={description} />
     </div>
   );
 }
@@ -187,9 +234,9 @@ function BuilderProjects({
                 </span>
                 <ProjectStatus status={project.status} />
               </div>
-              <p className="text-sm text-muted-foreground line-clamp-2">
-                {project.description}
-              </p>
+              <div className="text-sm text-muted-foreground line-clamp-2">
+                <Markdown content={project.description} />
+              </div>
               {project.technologies && project.technologies.length > 0 && (
                 <div className="flex flex-wrap gap-1 pt-1">
                   {project.technologies.slice(0, 3).map((tech) => (
@@ -234,9 +281,9 @@ function ProjectStatus({ status }: { status: string }) {
 function BuilderSocials({
   socials,
 }: {
-  socials: { github?: string; twitter?: string };
+  socials: { github?: string; twitter?: string; website?: string; telegram?: string };
 }) {
-  if (!socials.github && !socials.twitter) return null;
+  if (!socials.github && !socials.twitter && !socials.website && !socials.telegram) return null;
 
   return (
     <div className="space-y-3">
@@ -244,6 +291,16 @@ function BuilderSocials({
         Connect
       </h3>
       <div className="flex flex-wrap gap-4">
+        {socials.website && (
+          <a
+            href={socials.website.startsWith("http") ? socials.website : `https://${socials.website}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-primary hover:text-primary/80 transition-colors font-mono underline underline-offset-4"
+          >
+            {socials.website.replace(/^https?:\/\//, "")}
+          </a>
+        )}
         {socials.github && (
           <a
             href={`https://github.com/${socials.github}`}
@@ -264,6 +321,16 @@ function BuilderSocials({
             @{socials.twitter}
           </a>
         )}
+        {socials.telegram && (
+          <a
+            href={`https://t.me/${socials.telegram}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-primary hover:text-primary/80 transition-colors font-mono underline underline-offset-4"
+          >
+            t.me/{socials.telegram}
+          </a>
+        )}
       </div>
     </div>
   );
@@ -274,4 +341,72 @@ function slugify(text: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
+}
+
+function LegionRankSection({
+  rankData,
+  isLoading,
+}: {
+  rankData?: RankData;
+  isLoading: boolean;
+}) {
+  const getRankStyles = (r: string | null) => {
+    switch (r) {
+      case "legendary":
+        return "bg-yellow-500/20 text-yellow-400 border-yellow-500/40";
+      case "epic":
+        return "bg-purple-500/20 text-purple-400 border-purple-500/40";
+      case "rare":
+        return "bg-blue-500/20 text-blue-400 border-blue-500/40";
+      case "common":
+        return "bg-gray-500/20 text-gray-400 border-gray-500/40";
+      default:
+        return "bg-muted text-muted-foreground border-border";
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <h3 className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
+        NEAR Legion Status
+      </h3>
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted border-t-primary" />
+          Checking NFT holdings...
+        </div>
+      ) : !rankData ? (
+        <p className="text-sm text-muted-foreground">Unable to load rank data</p>
+      ) : !rankData.hasNft && !rankData.hasInitiate ? (
+        <p className="text-sm text-muted-foreground">
+          No NEAR Legion NFTs found.
+        </p>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          {rankData.hasNft && rankData.rank && (
+            <span
+              className={`inline-flex items-center gap-1.5 text-sm px-4 py-2 font-mono font-medium border ${getRankStyles(rankData.rank)}`}
+            >
+              <span className="text-base">
+                {rankData.rank === "legendary" && "🏆"}
+                {rankData.rank === "epic" && "💎"}
+                {rankData.rank === "rare" && "⭐"}
+                {rankData.rank === "common" && "🎖️"}
+              </span>
+              {rankData.rank.charAt(0).toUpperCase() + rankData.rank.slice(1)} Ascendant
+              {rankData.tokenId && (
+                <span className="text-xs opacity-60">#{rankData.tokenId}</span>
+              )}
+            </span>
+          )}
+          {rankData.hasInitiate && (
+            <span className="inline-flex items-center gap-1.5 text-sm bg-emerald-500/20 text-emerald-400 border-emerald-500/40 px-4 py-2 font-mono font-medium border">
+              <span className="text-base">🌱</span>
+              Initiate
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }

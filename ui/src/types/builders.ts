@@ -19,6 +19,7 @@ export interface Builder {
   accountId: string;
   displayName: string;
   avatar: string | null;
+  backgroundImage?: string | null;
   role: string;
   tags: string[];
   description: string;
@@ -26,6 +27,8 @@ export interface Builder {
   socials: {
     github?: string;
     twitter?: string;
+    website?: string;
+    telegram?: string;
   };
   isLegion?: boolean;
   isInitiate?: boolean;

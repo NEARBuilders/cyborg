@@ -10,7 +10,9 @@ import {
 } from "../../../components/ui/avatar";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
+import { Markdown } from "../../../components/ui/markdown";
 import { usePoke, useProfile } from "../../../integrations/near-social-js";
+import { useUserRank, type RankData } from "../../../hooks";
 import { authClient } from "../../../lib/auth-client";
 import { sessionQueryOptions } from "../../../lib/session";
 import { apiClient } from "../../../utils/orpc";
@@ -23,7 +25,7 @@ interface BuilderProfileData {
   role?: string;
   tags?: string[];
   projects?: { name: string; description: string; status: string }[];
-  socials?: { github?: string; twitter?: string };
+  socials?: { github?: string; twitter?: string; website?: string; telegram?: string };
 }
 
 export const Route = createFileRoute("/_layout/profile/$accountId")({
@@ -92,12 +94,8 @@ function ProfilePage() {
 
   const [isEditing, setIsEditing] = useState(false);
 
-  // Load user rank from API
-  const { data: rankData, isLoading: isLoadingRank } = useQuery({
-    queryKey: ["user-rank", accountId],
-    queryFn: () => apiClient.getUserRank({ accountId }),
-    enabled: !!accountId,
-  });
+  // Load user rank from API (shared cache across components)
+  const { data: rankData, isLoading: isLoadingRank } = useUserRank(accountId);
 
   // Load builder profile from KV store
   const { data: storedProfile } = useQuery({
@@ -115,15 +113,16 @@ function ProfilePage() {
   });
 
   // Merge NEAR Social profile with stored builder data
+  // Prefer stored data if it has actual content, otherwise use NEAR Social
   const displayName =
     storedProfile?.displayName || profile?.name || accountId.split(".")[0];
   const description =
-    storedProfile?.description ||
+    (storedProfile?.description?.trim()) ||
     profile?.description ||
     "A passionate builder in the NEAR ecosystem.";
   const role = storedProfile?.role || "Builder";
   const tags =
-    storedProfile?.tags ||
+    (storedProfile?.tags?.length ? storedProfile.tags : null) ||
     (profile?.tags ? Object.keys(profile.tags) : ["NEAR Builder"]);
   const projects = storedProfile?.projects || [
     {
@@ -135,12 +134,18 @@ function ProfilePage() {
   const socials = storedProfile?.socials || {
     github: profile?.linktree?.github as string | undefined,
     twitter: profile?.linktree?.twitter as string | undefined,
+    website: profile?.linktree?.website as string | undefined,
+    telegram: profile?.linktree?.telegram as string | undefined,
   };
 
   const avatarUrl = profile?.image?.ipfs_cid
     ? `https://ipfs.near.social/ipfs/${profile.image.ipfs_cid}`
     : profile?.image?.url ||
       `https://api.dicebear.com/7.x/avataaars/svg?seed=${accountId}`;
+
+  const backgroundUrl = profile?.backgroundImage?.ipfs_cid
+    ? `https://ipfs.near.social/ipfs/${profile.backgroundImage.ipfs_cid}`
+    : profile?.backgroundImage?.url || null;
 
   const handlePoke = () => {
     poke(undefined, {
@@ -159,7 +164,19 @@ function ProfilePage() {
 
   return (
     <div className="flex-1 border border-primary/30 bg-background h-full overflow-y-auto">
-      <div className="p-4 sm:p-6 space-y-6">
+      {/* Background Image Banner */}
+      {backgroundUrl && (
+        <div className="relative h-32 sm:h-40 overflow-hidden">
+          <img
+            src={backgroundUrl}
+            alt=""
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/50 to-transparent" />
+        </div>
+      )}
+
+      <div className={`p-4 sm:p-6 space-y-6 ${backgroundUrl ? "-mt-12 relative" : ""}`}>
         {/* Header */}
         <ProfileHeader
           accountId={accountId}
@@ -227,13 +244,6 @@ function ProfilePage() {
       </div>
     </div>
   );
-}
-
-interface RankData {
-  rank: "legendary" | "epic" | "rare" | "common" | null;
-  tokenId: string | null;
-  hasNft: boolean;
-  hasInitiate: boolean;
 }
 
 function ProfileHeader({
@@ -392,7 +402,7 @@ function ProfileAbout({ description }: { description: string }) {
       <h3 className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
         About
       </h3>
-      <p className="text-foreground text-base leading-relaxed">{description}</p>
+      <Markdown content={description} />
     </div>
   );
 }
@@ -419,9 +429,9 @@ function ProfileProjects({
               </span>
               <ProjectStatus status={project.status} />
             </div>
-            <p className="text-sm text-muted-foreground">
-              {project.description}
-            </p>
+            <div className="text-sm text-muted-foreground">
+              <Markdown content={project.description} />
+            </div>
           </div>
         ))}
       </div>
@@ -451,9 +461,9 @@ function ProjectStatus({ status }: { status: string }) {
 function ProfileSocials({
   socials,
 }: {
-  socials: { github?: string; twitter?: string };
+  socials: { github?: string; twitter?: string; website?: string; telegram?: string };
 }) {
-  if (!socials.github && !socials.twitter) return null;
+  if (!socials.github && !socials.twitter && !socials.website && !socials.telegram) return null;
 
   return (
     <div className="space-y-3">
@@ -461,6 +471,16 @@ function ProfileSocials({
         Connect
       </h3>
       <div className="flex flex-wrap gap-4">
+        {socials.website && (
+          <a
+            href={socials.website.startsWith("http") ? socials.website : `https://${socials.website}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-primary hover:text-primary/80 transition-colors font-mono underline underline-offset-4"
+          >
+            {socials.website.replace(/^https?:\/\//, "")}
+          </a>
+        )}
         {socials.github && (
           <a
             href={`https://github.com/${socials.github}`}
@@ -479,6 +499,16 @@ function ProfileSocials({
             className="text-sm text-primary hover:text-primary/80 transition-colors font-mono underline underline-offset-4"
           >
             @{socials.twitter}
+          </a>
+        )}
+        {socials.telegram && (
+          <a
+            href={`https://t.me/${socials.telegram}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-primary hover:text-primary/80 transition-colors font-mono underline underline-offset-4"
+          >
+            t.me/{socials.telegram}
           </a>
         )}
       </div>
@@ -716,6 +746,19 @@ function ProfileEditForm({
         </label>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Website</label>
+            <Input
+              value={formData.socials?.website || ""}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  socials: { ...prev.socials, website: e.target.value },
+                }))
+              }
+              placeholder="https://yoursite.com"
+            />
+          </div>
+          <div className="space-y-1">
             <label className="text-xs text-muted-foreground">GitHub</label>
             <Input
               value={formData.socials?.github || ""}
@@ -736,6 +779,19 @@ function ProfileEditForm({
                 setFormData((prev) => ({
                   ...prev,
                   socials: { ...prev.socials, twitter: e.target.value },
+                }))
+              }
+              placeholder="username"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Telegram</label>
+            <Input
+              value={formData.socials?.telegram || ""}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  socials: { ...prev.socials, telegram: e.target.value },
                 }))
               }
               placeholder="username"

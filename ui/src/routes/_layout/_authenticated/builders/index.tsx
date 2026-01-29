@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useBuilders } from "@/hooks";
+import { useBuildersWithProfiles } from "@/hooks";
 
 export const Route = createFileRoute("/_layout/_authenticated/builders/")({
   component: BuildersIndex,
@@ -8,7 +8,7 @@ export const Route = createFileRoute("/_layout/_authenticated/builders/")({
 
 function BuildersIndex() {
   const navigate = useNavigate();
-  const { builders, isLoading } = useBuilders();
+  const { builders, isLoading } = useBuildersWithProfiles();
 
   // Auto-redirect to first builder on desktop
   useEffect(() => {

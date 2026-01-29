@@ -1,6 +1,7 @@
+import { useMemo } from "react";
 import { createFileRoute, Outlet, useParams, useNavigate } from "@tanstack/react-router";
 import { BuilderList, type Builder } from "@/components/builders";
-import { useBuilders } from "@/hooks";
+import { useBuildersWithProfiles, useUserRanks } from "@/hooks";
 
 export const Route = createFileRoute("/_layout/_authenticated/builders")({
   component: BuildersLayout,
@@ -21,10 +22,18 @@ function BuildersLayout() {
     totalCounts,
     loadMore,
     clearLoadMoreError,
-  } = useBuilders();
+  } = useBuildersWithProfiles();
+
+  // Prefetch ranks for all loaded builders so they're cached when viewing detail pages
+  const builderAccountIds = useMemo(() => builders.map(b => b.accountId), [builders]);
+  useUserRanks(builderAccountIds);
 
   const handleSelectBuilder = (builder: Builder) => {
     navigate({ to: "/builders/$builderId", params: { builderId: builder.accountId } });
+  };
+
+  const handleSearchNavigate = (accountId: string) => {
+    navigate({ to: "/builders/$builderId", params: { builderId: accountId } });
   };
 
   // Error state
@@ -68,6 +77,7 @@ function BuildersLayout() {
           onLoadMore={loadMore}
           onLoadMoreError={loadMoreError}
           onClearLoadMoreError={clearLoadMoreError}
+          onSearchNavigate={handleSearchNavigate}
         />
       </div>
 

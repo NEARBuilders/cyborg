@@ -1,8 +1,11 @@
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { useBuilders } from "@/hooks";
+import { Markdown } from "@/components/ui/markdown";
+import { useBuildersWithProfiles } from "@/hooks";
+import { useProfile } from "@/integrations/near-social-js";
 import { ExternalLink, Github, ArrowLeft } from "lucide-react";
+import type { Builder } from "@/types/builders";
 
 export const Route = createFileRoute(
   "/_layout/_authenticated/builders/$builderId/$projectSlug"
@@ -14,14 +17,42 @@ function ProjectDetailPage() {
   const { builderId, projectSlug } = useParams({
     from: "/_layout/_authenticated/builders/$builderId/$projectSlug",
   });
-  const { builders, isLoading } = useBuilders();
+  const { builders, isLoading } = useBuildersWithProfiles();
 
-  const builder = builders.find((b) => b.accountId === builderId);
+  // If builder not in list, fetch their NEAR Social profile directly
+  const builderInList = builders.find((b) => b.accountId === builderId);
+  const { data: directProfile, isLoading: isLoadingProfile } = useProfile(builderId, {
+    enabled: !builderInList && !isLoading,
+  });
+
+  // Create a builder object from direct profile if not in list
+  const builder: Builder | undefined = builderInList || (directProfile ? {
+    id: builderId,
+    accountId: builderId,
+    displayName: directProfile.name || builderId.split(".")[0],
+    avatar: directProfile.image?.ipfs_cid
+      ? `https://ipfs.near.social/ipfs/${directProfile.image.ipfs_cid}`
+      : directProfile.image?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${builderId}`,
+    backgroundImage: directProfile.backgroundImage?.ipfs_cid
+      ? `https://ipfs.near.social/ipfs/${directProfile.backgroundImage.ipfs_cid}`
+      : directProfile.backgroundImage?.url || null,
+    role: "Builder",
+    tags: directProfile.tags ? Object.keys(directProfile.tags) : ["NEAR Builder"],
+    description: directProfile.description || "A builder in the NEAR ecosystem.",
+    projects: [],
+    socials: {
+      github: directProfile.linktree?.github,
+      twitter: directProfile.linktree?.twitter,
+      website: directProfile.linktree?.website,
+      telegram: directProfile.linktree?.telegram,
+    },
+  } : undefined);
+
   const project = builder?.projects.find(
     (p) => (p.slug || slugify(p.name)) === projectSlug
   );
 
-  if (isLoading) {
+  if (isLoading || isLoadingProfile) {
     return <ProjectDetailSkeleton />;
   }
 
@@ -77,7 +108,7 @@ function ProjectDetailPage() {
                 {project.name}
               </h1>
               <p className="text-muted-foreground">
-                {project.description}
+                {project.description || `A project by ${builder.displayName}`}
               </p>
             </div>
             <ProjectStatus status={project.status} />
@@ -128,16 +159,22 @@ function ProjectDetailPage() {
         )}
 
         {/* Long Description */}
-        {project.longDescription && (
-          <div className="space-y-3">
-            <h2 className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
-              About this project
-            </h2>
-            <p className="text-foreground text-base leading-relaxed whitespace-pre-wrap">
-              {project.longDescription}
-            </p>
-          </div>
-        )}
+        <div className="space-y-3">
+          <h2 className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
+            About this project
+          </h2>
+          {project.longDescription ? (
+            <Markdown content={project.longDescription} />
+          ) : (
+            <div className="p-4 border border-dashed border-border/50 bg-muted/10">
+              <p className="text-muted-foreground text-sm">
+                {project.description
+                  ? `${project.name} is a ${project.status.toLowerCase()} project${project.technologies?.length ? ` built with ${project.technologies.slice(0, 3).join(", ")}` : ""}.`
+                  : `This is a ${project.status.toLowerCase()} project by ${builder.displayName}.`}
+              </p>
+            </div>
+          )}
+        </div>
 
         {/* Technologies */}
         {project.technologies && project.technologies.length > 0 && (

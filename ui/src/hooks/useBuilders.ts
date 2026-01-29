@@ -17,6 +17,39 @@ const LEGION_CONTRACT = "ascendant.nearlegion.near";
 const INITIATE_CONTRACT = "initiate.nearlegion.near";
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
+const CACHE_KEY = "builders-cache";
+const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+
+interface CachedBuildersData {
+  builders: Builder[];
+  totalCounts: { legion: number; initiate: number };
+  loadedPages: { legion: number[]; initiate: number[] };
+  hasMore: { legion: boolean; initiate: boolean };
+  timestamp: number;
+}
+
+function getCachedBuilders(): CachedBuildersData | null {
+  try {
+    const cached = sessionStorage.getItem(CACHE_KEY);
+    if (!cached) return null;
+    const data = JSON.parse(cached) as CachedBuildersData;
+    if (Date.now() - data.timestamp > CACHE_DURATION_MS) {
+      sessionStorage.removeItem(CACHE_KEY);
+      return null;
+    }
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+function setCachedBuilders(data: Omit<CachedBuildersData, "timestamp">) {
+  try {
+    sessionStorage.setItem(CACHE_KEY, JSON.stringify({ ...data, timestamp: Date.now() }));
+  } catch {
+    // Ignore storage errors
+  }
+}
 
 // Helper function to delay execution
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -247,6 +280,8 @@ function transformToBuilder(
     socials: {
       github: githubHandle,
       twitter: twitterHandle,
+      website: undefined,
+      telegram: undefined,
     },
     isLegion,
     isInitiate,
@@ -254,21 +289,24 @@ function transformToBuilder(
 }
 
 export function useBuilders() {
-  const [builders, setBuilders] = useState<Builder[]>([]);
-  const [totalCounts, setTotalCounts] = useState({ legion: 0, initiate: 0 });
-  const [isLoading, setIsLoading] = useState(true);
+  // Try to load from cache on initial render
+  const cachedData = useRef(getCachedBuilders());
+
+  const [builders, setBuilders] = useState<Builder[]>(cachedData.current?.builders || []);
+  const [totalCounts, setTotalCounts] = useState(cachedData.current?.totalCounts || { legion: 0, initiate: 0 });
+  const [isLoading, setIsLoading] = useState(!cachedData.current);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
 
   // Track which API pages we've loaded
-  const [loadedPages, setLoadedPages] = useState({
+  const [loadedPages, setLoadedPages] = useState(cachedData.current?.loadedPages || {
     legion: [] as number[],
     initiate: [] as number[],
   });
 
   // Track if there are more pages to load
-  const [hasMore, setHasMore] = useState({
+  const [hasMore, setHasMore] = useState(cachedData.current?.hasMore || {
     legion: true,
     initiate: true,
   });
@@ -451,6 +489,12 @@ export function useBuilders() {
     async function fetchInitial() {
       if (cancelled) return;
 
+      // Skip fetch if we have cached data
+      if (cachedData.current) {
+        console.log("[useBuilders] Using cached data, skipping fetch");
+        return;
+      }
+
       try {
         console.log("[useBuilders] Starting initial load of builders data");
         setIsLoading(true);
@@ -534,6 +578,25 @@ export function useBuilders() {
           initialBuilders.length,
         );
         setBuilders(initialBuilders);
+
+        // Cache the data for faster subsequent loads
+        const newLoadedPages = {
+          legion: legionResult.holders.length > 0 ? [1] : [],
+          initiate: initiateResult.holders.length > 0 ? [1] : [],
+        };
+        const newHasMore = {
+          legion: legionResult.hasMore,
+          initiate: initiateResult.hasMore,
+        };
+        setCachedBuilders({
+          builders: initialBuilders,
+          totalCounts: {
+            legion: legionCountResult.count,
+            initiate: initiateCountResult.count,
+          },
+          loadedPages: newLoadedPages,
+          hasMore: newHasMore,
+        });
       } catch (err) {
         if (!cancelled) {
           console.error("[useBuilders] Exception in initial load:", err);

@@ -50,17 +50,6 @@ function Layout() {
       <main className="flex-1 w-full min-h-0 overflow-hidden">
         <Outlet />
       </main>
-
-      <footer className="shrink-0 border-t border-border/50">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 sm:py-4">
-          <a
-            href="/api"
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
-          >
-            api
-          </a>
-        </div>
-      </footer>
     </div>
   );
 }
