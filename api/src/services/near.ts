@@ -207,11 +207,16 @@ export class NearService {
       const data = await response.json() as NearRpcResponse;
 
       if (data.error) {
+        // Handle "account doesn't exist" or similar errors gracefully
+        if (data.error.message?.includes("doesn't exist") || data.error.cause?.name === "UNKNOWN_ACCOUNT") {
+          return [];
+        }
         throw new Error(`RPC error: ${data.error.message}`);
       }
 
+      // If no result, user has no NFTs - return empty array
       if (!data.result?.result) {
-        throw new Error("Invalid RPC response format");
+        return [];
       }
 
       // Decode the result

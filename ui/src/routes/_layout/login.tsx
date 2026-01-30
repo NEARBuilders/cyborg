@@ -2,7 +2,6 @@ import { createFileRoute, redirect, useNavigate, useRouter } from "@tanstack/rea
 import { useState } from "react";
 import { toast } from "sonner";
 import { authClient } from "../../lib/auth-client";
-import { queryClient } from "../../utils/orpc";
 
 type SearchParams = {
   redirect?: string;
@@ -26,25 +25,81 @@ function LoginPage() {
   const navigate = useNavigate();
   const router = useRouter();
   const { redirect } = Route.useSearch();
+  const session = authClient.useSession();
+  const nearState = authClient.useNearState();
 
-  const [isConnectingWallet, setIsConnectingWallet] = useState(false);
-  const [isSigningInWithNear, setIsSigningInWithNear] = useState(false);
-  const [isDisconnectingWallet, setIsDisconnectingWallet] = useState(false);
+  const [isSigningIn, setIsSigningIn] = useState(false);
 
-  const accountId = authClient.near.getAccountId();
+  const recipient = window.__RUNTIME_CONFIG__?.account ?? "every.near";
+  const isWalletConnected = !!nearState?.accountId;
 
-  const handleWalletConnect = async () => {
-    setIsConnectingWallet(true);
+  // Handle successful sign-in
+  const onSignInSuccess = async (accountId: string) => {
+    setIsSigningIn(false);
+    await session.refetch();
+    router.invalidate();
+    navigate({ to: redirect ?? "/", replace: true });
+    toast.success(`Signed in as: ${accountId}`);
+  };
+
+  // Handle sign-in error
+  const onSignInError = (error: any) => {
+    setIsSigningIn(false);
+    console.error("NEAR sign in error:", error);
+    toast.error(error instanceof Error ? error.message : "Authentication failed");
+  };
+
+  // Sign in with already connected wallet (single signature)
+  const handleSignInOnly = async () => {
+    setIsSigningIn(true);
+    const accountId = nearState?.accountId;
+
+    try {
+      // Need to get nonce first via requestSignIn, but wallet is already connected
+      // so it should skip the wallet modal
+      await authClient.requestSignIn.near(
+        { recipient },
+        {
+          onSuccess: async () => {
+            await authClient.signIn.near(
+              { recipient },
+              {
+                onSuccess: () => onSignInSuccess(accountId!),
+                onError: onSignInError,
+              }
+            );
+          },
+          onError: onSignInError,
+        }
+      );
+    } catch (error) {
+      onSignInError(error);
+    }
+  };
+
+  // Full flow: connect wallet then sign in
+  const handleConnectAndSignIn = async () => {
+    setIsSigningIn(true);
     try {
       await authClient.requestSignIn.near(
-        { recipient: window.__RUNTIME_CONFIG__?.account ?? "every.near" },
+        { recipient },
         {
-          onSuccess: () => {
-            setIsConnectingWallet(false);
-            toast.success("Wallet connected");
+          onSuccess: async () => {
+            const connectedAccountId = authClient.near.getAccountId();
+            try {
+              await authClient.signIn.near(
+                { recipient },
+                {
+                  onSuccess: () => onSignInSuccess(connectedAccountId!),
+                  onError: onSignInError,
+                }
+              );
+            } catch (error) {
+              onSignInError(error);
+            }
           },
           onError: (error: any) => {
-            setIsConnectingWallet(false);
+            setIsSigningIn(false);
             console.error("Wallet connection failed:", error);
             const errorMessage =
               error.code === "SIGNER_NOT_AVAILABLE"
@@ -55,75 +110,16 @@ function LoginPage() {
         }
       );
     } catch (error) {
-      setIsConnectingWallet(false);
-      console.error("Wallet connection error:", error);
-      toast.error("Failed to connect to NEAR wallet");
+      setIsSigningIn(false);
+      console.error("Sign in error:", error);
+      toast.error("Failed to sign in");
     }
   };
 
-  const handleNearSignIn = async () => {
-    setIsSigningInWithNear(true);
-    try {
-      await authClient.signIn.near(
-        { recipient: window.__RUNTIME_CONFIG__?.account ?? "every.near" },
-        {
-          onSuccess: () => {
-            setIsSigningInWithNear(false);
-            queryClient.invalidateQueries({ queryKey: ['session'] });
-            router.invalidate();
-            navigate({ to: redirect ?? "/", replace: true });
-            toast.success(`Signed in as: ${accountId}`);
-          },
-          onError: (error: any) => {
-            setIsSigningInWithNear(false);
-            console.error("NEAR sign in error:", error);
-
-            if ((error as any)?.code === "NONCE_NOT_FOUND") {
-              toast.error("Session expired. Please reconnect your wallet.");
-              handleWalletDisconnect();
-              return;
-            }
-
-            toast.error(
-              error instanceof Error ? error.message : "Authentication failed"
-            );
-          },
-        }
-      );
-    } catch (error) {
-      setIsSigningInWithNear(false);
-      console.error("NEAR sign in error:", error);
-
-      if ((error as any)?.code === "NONCE_NOT_FOUND") {
-        toast.error("Session expired. Please reconnect your wallet.");
-        handleWalletDisconnect();
-        return;
-      }
-
-      toast.error("Authentication failed");
-    }
+  // Disconnect wallet
+  const handleDisconnect = async () => {
+    await authClient.near.disconnect();
   };
-
-  const handleWalletDisconnect = async () => {
-    setIsDisconnectingWallet(true);
-    try {
-      await authClient.signOut();
-      await authClient.near.disconnect();
-      queryClient.invalidateQueries({ queryKey: ['session'] });
-      router.invalidate();
-      setIsDisconnectingWallet(false);
-      toast.success("Wallet disconnected successfully");
-    } catch (error) {
-      setIsDisconnectingWallet(false);
-      console.error("Wallet disconnect error:", error);
-      toast.error("Failed to disconnect wallet");
-    }
-  };
-
-  const isLoading =
-    isConnectingWallet ||
-    isSigningInWithNear ||
-    isDisconnectingWallet;
 
   return (
     <div className="min-h-[60vh] w-full flex items-center justify-center">
@@ -131,40 +127,40 @@ function LoginPage() {
         <div className="text-center mb-6">
           <h1 className="text-xl sm:text-2xl font-bold text-primary mb-1">Welcome</h1>
           <p className="text-sm text-muted-foreground/70">
-            Connect your NEAR wallet to continue
+            {isWalletConnected
+              ? `Connected as ${nearState.accountId}`
+              : "Connect your NEAR wallet to continue"}
           </p>
         </div>
 
-        {!accountId ? (
-          <button
-            type="button"
-            onClick={handleWalletConnect}
-            disabled={isLoading}
-            className="w-full px-4 py-3 text-sm font-mono border border-border/50 hover:border-primary/50 bg-muted/10 hover:bg-primary/10 text-foreground hover:text-primary transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isConnectingWallet ? "connecting..." : "connect near wallet"}
-          </button>
-        ) : (
+        {isWalletConnected ? (
           <>
             <button
               type="button"
-              onClick={handleNearSignIn}
-              disabled={isLoading}
+              onClick={handleSignInOnly}
+              disabled={isSigningIn}
               className="w-full px-4 py-3 text-sm font-mono border border-primary/40 bg-primary/10 hover:bg-primary/20 text-primary transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isSigningInWithNear
-                ? "signing in..."
-                : `sign in as ${accountId}`}
+              {isSigningIn ? "signing in..." : `sign in as ${nearState.accountId}`}
             </button>
             <button
               type="button"
-              onClick={handleWalletDisconnect}
-              disabled={isLoading}
+              onClick={handleDisconnect}
+              disabled={isSigningIn}
               className="w-full px-4 py-2 text-xs font-mono text-muted-foreground/60 hover:text-muted-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isDisconnectingWallet ? "disconnecting..." : "disconnect"}
+              use different wallet
             </button>
           </>
+        ) : (
+          <button
+            type="button"
+            onClick={handleConnectAndSignIn}
+            disabled={isSigningIn}
+            className="w-full px-4 py-3 text-sm font-mono border border-border/50 hover:border-primary/50 bg-muted/10 hover:bg-primary/10 text-foreground hover:text-primary transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isSigningIn ? "signing in..." : "sign in with near"}
+          </button>
         )}
       </div>
     </div>
