@@ -1,39 +1,35 @@
-import type { ClientRuntimeConfig } from "./types";
+import { getAssetsUrl, getRuntimeConfig } from "./remote/runtime";
 
 export async function hydrate() {
-  const runtimeConfig = (window as any).__RUNTIME_CONFIG__ as ClientRuntimeConfig | undefined;
+  console.log("[Hydrate] Starting...");
 
+  const runtimeConfig = getRuntimeConfig();
   if (!runtimeConfig) {
-    console.error("[Hydrate] No runtime config");
+    console.error("[Hydrate] No runtime config found");
     return;
   }
 
-  const { createRoot } = await import("react-dom/client");
-  const { RouterProvider } = await import("@tanstack/react-router");
+  const { hydrateRoot } = await import("react-dom/client");
+  const { RouterClient } = await import("@tanstack/react-router/ssr/client");
   const { QueryClientProvider } = await import("@tanstack/react-query");
   const { createRouter } = await import("./router");
 
   const { router, queryClient } = createRouter({
     context: {
-      assetsUrl: runtimeConfig.assetsUrl,
+      assetsUrl: getAssetsUrl(runtimeConfig),
       runtimeConfig,
     },
   });
 
-  const root = document.getElementById("root");
-  if (root) {
-    createRoot(root).render(
-      <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>
-    );
-  }
+  console.log("[Hydrate] Calling hydrateRoot...");
+  hydrateRoot(
+    document,
+    <QueryClientProvider client={queryClient}>
+      <RouterClient router={router} />
+    </QueryClientProvider>,
+  );
+
+  console.log("[Hydrate] Complete!");
 }
 
 export default hydrate;
-
-// Run once
-if (typeof window !== "undefined" && (window as any).__RUNTIME_CONFIG__ && !(window as any).__HYDRATED__) {
-  (window as any).__HYDRATED__ = true;
-  hydrate();
-}

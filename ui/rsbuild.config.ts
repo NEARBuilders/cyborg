@@ -6,16 +6,19 @@ import { pluginModuleFederation } from "@module-federation/rsbuild-plugin";
 import { defineConfig } from "@rsbuild/core";
 import { pluginReact } from "@rsbuild/plugin-react";
 import { TanStackRouterRspack } from "@tanstack/router-plugin/rspack";
-import { getUISharedDependencies } from "every-plugin/build/rspack";
 import { withZephyr } from "zephyr-rsbuild-plugin";
 import pkg from "./package.json";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const normalizedName = pkg.name;
-const isProduction = process.env.NODE_ENV === "production";
+const shouldDeploy = process.env.DEPLOY === "true";
 const buildTarget = process.env.BUILD_TARGET as "client" | "server" | undefined;
 const isServerBuild = buildTarget === "server";
+
+const bosConfigPath = path.resolve(__dirname, "../bos.config.json");
+const bosConfig = JSON.parse(fs.readFileSync(bosConfigPath, "utf8"));
+const uiSharedDeps = bosConfig.shared?.ui ?? {};
 
 function updateBosConfig(field: "production" | "ssr", url: string) {
   try {
@@ -33,12 +36,10 @@ function updateBosConfig(field: "production" | "ssr", url: string) {
   } catch (err) {
     console.error(
       "   ❌ Failed to update bos.config.json:",
-      (err as Error).message,
+      (err as Error).message
     );
   }
 }
-
-const uiSharedDeps = getUISharedDependencies();
 
 function createClientConfig() {
   const plugins = [
@@ -50,6 +51,7 @@ function createClientConfig() {
       exposes: {
         "./Router": "./src/router.tsx",
         "./Hydrate": "./src/hydrate.tsx",
+        "./remote": "./src/remote/index.ts",
         "./components": "./src/components/index.ts",
         "./providers": "./src/providers/index.tsx",
         "./hooks": "./src/hooks/index.ts",
@@ -59,7 +61,7 @@ function createClientConfig() {
     }),
   ];
 
-  if (isProduction) {
+  if (shouldDeploy) {
     plugins.push(
       withZephyr({
         hooks: {
@@ -68,7 +70,7 @@ function createClientConfig() {
             updateBosConfig("production", info.url);
           },
         },
-      }),
+      })
     );
   }
 
@@ -99,16 +101,6 @@ function createClientConfig() {
         "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type",
       },
-      proxy: {
-        "/api": {
-          target: "http://localhost:3014",
-          changeOrigin: true,
-        },
-        "/auth": {
-          target: "http://localhost:3000",
-          changeOrigin: true,
-        },
-      },
       publicDir: {
         name: "dist",
         copyOnBuild: false,
@@ -122,9 +114,6 @@ function createClientConfig() {
         },
         infrastructureLogging: { level: "error" },
         stats: "errors-warnings",
-        watchOptions: {
-          ignored: ["**/routeTree.gen.ts"],
-        },
         plugins: [
           TanStackRouterRspack({
             target: "react",
@@ -145,7 +134,7 @@ function createClientConfig() {
 function createServerConfig() {
   const plugins = [pluginReact()];
 
-  if (isProduction) {
+  if (shouldDeploy) {
     plugins.push(
       withZephyr({
         hooks: {
@@ -154,7 +143,7 @@ function createServerConfig() {
             updateBosConfig("ssr", info.url);
           },
         },
-      }),
+      })
     );
   }
 
@@ -180,21 +169,18 @@ function createServerConfig() {
           publicPath: "/",
           library: { type: "commonjs-module" },
         },
-        externals: [/^node:/],
+        externals: [
+          /^node:/,
+        ],
         infrastructureLogging: { level: "error" },
         stats: "errors-warnings",
-        watchOptions: {
-          ignored: ["**/routeTree.gen.ts"],
-        },
         plugins: [
           TanStackRouterRspack({ target: "react", autoCodeSplitting: false }),
           new ModuleFederationPlugin({
             name: normalizedName,
             filename: "remoteEntry.server.js",
             dts: false,
-            runtimePlugins: [
-              require.resolve("@module-federation/node/runtimePlugin"),
-            ],
+            runtimePlugins: [require.resolve("@module-federation/node/runtimePlugin")],
             library: { type: "commonjs-module" },
             exposes: { "./Router": "./src/router.server.tsx" },
             shared: uiSharedDeps,
