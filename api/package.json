@@ -18,17 +18,19 @@
     "effect": "catalog:",
     "nanoid": "^5.1.6",
     "near-kit": "catalog:",
-    "openai": "^6.16.0"
+    "openai": "^6.16.0",
+    "@orpc/contract": "^1.13.4",
+    "@orpc/server": "^1.13.4"
   },
   "devDependencies": {
-    "@effect/language-service": "^0.72.0",
+    "@effect/language-service": "^0.41.1",
     "@module-federation/node": "^2.7.25",
-    "@rspack/cli": "^1.7.3",
-    "@rspack/core": "^1.7.3",
+    "@rspack/cli": "^1.6.8",
+    "@rspack/core": "^1.6.8",
     "@types/node": "catalog:",
     "dotenv": "^17.2.3",
-    "every-plugin": "0.8.8",
-    "vite-tsconfig-paths": "^6.0.5",
+    "every-plugin": "catalog:",
+    "vite-tsconfig-paths": "^5.1.4",
     "vitest": "catalog:",
     "zephyr-rspack-plugin": "^0.1.2"
   },
@@ -42,6 +44,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "deploy": "DEPLOY=true rspack build"
   }
 }
