@@ -21,14 +21,14 @@ export function useSocialInstance() {
 }
 
 export function useProfile(
-  accountId: string,
+  accountId: string | undefined,
   options?: Omit<UseQueryOptions<Profile | null>, "queryKey" | "queryFn">
 ) {
   const social = useSocialInstance();
 
   return useQuery({
-    queryKey: socialKeys.profile(accountId),
-    queryFn: () => social.getProfile(accountId),
+    queryKey: socialKeys.profile(accountId ?? ""),
+    queryFn: () => social.getProfile(accountId!),
     enabled: !!accountId,
     ...options,
   });

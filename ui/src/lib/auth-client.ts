@@ -4,6 +4,13 @@ import { siwnClient } from "better-near-auth/client";
 
 function getAuthBaseUrl(): string {
   if (typeof window === "undefined") return "";
+
+  // Check for Cloudflare Pages deployment
+  const hostname = window.location.hostname;
+  if (hostname.includes('.pages.dev') || hostname.includes('near-agent')) {
+    return 'https://near-agent.kj95hgdgnn.workers.dev';
+  }
+
   return window.__RUNTIME_CONFIG__?.hostUrl ?? window.location.origin;
 }
 

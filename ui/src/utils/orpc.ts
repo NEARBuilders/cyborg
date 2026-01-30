@@ -16,6 +16,14 @@ function getApiUrl(): string {
   if (typeof window === 'undefined') {
     throw new Error('RPCLink is not allowed on the server side. Use server-side client instead.');
   }
+
+  // Check for Cloudflare Pages deployment
+  const hostname = window.location.hostname;
+  if (hostname.includes('.pages.dev') || hostname.includes('near-agent')) {
+    const workerUrl = 'https://near-agent.kj95hgdgnn.workers.dev';
+    return `${workerUrl}/api/rpc`;
+  }
+
   const base = window.__RUNTIME_CONFIG__?.rpcBase;
   return base ? `${window.location.origin}${base}` : `${window.location.origin}/api/rpc`;
 }

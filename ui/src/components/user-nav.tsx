@@ -9,12 +9,13 @@ export function UserNav() {
 
   // Get account ID from multiple sources:
   // 1. nearState from wallet connection (most reliable when connected)
-  // 2. session.user.nearAccount from server session
+  // 2. session.user.nearAccount from server session (added by better-near-auth hook)
   // 3. session.user.name as fallback (set to accountId on user creation)
+  const user = session?.user as { nearAccount?: { accountId?: string }; name?: string } | undefined;
   const nearName =
     nearState?.accountId ||
-    session?.user?.nearAccount?.accountId ||
-    session?.user?.name;
+    user?.nearAccount?.accountId ||
+    user?.name;
 
   const handleSignOut = async () => {
     try {

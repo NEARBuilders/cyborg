@@ -1,0 +1,30 @@
+name = "near-agent"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# D1 Database binding
+[[d1_databases]]
+binding = "DB"
+database_name = "near-agent-db"
+database_id = "5d89d64f-38eb-44d5-bb96-9b85c005c924"
+
+[vars]
+NEAR_AI_MODEL = "deepseek-ai/DeepSeek-V3.1"
+NEAR_AI_BASE_URL = "https://cloud-api.near.ai/v1"
+NEAR_RPC_URL = "https://rpc.mainnet.near.org"
+NEAR_LEGION_CONTRACT = "ascendant.nearlegion.near"
+NEAR_INITIATE_CONTRACT = "initiate.nearlegion.near"
+NEAR_ACCOUNT = "example.near"
+BETTER_AUTH_URL = "https://near-agent.kj95hgdgnn.workers.dev"
+
+# Environment-specific settings
+[env.production]
+name = "near-agent"
+
+[env.production.vars]
+BETTER_AUTH_URL = "https://near-agent.kj95hgdgnn.workers.dev"
+
+# Secrets (set via: wrangler secret put SECRET_NAME)
+# - BETTER_AUTH_SECRET
+# - NEAR_AI_API_KEY

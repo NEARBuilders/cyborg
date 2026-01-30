@@ -109,7 +109,10 @@ export function BuilderList({
         onSearchNavigate(searchQuery.trim().toLowerCase());
       } else if (filteredBuilders.length === 1) {
         // If exactly one result, select it
-        onSelect(filteredBuilders[0]);
+        const builder = filteredBuilders[0];
+        if (builder) {
+          onSelect(builder);
+        }
       }
     }
   };

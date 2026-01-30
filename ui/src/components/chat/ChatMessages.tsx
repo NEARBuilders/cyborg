@@ -3,8 +3,8 @@
  * Scrollable container for chat messages
  */
 
-import { RefObject } from "react";
-import { ChatMessage } from "./ChatMessage";
+import type { RefObject } from "react";
+import { ChatMessage } from "./chat-message";
 
 interface Message {
   id: string;

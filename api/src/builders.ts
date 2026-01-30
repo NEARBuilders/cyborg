@@ -95,6 +95,15 @@ export const handleBuildersRequest = (
         }
       }
 
+      if (!response) {
+        return {
+          success: false,
+          error: "Failed to fetch after retries",
+          status: 500,
+          data: null,
+        };
+      }
+
       if (!response.ok) {
         console.error(
           `[API] NEARBlocks API error: ${response.status} ${response.statusText}`,
@@ -126,7 +135,7 @@ export const handleBuildersRequest = (
 
       console.log(
         `[API] Successfully fetched data from NEARBlocks:`,
-        Object.keys(data),
+        Object.keys(data as object),
       );
 
       return {

@@ -8,6 +8,7 @@
     "build": "bun run build:client && bun run build:server",
     "build:client": "BUILD_TARGET=client rsbuild build",
     "build:server": "BUILD_TARGET=server rsbuild build",
+    "build:pages": "BUILD_TARGET=pages rsbuild build",
     "preview": "rsbuild preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
@@ -76,7 +77,6 @@
     "jsdom": "^27.2.0",
     "tailwindcss": "^4.1.17",
     "typescript": "catalog:",
-    "vitest": "catalog:",
-    "zephyr-rsbuild-plugin": "^0.1.2"
+    "vitest": "catalog:"
   }
 }

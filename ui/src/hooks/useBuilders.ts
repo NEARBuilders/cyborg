@@ -11,13 +11,23 @@ import type {
   NearBlocksCountResponse,
 } from "@/types/builders";
 
+// Get API base URL (same logic as auth-client)
+function getApiBaseUrl(): string {
+  if (typeof window === "undefined") return "";
+  const hostname = window.location.hostname;
+  if (hostname.includes('.pages.dev') || hostname.includes('near-agent')) {
+    return 'https://near-agent.kj95hgdgnn.workers.dev';
+  }
+  return window.location.origin;
+}
+
 // Configuration constants
 const API_PAGE_SIZE = 100; // Number of holders to fetch per page
 const LEGION_CONTRACT = "ascendant.nearlegion.near";
 const INITIATE_CONTRACT = "initiate.nearlegion.near";
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
-const CACHE_KEY = "builders-cache";
+const CACHE_KEY = "builders-cache-v5";
 const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
 
 interface CachedBuildersData {
@@ -68,7 +78,7 @@ interface FetchCountResult {
 // Fetch total holder count from NearBlocks API via our proxy
 async function fetchCount(contractId: string): Promise<FetchCountResult> {
   try {
-    const url = `/api/builders`;
+    const url = `${getApiBaseUrl()}/api/builders`;
     const requestBody = {
       path: `nfts/${contractId}/holders/count`,
     };
@@ -128,12 +138,12 @@ async function fetchHoldersPage(
   while (retryCount < MAX_RETRIES) {
     try {
       console.log(`[useBuilders] Fetching page ${page} for contract ${contractId}`);
-      const url = `/api/builders`;
+      const url = `${getApiBaseUrl()}/api/builders`;
       const requestBody = {
         path: `nfts/${contractId}/holders`,
         params: {
-          per_page: API_PAGE_SIZE,
-          page,
+          per_page: String(API_PAGE_SIZE),
+          page: String(page),
         },
       };
       console.log(`[useBuilders] Request URL: ${url}`);

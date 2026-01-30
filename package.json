@@ -4,7 +4,8 @@
   "workspaces": {
     "packages": [
       "api",
-      "ui"
+      "ui",
+      "worker"
     ],
     "catalog": {
       "react": "^19.2.3",
@@ -34,17 +35,27 @@
     "dev:ui": "bos dev --host=remote --api=remote",
     "dev:api": "bos dev",
     "dev:host": "bos dev",
+    "dev:worker": "bun run --cwd worker wrangler dev",
+    "dev:cf": "concurrently \"bun dev:worker\" \"bun run --cwd ui bun dev\"",
     "build": "bos build",
     "build:api": "bun run --cwd api rsbuild build",
     "build:host": "bun run --cwd host rsbuild build",
     "build:ui": "bun run --cwd ui rsbuild build",
+    "build:worker": "bun run --cwd worker wrangler deploy --dry-run",
+    "build:cf": "bun build:worker && bun build:ui",
     "deploy": "NODE_ENV=production bun run build:ui && bun run build:api",
-    "typecheck": "bun run --cwd host tsc --noEmit && bun run --cwd ui tsc --noEmit && bun run --cwd api tsc --noEmit",
+    "deploy:worker": "bun run --cwd worker wrangler deploy",
+    "deploy:pages": "wrangler pages deploy ui/dist --project-name=near-agent",
+    "deploy:cf": "bun deploy:worker && bun deploy:pages",
+    "typecheck": "bun run --cwd host tsc --noEmit && bun run --cwd ui tsc --noEmit && bun run --cwd api tsc --noEmit && bun run --cwd worker tsc --noEmit",
     "start": "NODE_ENV=production bos start --no-interactive",
     "db:push": "bun run --cwd host drizzle-kit push",
     "db:studio": "bun run --cwd host drizzle-kit studio",
     "db:generate": "bun run --cwd host drizzle-kit generate",
-    "db:migrate": "bun run --cwd host drizzle-kit migrate"
+    "db:migrate": "bun run --cwd host drizzle-kit migrate",
+    "db:generate:d1": "bun run --cwd worker drizzle-kit generate",
+    "db:migrate:d1": "bun run --cwd worker wrangler d1 migrations apply near-agent-db",
+    "db:migrate:d1:local": "bun run --cwd worker wrangler d1 migrations apply near-agent-db --local"
   },
   "packageManager": "bun@1.2.20",
   "module": "index.ts",

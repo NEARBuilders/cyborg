@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ModuleFederationPlugin } from "@module-federation/enhanced/rspack";
@@ -7,36 +6,14 @@ import { defineConfig } from "@rsbuild/core";
 import { pluginReact } from "@rsbuild/plugin-react";
 import { TanStackRouterRspack } from "@tanstack/router-plugin/rspack";
 import { getUISharedDependencies } from "every-plugin/build/rspack";
-import { withZephyr } from "zephyr-rsbuild-plugin";
 import pkg from "./package.json";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const normalizedName = pkg.name;
-const isProduction = process.env.NODE_ENV === "production";
-const buildTarget = process.env.BUILD_TARGET as "client" | "server" | undefined;
+const buildTarget = process.env.BUILD_TARGET as "client" | "server" | "pages" | undefined;
 const isServerBuild = buildTarget === "server";
-
-function updateBosConfig(field: "production" | "ssr", url: string) {
-  try {
-    const configPath = path.resolve(__dirname, "../bos.config.json");
-    const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-
-    if (!config.app.ui) {
-      console.error("   ❌ app.ui not found in bos.config.json");
-      return;
-    }
-
-    config.app.ui[field] = url;
-    fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
-    console.log(`   ✅ Updated bos.config.json: app.ui.${field}`);
-  } catch (err) {
-    console.error(
-      "   ❌ Failed to update bos.config.json:",
-      (err as Error).message,
-    );
-  }
-}
+const isPagesBuild = buildTarget === "pages";
 
 const uiSharedDeps = getUISharedDependencies();
 
@@ -58,19 +35,6 @@ function createClientConfig() {
       shared: uiSharedDeps,
     }),
   ];
-
-  if (isProduction) {
-    plugins.push(
-      withZephyr({
-        hooks: {
-          onDeployComplete: (info) => {
-            console.log("🚀 UI Client Deployed:", info.url);
-            updateBosConfig("production", info.url);
-          },
-        },
-      }),
-    );
-  }
 
   return defineConfig({
     plugins,
@@ -135,7 +99,7 @@ function createClientConfig() {
     },
     output: {
       distPath: { root: "dist", css: "static/css", js: "static/js" },
-      assetPrefix: "auto",
+      assetPrefix: "/",
       filename: { js: "[name].js", css: "style.css" },
       copy: [{ from: path.resolve(__dirname, "public"), to: "./" }],
     },
@@ -144,19 +108,6 @@ function createClientConfig() {
 
 function createServerConfig() {
   const plugins = [pluginReact()];
-
-  if (isProduction) {
-    plugins.push(
-      withZephyr({
-        hooks: {
-          onDeployComplete: (info) => {
-            console.log("🚀 UI SSR Deployed:", info.url);
-            updateBosConfig("ssr", info.url);
-          },
-        },
-      }),
-    );
-  }
 
   return defineConfig({
     plugins,
@@ -210,4 +161,47 @@ function createServerConfig() {
   });
 }
 
-export default isServerBuild ? createServerConfig() : createClientConfig();
+function createPagesConfig() {
+  // Simple SPA build for Cloudflare Pages - no Module Federation
+  return defineConfig({
+    plugins: [pluginReact()],
+    source: {
+      entry: {
+        index: "./src/pages-entry.tsx",
+      },
+    },
+    resolve: {
+      alias: {
+        "@": "./src",
+      },
+    },
+    tools: {
+      rspack: {
+        target: "web",
+        output: {
+          uniqueName: normalizedName,
+        },
+        infrastructureLogging: { level: "error" },
+        stats: "errors-warnings",
+        plugins: [
+          TanStackRouterRspack({
+            target: "react",
+            autoCodeSplitting: true,
+          }),
+        ],
+      },
+    },
+    output: {
+      distPath: { root: "dist", css: "static/css", js: "static/js" },
+      assetPrefix: "/",
+      filename: { js: "[name].[contenthash:8].js", css: "[name].[contenthash:8].css" },
+      copy: [{ from: path.resolve(__dirname, "public"), to: "./" }],
+    },
+  });
+}
+
+export default isPagesBuild
+  ? createPagesConfig()
+  : isServerBuild
+    ? createServerConfig()
+    : createClientConfig();
