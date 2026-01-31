@@ -12,6 +12,7 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 interface BuildersInput {
   path?: string;
   params?: Record<string, string>;
+  nearblocksApiKey?: string;
 }
 
 interface BuildersResult {
@@ -63,7 +64,7 @@ export async function handleBuildersRequest(input: BuildersInput): Promise<Build
           method: "GET",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${process.env.NEAR_BLOCK || ""}`,
+            ...(input.nearblocksApiKey ? { Authorization: `Bearer ${input.nearblocksApiKey}` } : {}),
           },
         });
         break;

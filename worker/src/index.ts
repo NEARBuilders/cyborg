@@ -156,6 +156,7 @@ app.all("/api/*", async (c) => {
     nearService,
     nearAccountId: sessionContext?.nearAccountId,
     role: sessionContext?.role,
+    nearblocksApiKey: env.NEAR_BLOCK,
   });
 
   // Create API routes with context

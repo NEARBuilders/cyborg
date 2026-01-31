@@ -49,6 +49,7 @@ interface ApiContext {
   nearService: NearService | null;
   nearAccountId?: string;
   role?: string;
+  nearblocksApiKey?: string;
 }
 
 // =============================================================================
@@ -411,12 +412,14 @@ export function createApiRoutes(getContext: () => ApiContext) {
   // ===========================================================================
 
   api.get("/builders", async (c) => {
+    const ctx = getContext();
     const queryParams = c.req.query();
     const input = {
       path: queryParams.path || "collections",
       params: Object.fromEntries(
         Object.entries(queryParams).filter(([k]) => k !== "path")
       ),
+      nearblocksApiKey: ctx.nearblocksApiKey,
     };
 
     const result = await handleBuildersRequest(input);
@@ -429,6 +432,7 @@ export function createApiRoutes(getContext: () => ApiContext) {
   });
 
   api.post("/builders", async (c) => {
+    const ctx = getContext();
     const body = await c.req.json();
     const validation = BuildersInputSchema.safeParse(body);
 
@@ -436,7 +440,10 @@ export function createApiRoutes(getContext: () => ApiContext) {
       return c.json({ error: validation.error.message }, 400);
     }
 
-    const result = await handleBuildersRequest(validation.data);
+    const result = await handleBuildersRequest({
+      ...validation.data,
+      nearblocksApiKey: ctx.nearblocksApiKey,
+    });
 
     if (result.success) {
       return c.json(result.data);
@@ -446,12 +453,14 @@ export function createApiRoutes(getContext: () => ApiContext) {
   });
 
   api.get("/builders/:id", async (c) => {
+    const ctx = getContext();
     const id = c.req.param("id");
     const queryParams = c.req.query();
 
     const input = {
       path: `collections/${id}`,
       params: queryParams as Record<string, string>,
+      nearblocksApiKey: ctx.nearblocksApiKey,
     };
 
     const result = await handleBuildersRequest(input);

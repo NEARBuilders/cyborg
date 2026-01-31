@@ -5,15 +5,16 @@ import { createRouter } from "./router";
 import type { ClientRuntimeConfig } from "./types";
 
 // Runtime config for Cloudflare Pages deployment
+// With _worker.js pattern, all APIs are served from the same domain
 function getRuntimeConfig(): ClientRuntimeConfig {
-  const workerUrl = "https://near-agent.kj95hgdgnn.workers.dev";
+  const origin = window.location.origin;
 
   return {
-    assetsUrl: window.location.origin,
+    assetsUrl: origin,
     env: "production",
     account: "near-agent",
     title: "NEAR Agent",
-    hostUrl: workerUrl,
+    hostUrl: origin, // Same origin - APIs served by _worker.js
     apiBase: "/api",
     rpcBase: "/api/rpc",
   };
