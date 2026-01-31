@@ -3,11 +3,35 @@
  * Left panel showing all builders with loading states and search
  */
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { BuilderListItem, type Builder } from "./BuilderListItem";
 import { useUserRank } from "@/hooks";
 import { useProfile } from "@/integrations/near-social-js";
 import { Search, X } from "lucide-react";
+
+// Simple hook to connect intersection observer with load more
+function useInView(ref: React.RefObject<HTMLDivElement>, callback: () => void, enabled: boolean) {
+  useEffect(() => {
+    if (!enabled) return;
+    const element = ref.current;
+    if (!element) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          callback();
+        }
+      },
+      { rootMargin: "300px" }
+    );
+
+    observer.observe(element);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [ref, callback, enabled]);
+}
 
 interface BuilderListProps {
   builders: Builder[];
@@ -21,7 +45,6 @@ interface BuilderListProps {
   onLoadMoreError?: string | null;
   onClearLoadMoreError?: () => void;
   onSearchNavigate?: (accountId: string) => void;
-  sentinelRef?: React.RefObject<HTMLDivElement | null>;
 }
 
 function BuilderListItemSkeleton({ index }: { index: number }) {
@@ -73,7 +96,6 @@ export function BuilderList({
   onLoadMoreError,
   onClearLoadMoreError,
   onSearchNavigate,
-  sentinelRef,
 }: BuilderListProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const totalCount = (totalCounts?.legion || 0) + (totalCounts?.initiate || 0);
@@ -103,6 +125,10 @@ export function BuilderList({
   // These hooks will prefetch data in the background so it's ready when navigating
   useUserRank(shouldPrefetch ? searchAccountId : undefined);
   useProfile(shouldPrefetch ? searchAccountId : undefined);
+
+  // Set up intersection observer for infinite scroll
+  const internalSentinelRef = useRef<HTMLDivElement>(null);
+  useInView(internalSentinelRef, () => onLoadMore?.(), Boolean(hasMore && !searchQuery && !isLoadingMore));
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && searchQuery.trim()) {
@@ -222,7 +248,7 @@ export function BuilderList({
 
             {/* Sentinel element for infinite scroll intersection observer */}
             {hasMore && !searchQuery && (
-              <div ref={sentinelRef} className="h-1" aria-hidden="true" />
+              <div ref={internalSentinelRef} className="h-1" aria-hidden="true" />
             )}
           </>
         )}

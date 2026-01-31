@@ -1,144 +1,63 @@
 /**
  * Hook for fetching Builder data from NEARBlocks API
- * X-style progressive loading:
- * 1. Show small initial batch (for immediate display)
- * 2. Pre-load buffer in background
- * 3. Fetch more as user scrolls near bottom
+ * Uses TanStack Query's useInfiniteQuery for reliable infinite scroll
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import type {
   Builder,
   NearBlocksHolder,
   NearBlocksHoldersResponse,
-  NearBlocksCountResponse,
 } from "@/types/builders";
 
 // Get API base URL - always use same-origin to avoid CORS issues
-// Cloudflare Pages middleware proxies /api/* requests to the worker
 function getApiBaseUrl(): string {
   if (typeof window === "undefined") return "";
   return window.location.origin;
 }
 
 // Configuration constants
-const INITIAL_BATCH_SIZE = 12; // Initial visible items
-const BUFFER_BATCH_SIZE = 24; // Pre-loaded buffer
-const SCROLL_THRESHOLD = 300; // px from bottom to trigger next fetch
+const PAGE_SIZE = 25;
 const LEGION_CONTRACT = "ascendant.nearlegion.near";
 const INITIATE_CONTRACT = "initiate.nearlegion.near";
-const MAX_RETRIES = 3;
-const RETRY_DELAY_MS = 1000;
-const CACHE_KEY = "builders-cache-v7";
-const CACHE_DURATION_MS = 30 * 60 * 1000; // 30 minutes
 
-interface CachedBuildersData {
-  builders: Builder[];
-  totalCounts: { legion: number; initiate: number };
-  timestamp: number;
+interface FetchHoldersParams {
+  contractId: string;
+  page: number;
+  limit: number;
 }
 
-function getCachedBuilders(): CachedBuildersData | null {
-  try {
-    const cached = sessionStorage.getItem(CACHE_KEY);
-    if (!cached) return null;
-    const data = JSON.parse(cached) as CachedBuildersData;
-    if (Date.now() - data.timestamp > CACHE_DURATION_MS) {
-      sessionStorage.removeItem(CACHE_KEY);
-      return null;
-    }
-    return data;
-  } catch {
-    return null;
-  }
-}
-
-function setCachedBuilders(data: Omit<CachedBuildersData, "timestamp">) {
-  try {
-    sessionStorage.setItem(CACHE_KEY, JSON.stringify({ ...data, timestamp: Date.now() }));
-  } catch {
-    // Ignore storage errors
-  }
-}
-
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-interface FetchResult {
+async function fetchHolders({ contractId, page, limit }: FetchHoldersParams): Promise<{
   holders: string[];
   hasMore: boolean;
-  error?: string;
-}
+}> {
+  const response = await fetch(`${getApiBaseUrl()}/api/builders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      path: `nfts/${contractId}/holders`,
+      params: { per_page: String(limit), page: String(page) },
+    }),
+  });
 
-// Fetch count
-async function fetchCount(contractId: string): Promise<number> {
-  try {
-    const url = `${getApiBaseUrl()}/api/builders`;
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: `nfts/${contractId}/holders/count` }),
-    });
-
-    if (!response.ok) return 0;
-
-    const data = await response.json() as NearBlocksCountResponse;
-    return parseInt(data.holders?.[0]?.count || "0", 10);
-  } catch {
-    return 0;
-  }
-}
-
-// Fetch holders with custom limit
-async function fetchHolders(
-  contractId: string,
-  page: number,
-  limit: number,
-): Promise<FetchResult> {
-  let retryCount = 0;
-
-  while (retryCount < MAX_RETRIES) {
-    try {
-      const url = `${getApiBaseUrl()}/api/builders`;
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          path: `nfts/${contractId}/holders`,
-          params: { per_page: String(limit), page: String(page) },
-        }),
-      });
-
-      if (response.status === 429) {
-        retryCount++;
-        if (retryCount >= MAX_RETRIES) return { holders: [], hasMore: false };
-        await delay(RETRY_DELAY_MS);
-        continue;
-      }
-
-      if (!response.ok) {
-        return { holders: [], hasMore: false, error: `API ${response.status}` };
-      }
-
-      const data = await response.json() as NearBlocksHoldersResponse;
-      const holdersList = data.holders || [];
-
-      const holders = holdersList
-        .filter((h: NearBlocksHolder) => h.account)
-        .map((h: NearBlocksHolder) => h.account);
-
-      const hasMore = holdersList.length === limit;
-
-      return { holders, hasMore };
-    } catch {
-      if (retryCount >= MAX_RETRIES - 1) {
-        return { holders: [], hasMore: false, error: "Network error" };
-      }
-      retryCount++;
-      await delay(RETRY_DELAY_MS);
-    }
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${response.statusText}`);
   }
 
-  return { holders: [], hasMore: false };
+  if (response.status === 429) {
+    throw new Error("Rate limited by NEARBlocks API. Please try again later.");
+  }
+
+  const data = await response.json() as NearBlocksHoldersResponse;
+  const holdersList = data.holders || [];
+
+  const holders = holdersList
+    .filter((h: NearBlocksHolder) => h.account)
+    .map((h: NearBlocksHolder) => h.account);
+
+  const hasMore = holdersList.length === limit;
+
+  return { holders, hasMore };
 }
 
 function transformToBuilder(
@@ -196,62 +115,46 @@ function transformToBuilder(
   };
 }
 
-interface UseBuildersOptions {
-  initialBatchSize?: number;
-  bufferBatchSize?: number;
-  scrollThreshold?: number;
-}
+export function useBuilders() {
+  const query = useInfiniteQuery({
+    queryKey: ["builders"],
+    queryFn: async ({ pageParam }) => {
+      const page = pageParam as number || 1;
 
-export function useBuilders(options: UseBuildersOptions = {}) {
-  const {
-    initialBatchSize = INITIAL_BATCH_SIZE,
-    bufferBatchSize = BUFFER_BATCH_SIZE,
-    scrollThreshold = SCROLL_THRESHOLD,
-  } = options;
+      // Fetch both contracts in parallel
+      const [legionResult, initiateResult] = await Promise.all([
+        fetchHolders({ contractId: LEGION_CONTRACT, page, limit: PAGE_SIZE }),
+        fetchHolders({ contractId: INITIATE_CONTRACT, page, limit: PAGE_SIZE }),
+      ]);
 
-  const cachedData = useRef(getCachedBuilders());
-
-  const [builders, setBuilders] = useState<Builder[]>(cachedData.current?.builders || []);
-  const [totalCounts, setTotalCounts] = useState(cachedData.current?.totalCounts || { legion: 0, initiate: 0 });
-  const [isLoading, setIsLoading] = useState(!cachedData.current);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
-
-  // Track pagination state
-  const paginationRef = useRef({
-    legionPage: 1,
-    initiatePage: 1,
-    hasMoreLegion: true,
-    hasMoreInitiate: true,
-  });
-
-  // Refs for values that loadMore needs (avoiding closure issues)
-  const stateRef = useRef({
-    isLoadingMore,
-    hasMore,
-    totalCounts,
-  });
-
-  // Keep state refs in sync
-  useEffect(() => {
-    stateRef.current = { isLoadingMore, hasMore, totalCounts };
-  }, [isLoadingMore, hasMore, totalCounts]);
-
-  const buildersRef = useRef(builders);
-  useEffect(() => { buildersRef.current = builders; }, [builders]);
-
-  // Merge new holders into existing builders
-  const mergeHolders = useCallback(
-    (current: Builder[], legionHolders: string[], initiateHolders: string[]) => {
-      const builderMap = new Map<string, Builder>();
-
-      for (const builder of current) {
-        builderMap.set(builder.accountId, { ...builder });
+      return {
+        legionHolders: legionResult.holders,
+        initiateHolders: initiateResult.holders,
+        legionPage: page,
+        initiatePage: page,
+        hasMoreLegion: legionResult.hasMore,
+        hasMoreInitiate: initiateResult.hasMore,
+      };
+    },
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      // Continue if either contract has more data
+      if (lastPage.hasMoreLegion || lastPage.hasMoreInitiate) {
+        return lastPage.legionPage + 1;
       }
+      return undefined;
+    },
+    refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
 
-      for (const accountId of legionHolders) {
+  // Merge all pages into a single list of builders
+  const builders = (() => {
+    const builderMap = new Map<string, Builder>();
+
+    for (const page of query.data?.pages || []) {
+      // Add legion holders
+      for (const accountId of page.legionHolders) {
         const existing = builderMap.get(accountId);
         if (existing) {
           builderMap.set(accountId, { ...existing, isLegion: true });
@@ -260,7 +163,8 @@ export function useBuilders(options: UseBuildersOptions = {}) {
         }
       }
 
-      for (const accountId of initiateHolders) {
+      // Add initiate holders
+      for (const accountId of page.initiateHolders) {
         const existing = builderMap.get(accountId);
         if (existing) {
           builderMap.set(accountId, { ...existing, isInitiate: true });
@@ -268,230 +172,43 @@ export function useBuilders(options: UseBuildersOptions = {}) {
           builderMap.set(accountId, transformToBuilder(accountId, false, true));
         }
       }
+    }
 
-      return Array.from(builderMap.values());
-    },
-    [],
-  );
+    return Array.from(builderMap.values());
+  })();
 
-  // Load next batch - using ref to avoid being in dependency arrays
-  const loadMoreRef = useRef<(() => Promise<void>) | null>(null);
+  // Calculate total counts (sum of all holders across all pages)
+  const totalCounts = (() => {
+    let legionCount = 0;
+    let initiateCount = 0;
 
-  loadMoreRef.current = async () => {
-    const { isLoadingMore: loading, hasMore: more } = stateRef.current;
-    if (loading || !more) return;
+    for (const page of query.data?.pages || []) {
+      legionCount += page.legionHolders.length;
+      initiateCount += page.initiateHolders.length;
+    }
 
-    setIsLoadingMore(true);
-    setLoadMoreError(null);
+    return { legion: legionCount, initiate: initiateCount };
+  })();
 
-    try {
-      const { legionPage, initiatePage } = paginationRef.current;
+  const loadMoreError = query.error instanceof Error ? query.error.message : null;
 
-      const promises: Promise<{ type: "legion" | "initiate"; result: FetchResult }>[] = [];
-
-      if (paginationRef.current.hasMoreLegion) {
-        promises.push(
-          fetchHolders(LEGION_CONTRACT, legionPage, bufferBatchSize).then(r => ({ type: "legion" as const, result: r })),
-        );
-      }
-
-      if (paginationRef.current.hasMoreInitiate) {
-        promises.push(
-          fetchHolders(INITIATE_CONTRACT, initiatePage, bufferBatchSize).then(r => ({ type: "initiate" as const, result: r })),
-        );
-      }
-
-      const results = await Promise.all(promises);
-
-      let legionHolders: string[] = [];
-      let initiateHolders: string[] = [];
-
-      // Check for errors in results
-      for (const { type, result } of results) {
-        if (result.error) {
-          setLoadMoreError(result.error);
-          return;
-        }
-      }
-
-      for (const { type, result } of results) {
-        if (type === "legion") {
-          legionHolders = result.holders;
-          paginationRef.current.hasMoreLegion = result.hasMore;
-          if (result.holders.length > 0) paginationRef.current.legionPage++;
-        } else {
-          initiateHolders = result.holders;
-          paginationRef.current.hasMoreInitiate = result.hasMore;
-          if (result.holders.length > 0) paginationRef.current.initiatePage++;
-        }
-      }
-
-      const merged = mergeHolders(buildersRef.current, legionHolders, initiateHolders);
-      setBuilders(merged);
-      setHasMore(paginationRef.current.hasMoreLegion || paginationRef.current.hasMoreInitiate);
-
-      // Update cache
-      setCachedBuilders({
-        builders: merged,
-        totalCounts: stateRef.current.totalCounts,
-      });
-    } catch (err) {
-      console.error("[useBuilders] Load more error:", err);
-      setLoadMoreError(err instanceof Error ? err.message : "Failed to load more builders");
-    } finally {
-      setIsLoadingMore(false);
+  const clearLoadMoreError = () => {
+    // Clear error by refetching
+    if (query.error) {
+      query.refetch();
     }
   };
-
-  // Stable loadMore callback for external use
-  const loadMore = useCallback(() => {
-    loadMoreRef.current?.();
-  }, []);
-
-  // Clear load more error callback
-  const clearLoadMoreError = useCallback(() => {
-    setLoadMoreError(null);
-  }, []);
-
-  // Intersection Observer
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
-  const observerRef = useRef<IntersectionObserver | null>(null);
-
-  // Set up intersection observer - only runs once
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting && stateRef.current.hasMore && !stateRef.current.isLoadingMore) {
-          loadMoreRef.current?.();
-        }
-      },
-      { rootMargin: `${scrollThreshold}px` },
-    );
-
-    observerRef.current = observer;
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [scrollThreshold]); // Only recreate when scrollThreshold changes
-
-  // Connect observer to sentinel when sentinel ref is set
-  useEffect(() => {
-    const sentinel = sentinelRef.current;
-    const observer = observerRef.current;
-
-    if (sentinel && observer) {
-      observer.observe(sentinel);
-    }
-
-    return () => {
-      if (sentinel && observer) {
-        observer.unobserve(sentinel);
-      }
-    };
-  }, [sentinelRef.current]); // Re-run when sentinel ref changes
-
-  // Initial load - only runs once
-  useEffect(() => {
-    let cancelled = false;
-    let bufferTimeout: ReturnType<typeof setTimeout> | null = null;
-
-    async function loadInitial() {
-      if (cancelled) return;
-
-      if (cachedData.current) {
-        setIsLoading(false);
-        return;
-      }
-
-      try {
-        setIsLoading(true);
-        setError(null);
-
-        // Step 1: Fetch counts
-        const [legionCount, initiateCount] = await Promise.all([
-          fetchCount(LEGION_CONTRACT),
-          fetchCount(INITIATE_CONTRACT),
-        ]);
-
-        if (cancelled) return;
-
-        setTotalCounts({ legion: legionCount, initiate: initiateCount });
-
-        // Step 2: Fetch initial batch for display
-        const [legionResult, initiateResult] = await Promise.all([
-          fetchHolders(LEGION_CONTRACT, 1, initialBatchSize),
-          fetchHolders(INITIATE_CONTRACT, 1, initialBatchSize),
-        ]);
-
-        if (cancelled) return;
-
-        // Update pagination state
-        paginationRef.current.hasMoreLegion = legionResult.hasMore;
-        paginationRef.current.hasMoreInitiate = initiateResult.hasMore;
-
-        if (legionResult.holders.length > 0) {
-          paginationRef.current.legionPage++;
-        }
-        if (initiateResult.holders.length > 0) {
-          paginationRef.current.initiatePage++;
-        }
-
-        // Merge initial builders
-        const initialBuilders = mergeHolders(
-          [],
-          legionResult.holders,
-          initiateResult.holders,
-        );
-
-        setBuilders(initialBuilders);
-        setHasMore(legionResult.hasMore || initiateResult.hasMore);
-
-        // Cache
-        setCachedBuilders({
-          builders: initialBuilders,
-          totalCounts: { legion: legionCount, initiate: initiateCount },
-        });
-
-        // Step 3: Pre-load buffer in background
-        if ((legionResult.hasMore || initiateResult.hasMore) && !cancelled) {
-          bufferTimeout = setTimeout(() => {
-            if (!cancelled) {
-              loadMoreRef.current?.();
-            }
-          }, 500);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          console.error("[useBuilders] Initial load error:", err);
-          setError(err as Error);
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    loadInitial();
-
-    return () => {
-      cancelled = true;
-      if (bufferTimeout) clearTimeout(bufferTimeout);
-    };
-  }, [initialBatchSize, mergeHolders]); // Only run on mount
 
   return {
     builders,
     totalCounts,
-    isLoading,
-    isLoadingMore,
-    hasMore,
-    error,
-    loadMore,
+    isLoading: query.isLoading,
+    isLoadingMore: query.isFetchingNextPage,
+    hasMore: query.hasNextPage,
+    error: query.error,
     loadMoreError,
     clearLoadMoreError,
-    sentinelRef,
+    loadMore: () => query.fetchNextPage(),
     loadedCount: builders.length,
   };
 }

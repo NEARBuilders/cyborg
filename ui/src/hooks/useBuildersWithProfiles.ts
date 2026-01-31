@@ -33,7 +33,7 @@ export interface EnhancedBuilder extends Builder {
 
 export function useBuildersWithProfiles() {
   const buildersResult = useBuilders();
-  const { builders, sentinelRef } = buildersResult;
+  const { builders } = buildersResult;
 
   // Get all account IDs to fetch profiles for
   const accountIds = useMemo(
@@ -95,6 +95,5 @@ export function useBuildersWithProfiles() {
     ...buildersResult,
     builders: enhancedBuilders,
     isLoadingProfiles,
-    sentinelRef,
   };
 }
