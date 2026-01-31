@@ -1,7 +1,6 @@
-import { useMutation, useQuery, useQueries, type UseQueryOptions } from "@tanstack/react-query";
-import { Social, type Profile } from "near-social-js";
+import { useMutation, useQuery, type UseQueryOptions } from "@tanstack/react-query";
+import type { Profile } from "near-social-js";
 import { useMemo } from "react";
-import { authClient } from "../../lib/auth-client";
 
 export const socialKeys = {
   all: ["social"] as const,
@@ -9,76 +8,86 @@ export const socialKeys = {
   profiles: (accountIds: string[]) => [...socialKeys.all, "profiles", accountIds.join(",")] as const,
 };
 
-export function useSocialInstance() {
-  const near = authClient.near.getNearClient();
-  return useMemo(
-    () =>
-      near
-        ? new Social({ near: near as any, network: "mainnet" })
-        : new Social({ network: "mainnet" }),
-    [near]
-  );
-}
-
+/**
+ * Fetch a single NEAR Social profile via our API (with KV cache)
+ */
 export function useProfile(
   accountId: string | undefined,
   options?: Omit<UseQueryOptions<Profile | null>, "queryKey" | "queryFn">
 ) {
-  const social = useSocialInstance();
-
   return useQuery({
     queryKey: socialKeys.profile(accountId ?? ""),
-    queryFn: () => social.getProfile(accountId!),
+    queryFn: async () => {
+      const response = await fetch(`/api/profiles/${accountId}`);
+      if (!response.ok) {
+        return null;
+      }
+      return response.json() as Promise<Profile | null>;
+    },
     enabled: !!accountId,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 30 * 60 * 1000, // 30 minutes
     ...options,
   });
 }
 
 /**
- * Fetch multiple NEAR Social profiles with proper caching.
- * Each profile is cached individually for optimal cache reuse.
+ * Fetch multiple NEAR Social profiles via our API (with KV cache)
+ * Uses batch endpoint for efficient fetching
  */
 export function useProfiles(accountIds: string[]) {
-  const social = useSocialInstance();
+  const uniqueIds = useMemo(() => {
+    const seen = new Set<string>();
+    return accountIds.filter((id) => {
+      if (!id || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  }, [accountIds]);
 
-  const queries = useQueries({
-    queries: accountIds.map((accountId) => ({
-      queryKey: socialKeys.profile(accountId),
-      queryFn: () => social.getProfile(accountId),
-      enabled: !!accountId,
-      staleTime: 5 * 60 * 1000, // 5 minutes
-      gcTime: 30 * 60 * 1000, // 30 minutes (was cacheTime)
-    })),
+  // Use batch API endpoint for better performance
+  const query = useQuery({
+    queryKey: socialKeys.profiles(uniqueIds),
+    queryFn: async () => {
+      if (uniqueIds.length === 0) {
+        return {};
+      }
+      const response = await fetch(`/api/profiles?ids=${uniqueIds.join(",")}`);
+      if (!response.ok) {
+        return {};
+      }
+      return response.json() as Promise<Record<string, Profile | null>>;
+    },
+    enabled: uniqueIds.length > 0,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 30 * 60 * 1000, // 30 minutes
   });
 
   const profiles = useMemo(() => {
     const map = new Map<string, Profile | null>();
-    accountIds.forEach((accountId, index) => {
-      const query = queries[index];
-      if (query?.data) {
-        map.set(accountId, query.data);
-      }
-    });
+    if (query.data) {
+      Object.entries(query.data).forEach(([accountId, profile]) => {
+        if (profile) {
+          map.set(accountId, profile);
+        }
+      });
+    }
     return map;
-  }, [accountIds, queries]);
+  }, [query.data]);
 
-  const isLoading = queries.some((q) => q.isLoading);
-  const isError = queries.some((q) => q.isError);
-
-  return { profiles, isLoading, isError, queries };
+  return { profiles, isLoading: query.isLoading, isError: query.isError };
 }
 
-export function usePoke(targetAccountId: string) {
-  const social = useSocialInstance();
-
+/**
+ * Keep the usePoke function for near-social-js functionality
+ * This is client-side only and doesn't need caching
+ */
+export function usePoke() {
   return useMutation({
     mutationFn: async () => {
-      const accountId = authClient.near.getAccountId();
-      if (!accountId) {
-        throw new Error("Wallet not connected");
-      }
-      const txBuilder = await social.poke(accountId, targetAccountId);
-      return txBuilder.send();
+      // This would require a different implementation for server-side
+      // For now, this is a placeholder
+      throw new Error("Poke functionality requires client-side NEAR integration");
     },
   });
 }

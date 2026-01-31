@@ -13,6 +13,7 @@ import * as schema from "../db/schema";
 import type { AgentService } from "../services/agent";
 import type { NearService } from "../services/near";
 import { handleBuildersRequest } from "../services/builders";
+import { CacheService } from "../services/cache";
 
 // =============================================================================
 // VALIDATION SCHEMAS
@@ -45,6 +46,7 @@ const BuildersInputSchema = z.object({
 
 interface ApiContext {
   db: Database;
+  cache: CacheService;
   agentService: AgentService | null;
   nearService: NearService | null;
   nearAccountId?: string;
@@ -420,6 +422,7 @@ export function createApiRoutes(getContext: () => ApiContext) {
         Object.entries(queryParams).filter(([k]) => k !== "path")
       ),
       nearblocksApiKey: ctx.nearblocksApiKey,
+      cache: ctx.cache,
     };
 
     const result = await handleBuildersRequest(input);
@@ -443,6 +446,7 @@ export function createApiRoutes(getContext: () => ApiContext) {
     const result = await handleBuildersRequest({
       ...validation.data,
       nearblocksApiKey: ctx.nearblocksApiKey,
+      cache: ctx.cache,
     });
 
     if (result.success) {
@@ -461,6 +465,7 @@ export function createApiRoutes(getContext: () => ApiContext) {
       path: `collections/${id}`,
       params: queryParams as Record<string, string>,
       nearblocksApiKey: ctx.nearblocksApiKey,
+      cache: ctx.cache,
     };
 
     const result = await handleBuildersRequest(input);
@@ -469,6 +474,105 @@ export function createApiRoutes(getContext: () => ApiContext) {
       return c.json(result.data);
     } else {
       return c.json({ error: result.error }, result.status as 400 | 500);
+    }
+  });
+
+  // ===========================================================================
+  // PROFILES (NEAR Social) with KV caching
+  // ===========================================================================
+
+  api.get("/profiles", async (c) => {
+    const ctx = getContext();
+    const queryParams = c.req.query();
+    const accountIds = queryParams.ids?.split(",").filter(Boolean) || [];
+
+    if (accountIds.length === 0) {
+      return c.json({});
+    }
+
+    // Try to get from KV cache first
+    const cachedProfiles = await ctx.cache.getProfiles(accountIds);
+    const uncachedIds = accountIds.filter((id) => !cachedProfiles.has(id));
+
+    // Fetch only uncached profiles from NEAR Social
+    const fetchedProfiles: Record<string, any> = {};
+
+    if (uncachedIds.length > 0) {
+      await Promise.all(
+        uncachedIds.map(async (accountId) => {
+          try {
+            const response = await fetch(
+              `https://api.near.social/get`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  keys: [`${accountId}/profile/**`],
+                }),
+              }
+            );
+
+            if (response.ok) {
+              const data = await response.json();
+              if (data[accountId]?.profile) {
+                fetchedProfiles[accountId] = data[accountId].profile;
+              }
+            }
+          } catch (e) {
+            console.error(`[API] Error fetching profile for ${accountId}:`, e);
+          }
+        })
+      );
+
+      // Cache fetched profiles
+      await ctx.cache.setProfiles(fetchedProfiles);
+    }
+
+    // Merge cached and fetched profiles
+    const allProfiles = { ...cachedProfiles, ...fetchedProfiles };
+
+    return c.json(allProfiles);
+  });
+
+  api.get("/profiles/:accountId", async (c) => {
+    const ctx = getContext();
+    const accountId = c.req.param("accountId");
+
+    // Try KV cache first
+    const cached = await ctx.cache.getProfile(accountId);
+    if (cached) {
+      console.log(`[KV CACHE HIT] Profile for: ${accountId}`);
+      return c.json(cached);
+    }
+
+    // Fetch from NEAR Social
+    try {
+      const response = await fetch("https://api.near.social/get", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          keys: [`${accountId}/profile/**`],
+        }),
+      });
+
+      if (!response.ok) {
+        return c.json(null, 404);
+      }
+
+      const data = await response.json();
+      const profile = data[accountId]?.profile;
+
+      if (!profile) {
+        return c.json(null, 404);
+      }
+
+      // Cache in KV
+      await ctx.cache.setProfile(accountId, profile);
+
+      return c.json(profile);
+    } catch (e) {
+      console.error(`[API] Error fetching profile for ${accountId}:`, e);
+      return c.json(null, 500);
     }
   });
 

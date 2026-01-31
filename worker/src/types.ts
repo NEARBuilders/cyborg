@@ -6,6 +6,9 @@ export interface Env {
   // D1 Database binding
   DB: D1Database;
 
+  // KV namespace for caching
+  CACHE: KVNamespace;
+
   // Assets binding for serving static files
   ASSETS: Fetcher;
 

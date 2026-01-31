@@ -66,6 +66,7 @@
   },
   "dependencies": {
     "@libsql/client": "^0.17.0",
+    "@tanstack/query-sync-storage-persister": "^5.90.22",
     "@types/better-sqlite3": "^7.6.13",
     "better-sqlite3": "^12.6.2",
     "concurrently": "^9.1.2",

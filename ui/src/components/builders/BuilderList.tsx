@@ -10,7 +10,7 @@ import { useProfile } from "@/integrations/near-social-js";
 import { Search, X } from "lucide-react";
 
 // Simple hook to connect intersection observer with load more
-function useInView(ref: React.RefObject<HTMLDivElement>, callback: () => void, enabled: boolean) {
+function useInView(ref: React.RefObject<HTMLDivElement | null>, callback: () => void, enabled: boolean) {
   useEffect(() => {
     if (!enabled) return;
     const element = ref.current;

@@ -15,6 +15,7 @@ import { createAuth, getSessionFromRequest } from "./auth";
 import { createDatabase } from "./db";
 import { NearService, createAgentService } from "./services";
 import { createApiRoutes } from "./routes/api";
+import { CacheService } from "./services/cache";
 
 // =============================================================================
 // APP SETUP
@@ -150,6 +151,7 @@ app.all("/api/*", async (c) => {
   // Create context getter for routes
   const getContext = () => ({
     db,
+    cache: new CacheService(env.CACHE),
     agentService,
     nearService,
     nearAccountId: sessionContext?.nearAccountId,

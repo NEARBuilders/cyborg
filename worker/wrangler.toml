@@ -9,6 +9,12 @@ binding = "DB"
 database_name = "near-agent-db"
 database_id = "5d89d64f-38eb-44d5-bb96-9b85c005c924"
 
+# KV namespace for caching
+[[kv_namespaces]]
+binding = "CACHE"
+id = "bb5d55fd13424559bcf64cd50fc3c1d1"
+preview_id = "aa7517a4c2304c0c90e2d89f5212ccf9"
+
 # Assets binding for serving static files
 [assets]
 directory = "../ui/dist"
@@ -33,4 +39,4 @@ BETTER_AUTH_URL = "https://near-agent.pages.dev"
 # Secrets (set via: wrangler secret put SECRET_NAME)
 # - BETTER_AUTH_SECRET
 # - NEAR_AI_API_KEY
-# - NEAR_BLOCK
+# - NEARBLOCKS_API_KEY

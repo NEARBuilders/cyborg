@@ -1,18 +1,15 @@
 /**
  * Builders API endpoint
- * Proxies requests to NEARBlocks API
- *
- * Adapted from api/src/builders.ts for Cloudflare Workers
+ * Proxies requests to NEARBlocks API with KV caching
  */
 
-// Simple in-memory cache (will be reset on Worker restart, but that's fine for edge)
-const apiCache = new Map<string, { data: unknown; timestamp: number }>();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+import { CacheService } from "./cache";
 
 interface BuildersInput {
   path?: string;
   params?: Record<string, string>;
   nearblocksApiKey?: string;
+  cache?: CacheService;
 }
 
 interface BuildersResult {
@@ -22,38 +19,47 @@ interface BuildersResult {
   data: unknown;
 }
 
+const CACHE_TTL_SECONDS = 300; // 5 minutes for builders
+const COUNT_CACHE_TTL_SECONDS = 600; // 10 minutes for counts
+
 /**
  * Handle builders API request
  */
 export async function handleBuildersRequest(input: BuildersInput): Promise<BuildersResult> {
   try {
+    const { cache } = input;
+
     const path = input.path || "collections";
     const params = input.params || {};
 
     console.log(`[API] Builders request - path: ${path}, params:`, params);
-    console.log(`[API] NEARBlocks API key present: ${!!input.nearblocksApiKey}`);
-    console.log(`[API] NEARBlocks API key length: ${input.nearblocksApiKey?.length || 0}`);
 
     // Build query string
     const queryString = new URLSearchParams(params).toString();
     const targetUrl = `https://api.nearblocks.io/v1/${path}${queryString ? `?${queryString}` : ""}`;
 
-    // Check cache
-    const cacheKey = targetUrl;
-    const cached = apiCache.get(cacheKey);
-    const now = Date.now();
+    // Check KV cache first
+    if (cache) {
+      // Generate cache key from URL
+      const cacheKey = `nearblocks:${path}:${queryString}`;
+      const cached = await cache.get<any>(cacheKey);
 
-    if (cached && now - cached.timestamp < CACHE_TTL) {
-      console.log(`[CACHE HIT] Returning cached data for: ${path}`);
-      return {
-        success: true,
-        error: null,
-        status: 200,
-        data: cached.data,
-      };
+      if (cached) {
+        console.log(`[KV CACHE HIT] Returning cached data for: ${path}`);
+        return {
+          success: true,
+          error: null,
+          status: 200,
+          data: cached,
+        };
+      }
     }
 
     console.log(`[API] Proxying to NEARBlocks: ${targetUrl}`);
+
+    // Determine TTL based on endpoint type
+    const isCountEndpoint = path.includes("/count");
+    const ttl = isCountEndpoint ? COUNT_CACHE_TTL_SECONDS : CACHE_TTL_SECONDS;
 
     // Fetch with retry logic
     let response: Response | null = null;
@@ -115,8 +121,12 @@ export async function handleBuildersRequest(input: BuildersInput): Promise<Build
 
     const data = await response.json();
 
-    // Cache successful response
-    apiCache.set(cacheKey, { data, timestamp: now });
+    // Cache successful response in KV
+    if (cache) {
+      const cacheKey = `nearblocks:${path}:${queryString}`;
+      await cache.set(cacheKey, data, ttl);
+      console.log(`[KV CACHE] Stored data for: ${path}, TTL: ${ttl}s`);
+    }
 
     console.log(`[API] Successfully fetched data from NEARBlocks:`, Object.keys(data as object));
 
