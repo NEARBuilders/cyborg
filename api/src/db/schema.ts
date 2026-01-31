@@ -4,6 +4,7 @@
  * This schema evolved from the every-plugin template:
  * - conversation & message: Added for AI chat feature with streaming
  * - kvStore: Inherited from template with per-user isolation (composite PK)
+ * - user, session, account, verification: Better Auth tables
  *
  * Migration workflow:
  *   1. Edit this file (add/modify tables, indices)
@@ -17,6 +18,73 @@
  */
 
 import { integer, sqliteTable, text, primaryKey, index } from "drizzle-orm/sqlite-core";
+
+// =============================================================================
+// BETTER AUTH TABLES
+// =============================================================================
+
+export const user = sqliteTable("user", {
+  id: text("id").primaryKey(),
+  name: text("name").unique(),
+  email: text("email").unique(),
+  emailVerified: integer("emailVerified", { mode: "boolean" }).notNull().default(false),
+  image: text("image"),
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull(),
+  role: text("role"),
+  banned: integer("banned", { mode: "boolean" }).notNull().default(false),
+});
+
+export const session = sqliteTable("session", {
+  id: text("id").primaryKey(),
+  userId: text("userId")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  expiresAt: integer("expiresAt", { mode: "timestamp" }).notNull(),
+  token: text("token").unique().notNull(),
+  ipAddress: text("ipAddress"),
+  userAgent: text("userAgent"),
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull(),
+});
+
+export const account = sqliteTable("account", {
+  id: text("id").primaryKey(),
+  userId: text("userId")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  accountId: text("accountId").notNull(),
+  providerId: text("providerId").notNull(),
+  accessToken: text("accessToken"),
+  refreshToken: text("refreshToken"),
+  idToken: text("idToken"),
+  expiresAt: integer("expiresAt", { mode: "timestamp" }),
+  password: text("password"),
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull(),
+});
+
+export const verification = sqliteTable("verification", {
+  id: text("id").primaryKey(),
+  identifier: text("identifier").notNull(),
+  value: text("value").notNull(),
+  expiresAt: integer("expiresAt", { mode: "timestamp" }).notNull(),
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull(),
+});
+
+// NEAR Account table for better-near-auth plugin
+export const nearAccount = sqliteTable("nearAccount", {
+  id: text("id").primaryKey(),
+  userId: text("userId")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  accountId: text("accountId").notNull(),
+  network: text("network").notNull(),
+  publicKey: text("publicKey").notNull(),
+  isPrimary: integer("isPrimary", { mode: "boolean" }).notNull().default(false),
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull(),
+});
 
 // =============================================================================
 // CORE SCHEMA - Conversations and Messages

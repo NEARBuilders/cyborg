@@ -56,7 +56,7 @@ function createClientConfig() {
       },
     },
     server: {
-      port: 3002,
+      port: 3000,
       printUrls: ({ urls }) => urls.filter((url) => url.includes("localhost")),
       headers: {
         "Access-Control-Allow-Origin": "*",
@@ -64,12 +64,18 @@ function createClientConfig() {
         "Access-Control-Allow-Headers": "Content-Type",
       },
       proxy: {
-        "/api": {
-          target: "http://localhost:3014",
+        "/api/auth": {
+          target: "http://localhost:3015",
           changeOrigin: true,
+          ws: true,
         },
         "/auth": {
-          target: "http://localhost:3000",
+          target: "http://localhost:3015",
+          changeOrigin: true,
+          ws: true,
+        },
+        "/api": {
+          target: "http://localhost:3013",
           changeOrigin: true,
         },
       },
@@ -101,7 +107,18 @@ function createClientConfig() {
       distPath: { root: "dist", css: "static/css", js: "static/js" },
       assetPrefix: "/",
       filename: { js: "[name].js", css: "style.css" },
-      copy: [{ from: path.resolve(__dirname, "public"), to: "./" }],
+      copy: [
+        {
+          from: path.resolve(__dirname, "public"),
+          to: "./",
+          globOptions: {
+            ignore: ["**/index.html"],
+          },
+        },
+      ],
+    },
+    html: {
+      template: "./public/index.html",
     },
   });
 }
@@ -195,7 +212,18 @@ function createPagesConfig() {
       distPath: { root: "dist", css: "static/css", js: "static/js" },
       assetPrefix: "/",
       filename: { js: "[name].[contenthash:8].js", css: "[name].[contenthash:8].css" },
-      copy: [{ from: path.resolve(__dirname, "public"), to: "./" }],
+      copy: [
+        {
+          from: path.resolve(__dirname, "public"),
+          to: "./",
+          globOptions: {
+            ignore: ["**/index.html"],
+          },
+        },
+      ],
+    },
+    html: {
+      template: "./public/index.html",
     },
   });
 }

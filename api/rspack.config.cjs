@@ -26,7 +26,8 @@ function updateHostConfig(name, url) {
 
 const baseConfig = {
   externals: [
-    /^@libsql\/.*/, 
+    /^@libsql\/.*/,
+    /^bun:sqlite/,
   ],
   plugins: [new EveryPluginDevServer()],
   infrastructureLogging: {

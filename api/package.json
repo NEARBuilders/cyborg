@@ -12,10 +12,14 @@
     "typescript": "catalog:"
   },
   "dependencies": {
-    "@libsql/client": "catalog:",
+    "@hono/node-server": "^1.19.9",
+    "@libsql/client": "^0.17.0",
+    "better-auth": "^1.4.18",
+    "better-near-auth": "^0.3.4",
     "drizzle-kit": "catalog:",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
+    "hono": "^4.6.0",
     "nanoid": "^5.1.6",
     "near-kit": "catalog:",
     "openai": "^6.16.0"
@@ -34,7 +38,8 @@
   },
   "scripts": {
     "build": "rspack build",
-    "dev": "rspack serve",
+    "dev": "bun run src/server.ts",
+    "dev:rspack": "rspack serve",
     "test": "vitest run",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",

@@ -31,15 +31,13 @@
   "scripts": {
     "init": "bun run db:migrate",
     "bos": "bos",
-    "dev": "for port in 3000 3002 3005 3014; do lsof -ti :$port 2>/dev/null | xargs kill -9 2>/dev/null || true; done && bos dev --no-interactive",
-    "dev:ui": "bos dev --host=remote --api=remote",
-    "dev:api": "bos dev",
-    "dev:host": "bos dev",
+    "dev": "for port in 3000 3013 3014 3015; do lsof -ti :$port 2>/dev/null | xargs kill -9 2>/dev/null || true; done && concurrently \"bun run --cwd api dev\" \"bun run api/auth-server.ts\" \"bun run --cwd ui dev\"",
+    "dev:ui": "bun run --cwd ui dev",
+    "dev:api": "bun run --cwd api dev",
     "dev:worker": "bun run --cwd worker wrangler dev",
     "dev:cf": "concurrently \"bun dev:worker\" \"bun run --cwd ui bun dev\"",
-    "build": "bos build",
-    "build:api": "bun run --cwd api rsbuild build",
-    "build:host": "bun run --cwd host rsbuild build",
+    "build": "bun run --cwd ui build && bun run --cwd api build",
+    "build:api": "bun run --cwd api rspack build",
     "build:ui": "bun run --cwd ui rsbuild build",
     "build:worker": "bun run --cwd worker wrangler deploy --dry-run",
     "build:cf": "bun build:worker && bun build:ui",
@@ -47,12 +45,12 @@
     "deploy:worker": "bun run --cwd worker wrangler deploy",
     "deploy:pages": "wrangler pages deploy ui/dist --project-name=near-agent",
     "deploy:cf": "bun deploy:worker && bun deploy:pages",
-    "typecheck": "bun run --cwd host tsc --noEmit && bun run --cwd ui tsc --noEmit && bun run --cwd api tsc --noEmit && bun run --cwd worker tsc --noEmit",
-    "start": "NODE_ENV=production bos start --no-interactive",
-    "db:push": "bun run --cwd host drizzle-kit push",
-    "db:studio": "bun run --cwd host drizzle-kit studio",
-    "db:generate": "bun run --cwd host drizzle-kit generate",
-    "db:migrate": "bun run --cwd host drizzle-kit migrate",
+    "typecheck": "bun run --cwd ui tsc --noEmit && bun run --cwd api tsc --noEmit && bun run --cwd worker tsc --noEmit",
+    "start": "NODE_ENV=production bun run --cwd api dev",
+    "db:push": "bun run --cwd api drizzle-kit push",
+    "db:studio": "bun run --cwd api drizzle-kit studio",
+    "db:generate": "bun run --cwd api drizzle-kit generate",
+    "db:migrate": "bun run --cwd api drizzle-kit migrate",
     "db:generate:d1": "bun run --cwd worker drizzle-kit generate",
     "db:migrate:d1": "bun run --cwd worker wrangler d1 migrations apply near-agent-db",
     "db:migrate:d1:local": "bun run --cwd worker wrangler d1 migrations apply near-agent-db --local"
@@ -67,6 +65,10 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "@libsql/client": "^0.17.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "better-sqlite3": "^12.6.2",
+    "concurrently": "^9.1.2",
     "everything-dev": "^0.0.8"
   }
 }
