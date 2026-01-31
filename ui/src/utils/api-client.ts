@@ -198,15 +198,13 @@ class WorkerApiClient {
 
 function getWorkerUrl(): string {
   if (typeof window === 'undefined') {
-    return 'https://near-agent.kj95hgdgnn.workers.dev';
+    // Server-side: use the main deployment URL
+    return 'https://near-agent.pages.dev';
   }
 
-  const hostname = window.location.hostname;
-  if (hostname.includes('.pages.dev') || hostname.includes('near-agent')) {
-    return 'https://near-agent.kj95hgdgnn.workers.dev';
-  }
-
-  return `${window.location.origin}`;
+  // Always use same-origin to avoid CORS issues
+  // Cloudflare Pages middleware proxies /api/* requests to the worker
+  return window.location.origin;
 }
 
 export const apiClient = new WorkerApiClient(getWorkerUrl());

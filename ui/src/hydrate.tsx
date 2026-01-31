@@ -26,13 +26,12 @@ function getOrCreateRuntimeConfig(): ClientRuntimeConfig | undefined {
 
   // Auto-detect Cloudflare Pages deployment
   if (hostname.includes('.pages.dev') || hostname.includes('near-agent')) {
-    const workerUrl = 'https://near-agent.kj95hgdgnn.workers.dev';
     const config: ClientRuntimeConfig = {
       assetsUrl: window.location.origin,
       env: 'production',
             account: 'near-agent',
       title: 'NEAR Agent',
-      hostUrl: workerUrl,
+      hostUrl: 'https://near-agent.pages.dev',
       apiBase: '/api',
       rpcBase: '/api/rpc',
     };

@@ -220,6 +220,10 @@ function createPagesConfig() {
             ignore: ["**/index.html"],
           },
         },
+        {
+          from: path.resolve(__dirname, "_worker.js"),
+          to: "./_worker.js",
+        },
       ],
     },
     html: {

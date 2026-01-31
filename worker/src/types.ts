@@ -16,12 +16,13 @@ export interface Env {
   NEAR_LEGION_CONTRACT: string;
   NEAR_INITIATE_CONTRACT: string;
   NEAR_ACCOUNT: string;
-  NEAR_BLOCK?: string;
   BETTER_AUTH_URL?: string;
 
   // Secrets (set via wrangler secret put)
   BETTER_AUTH_SECRET?: string;
   NEAR_AI_API_KEY?: string;
+  NEAR_BLOCK?: string;
+  NEARBLOCKS_API_KEY?: string;
 }
 
 /**

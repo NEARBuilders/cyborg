@@ -20,10 +20,8 @@ interface BackgroundCheckError {
 
 function getApiBaseUrl(): string {
   if (typeof window === "undefined") return "";
-  const hostname = window.location.hostname;
-  if (hostname.includes('.pages.dev') || hostname.includes('near-agent')) {
-    return 'https://near-agent.kj95hgdgnn.workers.dev';
-  }
+  // Always use same-origin to avoid CORS issues
+  // Cloudflare Pages middleware proxies /api/* requests to the worker
   return window.location.origin;
 }
 

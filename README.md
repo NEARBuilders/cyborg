@@ -1,237 +1,207 @@
-# Cyborg: NEAR AI Agent Starter Kit
+# NEAR Agent
 
-## Module Federation Monorepo
+AI-powered NEAR Protocol agent with streaming chat, builders directory, and NEAR Social profile integration.
 
-A Module Federation monorepo featuring every-plugin architecture, runtime-loaded configuration, better-near-auth sessions, NEAR AI Cloud API integration with streaming chat, and per-user key-value storage.
+**Live Demo:** [near-agent.pages.dev](https://near-agent.pages.dev)
 
-Built with React, Hono.js, oRPC, Better-Auth, Module Federation, and NEAR AI Cloud.
+## Features
+
+- **AI Chat** - Streaming chat powered by NEAR AI Cloud (DeepSeek-V3)
+- **Builders Directory** - Browse NEAR Legion & Initiate NFT holders with profiles
+- **NEAR Social Integration** - Profile data from NEAR Social
+- **NEAR Authentication** - Wallet-based sign-in via Better-Auth
+- **Per-User Storage** - Key-value storage for user data
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│         Cloudflare Worker (near-agent.pages.dev)        │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  Hono.js + Drizzle + Better-Auth                │   │
+│  │                                                  │   │
+│  │  /api/*        → API routes (chat, builders)    │   │
+│  │  /auth/*       → Better-Auth handler            │   │
+│  │  /*            → Static UI assets               │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                          │
+│  Bindings:                                               │
+│  - D1 Database (SQLite)                                 │
+│  - NEAR AI API                                          │
+│  - NEARBlocks API                                       │
+└───────────────────────────────────────────────────────────┘
+```
 
 ## Quick Start
 
 ```bash
-# 1. Clone and install
+# Clone and install
 git clone https://github.com/NEARBuilders/cyborg.git && cd cyborg
 bun install
 
-# 2. Create environment file
+# Copy environment file
 cp .env.example .env
 
-# 3. Initialize (runs database migrations)
-bun init
+# Add your API keys
+# NEAR_AI_API_KEY - Get from https://cloud.near.ai
+# NEARBLOCKS_API_KEY - Get from https://nearblocks.io/api
 
-# 4. Start development server
+# Start development
 bun dev
 ```
 
-> **Note:** You may see some warnings during startup - this is normal and the application will still function correctly.
+Visit [http://localhost:8787](http://localhost:8787)
 
-Visit [http://localhost:3000](http://localhost:3000) to see the application.
+## Environment Variables
 
-### Enable AI Chat
+```bash
+# Required
+NEAR_AI_API_KEY=sk-xxx          # NEAR AI Cloud API key
+NEARBLOCKS_API_KEY=xxx          # NEARBlocks API key
 
-1. Get an API key from [cloud.near.ai](https://cloud.near.ai)
-2. Add to `.env`: `NEAR_AI_API_KEY=your_key_here`
-3. Restart with `bun dev`
-
-## Documentation
-
-- **[CLAUDE.md](./CLAUDE.md)** - Quick reference for Claude Code and AI assistants
-- **[LLM.txt](./LLM.txt)** - Comprehensive technical guide (architecture, patterns, examples)
-- **[CONTRIBUTING.md](./CONTRIBUTING.md)** - Contribution guidelines and development workflow
-- **[API README](./api/README.md)** - API plugin documentation
-- **[UI README](./ui/README.md)** - Frontend documentation
-- **[Host README](./host/README.md)** - Server host documentation
-
-## Architecture
-
-**Module Federation Monorepo** with runtime-loaded configuration:
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                  host (Server)                          │
-│  Hono.js + oRPC + bos.config.json loader                │
-│  ┌──────────────────┐      ┌──────────────────┐         │
-│  │ Module Federation│      │ every-plugin     │         │
-│  │ Runtime          │      │ Runtime          │         │
-│  └────────┬─────────┘      └────────┬─────────┘         │
-│           ↓                         ↓                   │
-│  Loads UI Remote           Loads API Plugins            │
-└───────────┬─────────────────────────┬───────────────────┘
-            ↓                         ↓
-┌───────────────────────┐ ┌───────────────────────┐
-│    ui/ (Remote)       │ │   api/ (Plugin)       │
-│  React + TanStack     │ │  oRPC + Effect        │
-│  remoteEntry.js       │ │  remoteEntry.js       │
-└───────────────────────┘ └───────────────────────┘
+# Optional (with defaults)
+BETTER_AUTH_URL=http://localhost:8787
+NEAR_AI_BASE_URL=https://cloud-api.near.ai/v1
+NEAR_AI_MODEL=deepseek-ai/DeepSeek-V3.1
+NEAR_RPC_URL=https://rpc.mainnet.near.org
 ```
 
-**Key Features:**
+## Deployment
 
-- ✅ **AI Chat** - Streaming chat built on NEAR AI Cloud (OpenAI-compatible)
-- ✅ **NEAR Authentication** - Wallet-based sign-in with Better-Auth
-- ✅ **Key-Value Storage** - Per-user persistent storage demo
-- ✅ **Runtime Configuration** - All URLs loaded from `bos.config.json`
-- ✅ **Independent Deployment** - UI, API, and Host deploy separately
-- ✅ **Type Safety** - End-to-end with oRPC contracts
-- ✅ **CDN-Ready** - Module Federation with automatic CDN deployment
+### Deploy to Cloudflare
 
-See [LLM.txt](./LLM.txt) for complete architecture details.
+```bash
+# Build UI
+bun run --cwd ui build
+
+# Deploy worker (serves UI + API)
+bun run --cwd worker wrangler deploy
+```
+
+### Set Worker Secrets
+
+```bash
+# Better Auth
+bun run --cwd worker wrangler secret put BETTER_AUTH_SECRET
+
+# NEAR AI Cloud
+bun run --cwd worker wrangler secret put NEAR_AI_API_KEY
+
+# NEARBlocks API
+bun run --cwd worker wrangler secret put NEARBLOCKS_API_KEY
+```
+
+## Project Structure
+
+```
+cyborg/
+├── worker/                 # Cloudflare Worker (backend)
+│   ├── src/
+│   │   ├── index.ts       # Entry point, Hono app setup
+│   │   ├── routes/        # API routes
+│   │   ├── services/      # Business logic
+│   │   ├── db/            # Database schema & client
+│   │   └── auth.ts        # Better-Auth configuration
+│   └── wrangler.toml      # Worker config
+│
+├── ui/                     # React Frontend
+│   ├── src/
+│   │   ├── routes/        # TanStack Router file-based routes
+│   │   ├── components/    # React components
+│   │   ├── hooks/         # Custom hooks
+│   │   ├── integrations/  # External integrations
+│   │   └── utils/         # Utilities
+│   ├── _worker.js         # Pages Functions (API proxy)
+│   └── wrangler.toml      # Pages config
+│
+└── .env                    # Environment variables
+```
 
 ## Tech Stack
 
-**Frontend:**
+### Frontend
+- **React 19** - UI framework
+- **TanStack Router** - File-based routing
+- **TanStack Query** - Server state management
+- **Tailwind CSS v4** - Styling
+- **shadcn/ui** - Component library
 
-- React 19 + TanStack Router (file-based) + TanStack Query
-- Tailwind CSS v4 + shadcn/ui components
-- Module Federation for microfrontend architecture
+### Backend (Worker)
+- **Hono.js** - Web framework
+- **Drizzle ORM** - Database ORM
+- **D1 (SQLite)** - Database
+- **Better-Auth** - Authentication
+- **better-near-auth** - NEAR wallet integration
 
-**Backend:**
-
-- Hono.js server + oRPC (type-safe RPC + OpenAPI)
-- every-plugin architecture for modular APIs
-- Effect-TS for service composition
-
-**Database & Auth:**
-
-- SQLite (libsql) + Drizzle ORM
-- Better-Auth with NEAR Protocol support
-
-## Configuration
-
-All runtime configuration lives in `bos.config.json`:
-
-```json
-{
-  "account": "example.near",
-  "create": {
-    "project": "yourorg/yourproject",
-    "ui": "yourorg/yourproject/ui",
-    "api": "yourorg/yourproject/api",
-    "host": "yourorg/yourproject/host"
-  },
-  "app": {
-    "host": {
-      "title": "App Title",
-      "description": "App description",
-      "development": "http://localhost:3000",
-      "production": "https://example.com",
-      "secrets": ["HOST_DATABASE_URL", "HOST_DATABASE_AUTH_TOKEN", "BETTER_AUTH_SECRET", "BETTER_AUTH_URL"]
-    },
-    "ui": {
-      "name": "ui",
-      "development": "http://localhost:3002",
-      "production": "https://cdn.example.com/ui/remoteEntry.js",
-      "exposes": {
-        "App": "./App",
-        "components": "./components",
-        "providers": "./providers",
-        "types": "./types"
-      }
-    },
-    "api": {
-      "name": "api",
-      "development": "http://localhost:3014",
-      "production": "https://cdn.example.com/api/remoteEntry.js",
-      "variables": {
-        "NEAR_AI_MODEL": "deepseek-ai/DeepSeek-V3.1"
-      },
-      "secrets": ["API_DATABASE_URL", "API_DATABASE_AUTH_TOKEN", "NEAR_AI_API_KEY", "NEAR_AI_BASE_URL"]
-    }
-  }
-}
-```
-
-**Benefits:**
-
-- Switch environments via `NODE_ENV` (no rebuild)
-- Update CDN URLs without code changes
-- Template injection for secrets
-
-## Health Checks
-
-Health endpoint is available:
-
-- `GET /health` - Basic liveness check (returns "OK" if server is running)
+### AI & APIs
+- **NEAR AI Cloud** - AI chat (DeepSeek-V3)
+- **NEARBlocks API** - NFT holder data
+- **NEAR Social** - User profiles
 
 ## Available Scripts
 
 ```bash
 # Development
-bun dev              # All services (API: 3014, UI: 3002, Host: 3000)
-bun dev:ui           # UI remote only
-bun dev:api          # API plugin only
-bun dev:host         # Host server only
-bun dev:proxy        # Host with API proxied to production
+bun dev                # Start worker dev server
+bun dev:ui             # Start UI only
 
-# Production
-bun build            # Build all packages
-bun build:api        # Build API plugin → uploads to CDN
-bun build:ui         # Build UI remote → uploads to CDN
-bun build:host       # Build host server
+# Building
+bun build              # Build all packages
+bun build:ui           # Build UI for production
 
 # Database
-bun init             # Initialize database (runs migrations)
-bun db:migrate       # Run migrations
-bun db:push          # Push schema changes
-bun db:studio        # Open Drizzle Studio
-bun db:generate      # Generate migrations
+bun db:push            # Push schema to D1
+bun db:studio          # Open Drizzle Studio
+bun db:generate        # Generate migrations
 
 # Testing
-bun typecheck        # Type checking all workspaces
+bun typecheck          # Type checking
+bun test               # Run tests
 ```
 
-## Development Workflow
+## API Endpoints
 
-1. **Make changes** to any workspace (ui/, api/, host/)
-2. **Hot reload** works automatically during development
-3. **Build & deploy** independently:
-   - `bun build:ui` → uploads to CDN → updates `bos.config.json`
-   - `bun build:api` → uploads to CDN → updates `bos.config.json`
-   - Host automatically loads new versions!
+### Health
+- `GET /health` - Health check
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed development workflow.
+### Chat (Authenticated)
+- `POST /api/chat` - Send chat message
+- `POST /api/chat/stream` - Streaming chat (SSE)
+- `GET /api/conversations/:id` - Get conversation history
 
-## Migrating from Template
+### Builders
+- `POST /api/builders` - Fetch NFT holders (NEARBlocks proxy)
+- `GET /api/builders/:id` - Get collection info
 
-This project evolved from the [every-plugin template](https://github.com/near-everything/every-plugin). Key customizations include:
+### User (Authenticated)
+- `GET /api/user/rank/:accountId` - Get user NFT rank
 
-### AI Chat Integration
+### Storage (Authenticated)
+- `GET /api/kv/:key` - Get user value
+- `POST /api/kv/:key` - Set user value
 
-- **AgentService** in `api/src/services/agent.ts` - AI-powered chat with streaming
-- **NEAR AI Cloud** integration (OpenAI-compatible API)
-- **Database schema** - `conversation` and `message` tables with optimized indices
-- **Streaming endpoints** - `/chat` and `/chat/stream` with SSE
+### Admin (Authenticated, admin role)
+- `GET /api/admin/stats` - Get platform stats
 
-### Authentication & Roles
+## NEAR Contracts
 
-- **Better-Auth** with admin plugin (`host/src/services/auth.ts`)
-- **User roles** - "user" (default) and "admin"
-- **Admin routes** - Protected via TanStack Router (`ui/src/routes/_layout/_authenticated/_admin.tsx`)
+- **Legion Contract:** `ascendant.nearlegion.near`
+- **Initiate Contract:** `initiate.nearlegion.near`
 
-### Database
+## Contributing
 
-- **Schema** - `api/src/db/schema.ts` (conversations, messages, kvStore)
-- **Migrations** - Drizzle Kit workflow (generate → push → migrate)
-- **Indices** - Optimized for conversation and message queries
-- **Per-user isolation** - Composite primary key on kvStore `(key, nearAccountId)`
-
-### Building Your Own
-
-To customize this template for your use case:
-
-1. **Define your domain** - Replace chat/conversation logic with your domain models
-2. **Update schema** - Modify `api/src/db/schema.ts` with your tables
-3. **Add services** - Create services in `api/src/services/` following Effect-TS Layer patterns
-4. **Update contract** - Define API routes in `api/src/contract.ts`
-5. **UI routes** - Add pages in `ui/src/routes/` with TanStack Router
-6. **Configuration** - Update `bos.config.json` with your deployment URLs
-
-## Related Projects
-
-- **[every-plugin](https://github.com/near-everything/every-plugin)** - Plugin framework for modular APIs
-- **[near-kit](https://kit.near.tools)** - Unified NEAR Protocol SDK
-- **[better-near-auth](https://github.com/elliotBraem/better-near-auth)** - NEAR authentication for Better-Auth
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## License
 
 MIT
+
+## Acknowledgments
+
+- **[every-plugin](https://github.com/near-everything/every-plugin)** - Plugin framework inspiration
+- **[near-kit](https://kit.near.tools)** - NEAR Protocol SDK
+- **[better-near-auth](https://github.com/elliotBraem/better-near-auth)** - NEAR authentication

@@ -14,13 +14,10 @@ import type {
   NearBlocksCountResponse,
 } from "@/types/builders";
 
-// Get API base URL
+// Get API base URL - always use same-origin to avoid CORS issues
+// Cloudflare Pages middleware proxies /api/* requests to the worker
 function getApiBaseUrl(): string {
   if (typeof window === "undefined") return "";
-  const hostname = window.location.hostname;
-  if (hostname.includes('.pages.dev') || hostname.includes('near-agent')) {
-    return 'https://near-agent.kj95hgdgnn.workers.dev';
-  }
   return window.location.origin;
 }
 
@@ -220,6 +217,7 @@ export function useBuilders(options: UseBuildersOptions = {}) {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
 
   // Track pagination state
   const paginationRef = useRef({
@@ -284,6 +282,7 @@ export function useBuilders(options: UseBuildersOptions = {}) {
     if (loading || !more) return;
 
     setIsLoadingMore(true);
+    setLoadMoreError(null);
 
     try {
       const { legionPage, initiatePage } = paginationRef.current;
@@ -306,6 +305,14 @@ export function useBuilders(options: UseBuildersOptions = {}) {
 
       let legionHolders: string[] = [];
       let initiateHolders: string[] = [];
+
+      // Check for errors in results
+      for (const { type, result } of results) {
+        if (result.error) {
+          setLoadMoreError(result.error);
+          return;
+        }
+      }
 
       for (const { type, result } of results) {
         if (type === "legion") {
@@ -330,6 +337,7 @@ export function useBuilders(options: UseBuildersOptions = {}) {
       });
     } catch (err) {
       console.error("[useBuilders] Load more error:", err);
+      setLoadMoreError(err instanceof Error ? err.message : "Failed to load more builders");
     } finally {
       setIsLoadingMore(false);
     }
@@ -338,6 +346,11 @@ export function useBuilders(options: UseBuildersOptions = {}) {
   // Stable loadMore callback for external use
   const loadMore = useCallback(() => {
     loadMoreRef.current?.();
+  }, []);
+
+  // Clear load more error callback
+  const clearLoadMoreError = useCallback(() => {
+    setLoadMoreError(null);
   }, []);
 
   // Intersection Observer
@@ -476,6 +489,8 @@ export function useBuilders(options: UseBuildersOptions = {}) {
     hasMore,
     error,
     loadMore,
+    loadMoreError,
+    clearLoadMoreError,
     sentinelRef,
     loadedCount: builders.length,
   };

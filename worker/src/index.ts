@@ -32,8 +32,6 @@ const ALLOWED_ORIGINS = [
   "http://localhost:3002",
   "http://localhost:8787",
   "https://near-agent.pages.dev",
-  "https://demo.near-agent.pages.dev",
-  "https://near-agent.kj95hgdgnn.workers.dev",
 ];
 
 // CORS middleware
@@ -156,7 +154,7 @@ app.all("/api/*", async (c) => {
     nearService,
     nearAccountId: sessionContext?.nearAccountId,
     role: sessionContext?.role,
-    nearblocksApiKey: env.NEAR_BLOCK,
+    nearblocksApiKey: env.NEARBLOCKS_API_KEY || env.NEAR_BLOCK,
   });
 
   // Create API routes with context

@@ -21,14 +21,14 @@ NEAR_RPC_URL = "https://rpc.mainnet.near.org"
 NEAR_LEGION_CONTRACT = "ascendant.nearlegion.near"
 NEAR_INITIATE_CONTRACT = "initiate.nearlegion.near"
 NEAR_ACCOUNT = "near-agent"
-BETTER_AUTH_URL = "https://near-agent.kj95hgdgnn.workers.dev"
+BETTER_AUTH_URL = "https://near-agent.pages.dev"
 
 # Environment-specific settings
 [env.production]
 name = "near-agent"
 
 [env.production.vars]
-BETTER_AUTH_URL = "https://near-agent.kj95hgdgnn.workers.dev"
+BETTER_AUTH_URL = "https://near-agent.pages.dev"
 
 # Secrets (set via: wrangler secret put SECRET_NAME)
 # - BETTER_AUTH_SECRET

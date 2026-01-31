@@ -31,6 +31,8 @@ export async function handleBuildersRequest(input: BuildersInput): Promise<Build
     const params = input.params || {};
 
     console.log(`[API] Builders request - path: ${path}, params:`, params);
+    console.log(`[API] NEARBlocks API key present: ${!!input.nearblocksApiKey}`);
+    console.log(`[API] NEARBlocks API key length: ${input.nearblocksApiKey?.length || 0}`);
 
     // Build query string
     const queryString = new URLSearchParams(params).toString();
@@ -64,7 +66,10 @@ export async function handleBuildersRequest(input: BuildersInput): Promise<Build
           method: "GET",
           headers: {
             "Content-Type": "application/json",
-            ...(input.nearblocksApiKey ? { Authorization: `Bearer ${input.nearblocksApiKey}` } : {}),
+            ...(input.nearblocksApiKey ? {
+              "x-nearblocks-api-key": input.nearblocksApiKey,
+              "Authorization": `Bearer ${input.nearblocksApiKey}`
+            } : {}),
           },
         });
         break;
