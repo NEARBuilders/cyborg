@@ -87,11 +87,8 @@ export class NearService {
         this.config.initiateContractId
       );
       return tokens.length > 0;
-    } catch (error) {
-      console.error(
-        `[NearService] Error checking initiate token for ${nearAccountId}:`,
-        error
-      );
+    } catch {
+      // Silently return false for errors - missing initiate token is expected for many users
       return false;
     }
   }

@@ -50,18 +50,17 @@ export interface NearBlocksCountResponse {
 
 export interface UseBuildersResult {
   builders: Builder[];
-  isLoading: boolean;
-  isLoadingMore: boolean;
-  error: Error | null;
-  loadMoreError: string | null;
-  hasMore: boolean;
   totalCounts: {
     legion: number;
     initiate: number;
   };
-  loadedCount: number;
+  isLoading: boolean;
+  isLoadingMore: boolean;
+  hasMore: boolean;
+  error: Error | null;
   loadMore: () => void;
-  clearLoadMoreError: () => void;
+  sentinelRef: React.RefObject<HTMLDivElement | null>;
+  loadedCount: number;
 }
 
 // Types are already exported above

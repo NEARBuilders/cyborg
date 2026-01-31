@@ -17,11 +17,9 @@ function BuildersLayout() {
     isLoading,
     isLoadingMore,
     error,
-    loadMoreError,
     hasMore,
     totalCounts,
-    loadMore,
-    clearLoadMoreError,
+    sentinelRef,
   } = useBuildersWithProfiles();
 
   // Prefetch ranks for all loaded builders so they're cached when viewing detail pages
@@ -74,9 +72,7 @@ function BuildersLayout() {
           isLoadingMore={isLoadingMore}
           totalCounts={totalCounts}
           hasMore={hasMore}
-          onLoadMore={loadMore}
-          onLoadMoreError={loadMoreError}
-          onClearLoadMoreError={clearLoadMoreError}
+          sentinelRef={sentinelRef}
           onSearchNavigate={handleSearchNavigate}
         />
       </div>

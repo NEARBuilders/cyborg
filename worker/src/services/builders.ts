@@ -63,7 +63,7 @@ export async function handleBuildersRequest(input: BuildersInput): Promise<Build
           method: "GET",
           headers: {
             "Content-Type": "application/json",
-            Authorization: "Bearer 10D94E2ECC9F460CB105030A47006C3D",
+            Authorization: `Bearer ${process.env.NEAR_BLOCK || ""}`,
           },
         });
         break;

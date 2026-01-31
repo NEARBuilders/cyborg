@@ -33,3 +33,4 @@ BETTER_AUTH_URL = "https://near-agent.kj95hgdgnn.workers.dev"
 # Secrets (set via: wrangler secret put SECRET_NAME)
 # - BETTER_AUTH_SECRET
 # - NEAR_AI_API_KEY
+# - NEAR_BLOCK

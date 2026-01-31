@@ -21,6 +21,7 @@ interface BuilderListProps {
   onLoadMoreError?: string | null;
   onClearLoadMoreError?: () => void;
   onSearchNavigate?: (accountId: string) => void;
+  sentinelRef?: React.RefObject<HTMLDivElement | null>;
 }
 
 function BuilderListItemSkeleton({ index }: { index: number }) {
@@ -72,6 +73,7 @@ export function BuilderList({
   onLoadMoreError,
   onClearLoadMoreError,
   onSearchNavigate,
+  sentinelRef,
 }: BuilderListProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const totalCount = (totalCounts?.legion || 0) + (totalCounts?.initiate || 0);
@@ -202,23 +204,25 @@ export function BuilderList({
                     </button>
                   </div>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={onLoadMore}
-                    disabled={isLoadingMore}
-                    className="w-full py-2.5 text-sm text-primary hover:bg-primary/10 font-mono font-medium border border-primary/30 transition-colors disabled:opacity-50"
-                  >
+                  <div className="text-center">
                     {isLoadingMore ? (
-                      <span className="flex items-center justify-center gap-2">
+                      <div className="flex items-center justify-center gap-2 py-2">
                         <span className="size-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-                        Loading...
-                      </span>
+                        <span className="text-sm text-muted-foreground font-mono">Loading...</span>
+                      </div>
                     ) : (
-                      "Load more"
+                      <span className="text-xs text-muted-foreground font-mono">
+                        {builders.length} loaded • Scroll for more
+                      </span>
                     )}
-                  </button>
+                  </div>
                 )}
               </div>
+            )}
+
+            {/* Sentinel element for infinite scroll intersection observer */}
+            {hasMore && !searchQuery && (
+              <div ref={sentinelRef} className="h-1" aria-hidden="true" />
             )}
           </>
         )}
