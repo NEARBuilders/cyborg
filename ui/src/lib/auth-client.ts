@@ -5,24 +5,35 @@ import { siwnClient } from "better-near-auth/client";
 function getAuthBaseUrl(): string {
   if (typeof window === "undefined") return "";
 
-  // Check for Cloudflare Pages deployment
   const hostname = window.location.hostname;
-  if (hostname.includes('.pages.dev') || hostname.includes('near-agent')) {
-    return 'https://near-agent.kj95hgdgnn.workers.dev';
+
+  // For Pages deployment - use same origin (proxied to worker via Pages Function)
+  if (hostname.includes('.pages.dev')) {
+    return window.location.origin;
   }
 
-  return window.__RUNTIME_CONFIG__?.hostUrl ?? window.location.origin;
+  // For Workers deployment (everything served from worker)
+  if (hostname.includes('.workers.dev')) {
+    return window.location.origin;
+  }
+
+  // For local development
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return window.__RUNTIME_CONFIG__?.hostUrl ?? "http://localhost:8787";
+  }
+
+  return window.location.origin;
 }
 
 function createAuthClient() {
   return createBetterAuthClient({
     baseURL: getAuthBaseUrl(),
-    fetchOptions: { credentials: "include" },
+    fetchOptions: {
+      credentials: "include",
+    },
     plugins: [
       siwnClient({
-        domain: typeof window !== "undefined"
-          ? (window.__RUNTIME_CONFIG__?.account ?? "every.near")
-          : "every.near",
+        domain: "near-agent",
         networkId: "mainnet",
       }),
       adminClient(),

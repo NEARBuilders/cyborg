@@ -6,6 +6,9 @@ export interface Env {
   // D1 Database binding
   DB: D1Database;
 
+  // Assets binding for serving static files
+  ASSETS: Fetcher;
+
   // Environment variables
   NEAR_AI_MODEL: string;
   NEAR_AI_BASE_URL: string;

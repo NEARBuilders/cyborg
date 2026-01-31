@@ -69,37 +69,43 @@ app.get("/health", (c) => c.text("OK"));
 
 // Better Auth handler - handle all /api/auth/* requests
 app.all("/api/auth/*", async (c) => {
-  console.log("[Auth] Handling:", c.req.method, c.req.url);
+  const url = new URL(c.req.url);
+  const method = c.req.method;
+
+  console.log(`[Auth] ${method} ${url.pathname}`);
+  console.log(`[Auth] Origin: ${c.req.header("origin")}`);
+  console.log(`[Auth] Cookie header: ${c.req.header("cookie") || "none"}`);
+
   try {
     const auth = createAuth(c.env);
-    console.log("[Auth] Auth created");
-
-    // Clone the request for debugging
-    const url = new URL(c.req.url);
-    console.log("[Auth] Path:", url.pathname);
 
     const response = await auth.handler(c.req.raw);
-    console.log("[Auth] Response status:", response?.status);
-
-    // If response is a 500, try to read the body for error details
-    if (response?.status === 500) {
-      const cloned = response.clone();
-      try {
-        const text = await cloned.text();
-        console.error("[Auth] 500 Response body:", text);
-      } catch (e) {
-        console.error("[Auth] Could not read 500 body");
-      }
-    }
 
     if (!response) {
       console.error("[Auth] No response from handler");
       return c.json({ error: "No response from auth handler" }, 500);
     }
+
+    console.log(`[Auth] Response status: ${response.status}`);
+
+    // Log Set-Cookie headers
+    const setCookies = response.headers.getSetCookie?.() || response.headers.get("set-cookie") || [];
+    console.log(`[Auth] Set-Cookie headers:`, setCookies);
+
+    // Log response body for non-success responses
+    if (response.status >= 400) {
+      const cloned = response.clone();
+      try {
+        const text = await cloned.text();
+        console.error("[Auth] Error body:", text);
+      } catch (e) {
+        console.error("[Auth] Could not read error body");
+      }
+    }
+
     return response;
   } catch (error: any) {
-    console.error("[Auth] Caught error:", error?.message || error);
-    console.error("[Auth] Stack:", error?.stack);
+    console.error("[Auth] Error:", error?.message || error);
     return c.json({ error: "Auth error", message: error?.message || String(error) }, 500);
   }
 });
@@ -172,15 +178,35 @@ app.all("/api/*", async (c) => {
 });
 
 // =============================================================================
-// STATIC FALLBACK (for SPA)
+// STATIC ASSETS (serve UI from same domain as auth)
 // =============================================================================
 
-// In production, static files are served by Cloudflare Pages
-// This catch-all returns 404 for non-API routes in the Worker
-app.all("*", (c) => {
-  // If this is a request that should be handled by Pages, return a redirect
-  // or let Pages handle it via routing rules
-  return c.text("Not Found", 404);
+// Serve static assets from the ASSETS binding
+app.get("*", async (c) => {
+  const url = new URL(c.req.url);
+  const pathname = url.pathname;
+
+  // Try to fetch from assets first
+  try {
+    const assetResponse = await c.env.ASSETS.fetch(
+      new Request(pathname, c.req.raw)
+    );
+
+    // If asset exists, return it
+    if (assetResponse.status === 200) {
+      return assetResponse;
+    }
+  } catch (e) {
+    // Asset not found, fall through to index.html for SPA
+  }
+
+  // For SPA routing, return index.html for non-API routes
+  try {
+    const indexResponse = await c.env.ASSETS.fetch(new Request("/index.html", c.req.raw));
+    return indexResponse;
+  } catch (e) {
+    return c.text("Not Found", 404);
+  }
 });
 
 // =============================================================================

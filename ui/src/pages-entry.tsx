@@ -11,7 +11,7 @@ function getRuntimeConfig(): ClientRuntimeConfig {
   return {
     assetsUrl: window.location.origin,
     env: "production",
-    account: "example.near",
+    account: "near-agent",
     title: "NEAR Agent",
     hostUrl: workerUrl,
     apiBase: "/api",

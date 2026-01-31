@@ -13,7 +13,7 @@ function getOrCreateRuntimeConfig(): ClientRuntimeConfig | undefined {
     const config: ClientRuntimeConfig = {
       assetsUrl: window.location.origin,
       env: 'development',
-      account: 'example.near',
+            account: 'near-agent',
       title: 'Legion Social',
       hostUrl: window.location.origin,
       apiBase: '/api',
@@ -30,7 +30,7 @@ function getOrCreateRuntimeConfig(): ClientRuntimeConfig | undefined {
     const config: ClientRuntimeConfig = {
       assetsUrl: window.location.origin,
       env: 'production',
-      account: 'example.near',
+            account: 'near-agent',
       title: 'NEAR Agent',
       hostUrl: workerUrl,
       apiBase: '/api',

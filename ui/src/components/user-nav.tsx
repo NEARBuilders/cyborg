@@ -7,15 +7,8 @@ export function UserNav() {
   const { data: session } = authClient.useSession();
   const nearState = authClient.useNearState();
 
-  // Get account ID from multiple sources:
-  // 1. nearState from wallet connection (most reliable when connected)
-  // 2. session.user.nearAccount from server session (added by better-near-auth hook)
-  // 3. session.user.name as fallback (set to accountId on user creation)
-  const user = session?.user as { nearAccount?: { accountId?: string }; name?: string } | undefined;
-  const nearName =
-    nearState?.accountId ||
-    user?.nearAccount?.accountId ||
-    user?.name;
+  // Get account ID from better-auth session or nearState
+  const nearName = session?.user?.name || nearState?.accountId;
 
   const handleSignOut = async () => {
     try {
@@ -23,7 +16,6 @@ export function UserNav() {
       await authClient.near.disconnect();
       queryClient.invalidateQueries({ queryKey: ["session"] });
       router.invalidate();
-      window.location.href = "/";
     } catch (error) {
       console.error("Sign out error:", error);
     }

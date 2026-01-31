@@ -9,13 +9,18 @@ binding = "DB"
 database_name = "near-agent-db"
 database_id = "5d89d64f-38eb-44d5-bb96-9b85c005c924"
 
+# Assets binding for serving static files
+[assets]
+directory = "../ui/dist"
+binding = "ASSETS"
+
 [vars]
 NEAR_AI_MODEL = "deepseek-ai/DeepSeek-V3.1"
 NEAR_AI_BASE_URL = "https://cloud-api.near.ai/v1"
 NEAR_RPC_URL = "https://rpc.mainnet.near.org"
 NEAR_LEGION_CONTRACT = "ascendant.nearlegion.near"
 NEAR_INITIATE_CONTRACT = "initiate.nearlegion.near"
-NEAR_ACCOUNT = "example.near"
+NEAR_ACCOUNT = "near-agent"
 BETTER_AUTH_URL = "https://near-agent.kj95hgdgnn.workers.dev"
 
 # Environment-specific settings

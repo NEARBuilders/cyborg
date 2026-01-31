@@ -56,7 +56,6 @@ export function createAuth(env: Env) {
       provider: "sqlite",
       schema,
     })),
-    basePath: "/api/auth",
     baseURL: env.BETTER_AUTH_URL || "http://localhost:8787",
     secret: env.BETTER_AUTH_SECRET || "dev-secret-change-in-production",
     trustedOrigins: [
@@ -68,17 +67,18 @@ export function createAuth(env: Env) {
       "https://near-agent.kj95hgdgnn.workers.dev",
     ],
     advanced: {
-      crossSubDomainCookies: {
-        enabled: true,
-      },
+      useSecureCookies: true,
+      cookiePrefix: "near-agent",
       defaultCookieAttributes: {
         sameSite: "none",
         secure: true,
+        path: "/",
+        httpOnly: true,
       },
     },
     plugins: [
       siwn({
-        recipient: env.NEAR_ACCOUNT || "example.near",
+        recipient: env.NEAR_ACCOUNT || "near-agent",
         emailDomainName: "near.email",
       }),
       admin(),
