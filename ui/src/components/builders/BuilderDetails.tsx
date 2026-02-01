@@ -15,7 +15,7 @@ interface BuilderDetailsProps {
 
 export function BuilderDetails({ builder }: BuilderDetailsProps) {
   return (
-    <div className="flex-1 border border-primary/30 bg-background h-full overflow-y-auto">
+    <div className="flex-1 min-h-0 border border-primary/30 bg-background overflow-y-auto">
       <div className="p-4 sm:p-6 space-y-6">
         {/* Header */}
         <BuilderHeader builder={builder} />

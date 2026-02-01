@@ -13,14 +13,23 @@ export const Route = createFileRoute("/_layout/builders/$builderId")({
       meta: [
         { title: "Builder Profile - Legion Social" },
         { name: "description", content: "View NEAR builder profile" },
-        { property: "og:title", content: "NEAR Builder Profile - Legion Social" },
+        {
+          property: "og:title",
+          content: "NEAR Builder Profile - Legion Social",
+        },
         { property: "og:description", content: "View NEAR builder profile" },
-        { property: "og:image", content: `${typeof window !== "undefined" ? window.location.origin : ""}/og.jpg` },
+        {
+          property: "og:image",
+          content: `${typeof window !== "undefined" ? window.location.origin : ""}/og.jpg`,
+        },
         { property: "og:image:width", content: "1200" },
         { property: "og:image:height", content: "630" },
         { property: "og:type", content: "website" },
         { name: "twitter:card", content: "summary_large_image" },
-        { name: "twitter:image", content: `${typeof window !== "undefined" ? window.location.origin : ""}/og.jpg` },
+        {
+          name: "twitter:image",
+          content: `${typeof window !== "undefined" ? window.location.origin : ""}/og.jpg`,
+        },
       ],
     };
   },
@@ -33,7 +42,7 @@ function BuilderDetailPage() {
   // Find the builder from the NFT holder list
   const builderFromList = useMemo(
     () => builders.find((b) => b.accountId === builderId),
-    [builders, builderId]
+    [builders, builderId],
   );
 
   // Fetch NEAR Social profile directly for this account
@@ -64,12 +73,16 @@ function BuilderDetailPage() {
         id: builderId,
         accountId: builderId,
         displayName,
-        avatar: avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${builderId}`,
+        avatar:
+          avatarUrl ||
+          `https://api.dicebear.com/7.x/avataaars/svg?seed=${builderId}`,
         backgroundImage: backgroundUrl,
         description: profile.description || "A member of the NEAR community.",
         tags: profile.tags ? Object.keys(profile.tags) : ["NEAR Community"],
         socials: {
-          github: profile.linktree?.github || builderId.replace(".near", "").toLowerCase(),
+          github:
+            profile.linktree?.github ||
+            builderId.replace(".near", "").toLowerCase(),
           twitter: profile.linktree?.twitter,
           website: profile.linktree?.website,
           telegram: profile.linktree?.telegram,
@@ -121,7 +134,9 @@ function BuilderDetailPage() {
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center space-y-3">
           <div className="text-4xl text-muted-foreground/20">👤</div>
-          <h3 className="text-lg font-medium text-foreground">Profile not found</h3>
+          <h3 className="text-lg font-medium text-foreground">
+            Profile not found
+          </h3>
           <p className="text-muted-foreground text-sm">
             Could not load NEAR Social profile for {builderId}
           </p>
@@ -134,7 +149,7 @@ function BuilderDetailPage() {
   }
 
   return (
-    <div className="animate-in fade-in duration-300">
+    <div className="flex-1 min-h-0 overflow-y-scroll animate-in fade-in duration-300">
       <BuilderDetails builder={builder} />
     </div>
   );
