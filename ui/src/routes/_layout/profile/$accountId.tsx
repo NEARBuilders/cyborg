@@ -11,11 +11,17 @@ import {
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import { Markdown } from "../../../components/ui/markdown";
-import { usePoke, useProfile } from "../../../integrations/near-social-js";
+import { MarkdownEditor } from "../../../components/ui/markdown-editor";
+import { EditModal, ProjectEditModal } from "../../../components/ui/edit-modal";
+import { SocialLinksModal } from "../../../components/ui/social-links-modal";
+import { Skeleton } from "../../../components/ui/skeleton";
+import { Settings } from "lucide-react";
+import { useProfile, usePoke } from "../../../integrations/near-social-js";
 import { useUserRank, type RankData } from "../../../hooks";
 import { authClient } from "../../../lib/auth-client";
 import { sessionQueryOptions } from "../../../lib/session";
 import { apiClient } from "../../../utils/orpc";
+import { Near } from "near-kit";
 
 const PROFILE_KEY = "builder-profile";
 
@@ -38,8 +44,16 @@ export const Route = createFileRoute("/_layout/profile/$accountId")({
     if (!loaderData) {
       return {
         meta: [
-          { title: "Profile" },
+          { title: "Profile - Legion Social" },
           { name: "description", content: "View NEAR profile" },
+          { property: "og:title", content: "NEAR Profile - Legion Social" },
+          { property: "og:description", content: "View NEAR profile" },
+          { property: "og:image", content: `${window.location.origin}/og.jpg` },
+          { property: "og:image:width", content: "1200" },
+          { property: "og:image:height", content: "630" },
+          { property: "og:type", content: "profile" },
+          { name: "twitter:card", content: "summary_large_image" },
+          { name: "twitter:image", content: `${window.location.origin}/og.jpg` },
         ],
       };
     }
@@ -47,13 +61,22 @@ export const Route = createFileRoute("/_layout/profile/$accountId")({
     const name = profile?.name || accountId;
     const description =
       profile?.description || `View ${accountId}'s NEAR profile`;
+    const avatarUrl = profile?.image?.ipfs_cid
+      ? `https://ipfs.near.social/ipfs/${profile.image.ipfs_cid}`
+      : profile?.image?.url || `${window.location.origin}/og.jpg`;
 
     return {
       meta: [
         { title: `${name} - Profile` },
         { name: "description", content: description },
-        { property: "og:title", content: `${name} - Profile` },
+        { property: "og:title", content: `${name} - Legion Social` },
         { property: "og:description", content: description },
+        { property: "og:image", content: avatarUrl },
+        { property: "og:image:width", content: "1200" },
+        { property: "og:image:height", content: "630" },
+        { property: "og:type", content: "profile" },
+        { name: "twitter:card", content: "summary_large_image" },
+        { name: "twitter:image", content: avatarUrl },
       ],
     };
   },
@@ -68,11 +91,7 @@ export const Route = createFileRoute("/_layout/profile/$accountId")({
       </p>
     </div>
   ),
-  pendingComponent: () => (
-    <div className="flex justify-center items-center min-h-[400px]">
-      <div className="h-8 w-8 animate-spin rounded-full border-4 border-muted border-t-foreground" />
-    </div>
-  ),
+  pendingComponent: () => <ProfileSkeleton />,
 });
 
 function ProfilePage() {
@@ -90,9 +109,46 @@ function ProfilePage() {
     nearState?.accountId ||
     (session?.user as any)?.nearAccount?.accountId ||
     session?.user?.name;
-  const isOwnProfile = !!currentAccountId && currentAccountId === accountId;
+
+  // Check own profile by comparing current account ID with the profile's account ID
+  // The URL param (accountId) might be a slug like "Jean" but the actual account is "jemartel.near"
+  // We need to normalize the comparison to handle cases like:
+  // - jemartel.near vs jemartel
+  // - jemartel.near vs Jean (if that's the profile name)
+  const normalizeAccountId = (id: string) => {
+    // Remove .near suffix if present
+    return id.replace(/\.near$/, '').toLowerCase();
+  };
+
+  const isOwnProfile = !!currentAccountId && (
+    currentAccountId === accountId ||
+    normalizeAccountId(currentAccountId) === normalizeAccountId(accountId)
+  );
 
   const [isEditing, setIsEditing] = useState(false);
+
+  // Local state for edits (overrides KV data)
+  const [localProfile, setLocalProfile] = useState<BuilderProfileData | null>(null);
+
+  // Modal states
+  const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
+  const [isSocialLinksModalOpen, setIsSocialLinksModalOpen] = useState(false);
+  const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
+  const [editingProjectIndex, setEditingProjectIndex] = useState<number | null>(null);
+  const [isSavingSocialLinks, setIsSavingSocialLinks] = useState(false);
+  const [editFormData, setEditFormData] = useState<BuilderProfileData>({
+    displayName: "",
+    description: "",
+    role: "",
+    tags: [],
+    projects: [],
+    socials: {},
+  });
+
+  // Pending image URLs (on save)
+  const [pendingAvatarUrl, setPendingAvatarUrl] = useState<string>("");
+  const [pendingBackgroundUrl, setPendingBackgroundUrl] = useState<string>("");
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   // Load user rank from API (shared cache across components)
   const { data: rankData, isLoading: isLoadingRank } = useUserRank(accountId);
@@ -113,25 +169,26 @@ function ProfilePage() {
   });
 
   // Merge NEAR Social profile with stored builder data
-  // Prefer stored data if it has actual content, otherwise use NEAR Social
+  // Prefer local edits first, then stored data, then NEAR Social
+  const sourceProfile = localProfile || storedProfile;
   const displayName =
-    storedProfile?.displayName || profile?.name || accountId.split(".")[0];
+    sourceProfile?.displayName || profile?.name || accountId.split(".")[0];
   const description =
-    (storedProfile?.description?.trim()) ||
+    (sourceProfile?.description?.trim()) ||
     profile?.description ||
     "A passionate builder in the NEAR ecosystem.";
-  const role = storedProfile?.role || "Builder";
+  const role = sourceProfile?.role || "Builder";
   const tags =
-    (storedProfile?.tags?.length ? storedProfile.tags : null) ||
+    (sourceProfile?.tags?.length ? sourceProfile.tags : null) ||
     (profile?.tags ? Object.keys(profile.tags) : ["NEAR Builder"]);
-  const projects = storedProfile?.projects || [
+  const projects = sourceProfile?.projects || [
     {
       name: "NEAR Project",
       description: "Building on the NEAR ecosystem.",
       status: "Active",
     },
   ];
-  const socials = storedProfile?.socials || {
+  const socials = sourceProfile?.socials || {
     github: profile?.linktree?.github as string | undefined,
     twitter: profile?.linktree?.twitter as string | undefined,
     website: profile?.linktree?.website as string | undefined,
@@ -184,9 +241,20 @@ function ProfilePage() {
           avatarUrl={avatarUrl}
           role={role}
           isOwnProfile={isOwnProfile}
-          isEditing={isEditing}
-          onEditToggle={() => setIsEditing(!isEditing)}
-        />
+        >
+          {isOwnProfile && (
+            <button
+              onClick={() => {
+                setEditFormData({ displayName, description, role, tags, projects, socials });
+                setIsEditProfileModalOpen(true);
+              }}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2.5 py-1.5 rounded-lg hover:bg-muted/50 font-medium"
+            >
+              <Settings className="size-3.5" />
+              Edit
+            </button>
+          )}
+        </ProfileHeader>
 
         {isEditing && isOwnProfile ? (
           <ProfileEditForm
@@ -211,17 +279,28 @@ function ProfilePage() {
             {/* NEAR Legion Rank */}
             <LegionRankSection rankData={rankData} isLoading={isLoadingRank} />
 
-            {/* Skills/Tags */}
-            <ProfileSkills tags={tags} />
-
             {/* About */}
             <ProfileAbout description={description} />
 
+            {/* Skills/Tags */}
+            <ProfileSkills tags={tags} />
+
             {/* Projects */}
-            <ProfileProjects projects={projects} />
+            <ProfileProjects
+              projects={projects}
+              isOwnProfile={isOwnProfile}
+              onEditProject={(index) => {
+                setEditingProjectIndex(index);
+                setIsProjectModalOpen(true);
+              }}
+              onAddProject={() => {
+                setEditingProjectIndex(null);
+                setIsProjectModalOpen(true);
+              }}
+            />
 
             {/* Socials */}
-            <ProfileSocials socials={socials} />
+            <ProfileSocials socials={socials} isOwnProfile={isOwnProfile} onEdit={() => setIsSocialLinksModalOpen(true)} />
 
             {/* Actions */}
             <div className="pt-4 border-t border-border/50">
@@ -242,6 +321,244 @@ function ProfilePage() {
           </>
         )}
       </div>
+
+      {/* Edit Profile Modal */}
+      <EditModal
+        isOpen={isEditProfileModalOpen}
+        onClose={() => {
+          setIsEditProfileModalOpen(false);
+          // Clear pending URLs on close
+          setPendingAvatarUrl("");
+          setPendingBackgroundUrl("");
+        }}
+        title="Edit Profile"
+        isSaving={isSavingProfile}
+        onSave={async () => {
+          setIsSavingProfile(true);
+          try {
+            const nearAuth = authClient.near;
+            if (!nearAuth) {
+              throw new Error("No NEAR wallet connected");
+            }
+
+            const walletAccountId = nearAuth.getAccountId();
+            if (!walletAccountId) {
+              throw new Error("Please connect your NEAR wallet first");
+            }
+
+            // Build profile data with description AND images
+            const profileData: any = {};
+
+            // Always include description if it changed
+            if (editFormData.description !== description) {
+              profileData.description = editFormData.description;
+            }
+
+            if (pendingAvatarUrl) {
+              profileData.image = { url: pendingAvatarUrl };
+            }
+
+            if (pendingBackgroundUrl) {
+              profileData.backgroundImage = { url: pendingBackgroundUrl };
+            }
+
+            // If nothing to save to NEAR Social, just update locally
+            if (Object.keys(profileData).length === 0) {
+              setIsEditProfileModalOpen(false);
+              toast.info("No changes to save");
+              return;
+            }
+
+            toast.info("Updating profile... please approve transaction");
+
+            // Use near-kit to update profile (URLs need minimal storage)
+            const near = nearAuth.getNearClient();
+            await near
+              .transaction(walletAccountId)
+              .functionCall("social.near", "set", {
+                data: {
+                  [accountId]: {
+                    profile: profileData,
+                  },
+                },
+              }, {
+                gas: "300 Tgas",
+                attachedDeposit: "0 NEAR",
+              })
+              .send();
+
+            console.log("Profile updated successfully");
+
+            setIsEditProfileModalOpen(false);
+            setPendingAvatarUrl("");
+            setPendingBackgroundUrl("");
+
+            // Update local profile with new values (no network call needed)
+            setLocalProfile({
+              displayName,
+              description: editFormData.description,
+              role,
+              tags,
+              projects,
+              socials,
+            });
+
+            toast.success("Profile updated on NEAR Social!");
+          } catch (error) {
+            console.error("Save error:", error);
+            toast.error(error instanceof Error ? error.message : "Failed to save profile");
+          } finally {
+            setIsSavingProfile(false);
+          }
+        }}
+      >
+        <div className="space-y-6">
+          {/* Image URLs */}
+          <div className="space-y-4 pb-6 border-b border-border/50">
+            <p className="text-sm text-foreground">
+              Add image URLs to your profile. Images will be saved to NEAR Social blockchain.
+            </p>
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-foreground">Profile Picture URL</label>
+                <Input
+                  value={pendingAvatarUrl}
+                  onChange={(e) => setPendingAvatarUrl(e.target.value)}
+                  placeholder="https://example.com/avatar.png"
+                  className="h-9"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-foreground">Background Image URL</label>
+                <Input
+                  value={pendingBackgroundUrl}
+                  onChange={(e) => setPendingBackgroundUrl(e.target.value)}
+                  placeholder="https://example.com/background.png"
+                  className="h-9"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* About Section */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-foreground">About</label>
+            <MarkdownEditor
+              value={editFormData.description || ""}
+              onChange={(value) =>
+                setEditFormData((prev) => ({ ...prev, description: value }))
+              }
+              placeholder="Tell us about yourself... Type / for commands"
+              rows={10}
+            />
+          </div>
+        </div>
+      </EditModal>
+
+      {/* Project Edit Modal */}
+      <ProjectEditModal
+        isOpen={isProjectModalOpen}
+        onClose={() => setIsProjectModalOpen(false)}
+        initialProject={
+          editingProjectIndex !== null
+            ? projects[editingProjectIndex]
+            : { name: "", description: "", status: "Active" }
+        }
+        onSave={(project) => {
+          // Update local state with the edited/added project
+          const updatedProjects =
+            editingProjectIndex !== null
+              ? [...projects.slice(0, editingProjectIndex), project, ...projects.slice(editingProjectIndex + 1)]
+              : [...projects, project];
+
+          setLocalProfile({
+            displayName,
+            description,
+            role,
+            tags,
+            projects: updatedProjects,
+            socials,
+          });
+
+          setIsProjectModalOpen(false);
+          toast.success(editingProjectIndex !== null ? "Project updated!" : "Project added!");
+        }}
+      />
+
+      {/* Social Links Edit Modal */}
+      <SocialLinksModal
+        isOpen={isSocialLinksModalOpen}
+        onClose={() => {
+          setIsSocialLinksModalOpen(false);
+        }}
+        initialLinks={socials}
+        isSaving={isSavingSocialLinks}
+        onSave={async (links) => {
+          setIsSavingSocialLinks(true);
+          try {
+            const nearAuth = authClient.near;
+            if (!nearAuth) {
+              throw new Error("No NEAR wallet connected");
+            }
+
+            const walletAccountId = nearAuth.getAccountId();
+            if (!walletAccountId) {
+              throw new Error("Please connect your NEAR wallet first");
+            }
+
+            // Build linktree data
+            const linktree: any = {};
+            if (links.website) linktree.website = links.website;
+            if (links.github) linktree.github = links.github;
+            if (links.twitter) linktree.twitter = links.twitter;
+            if (links.telegram) linktree.telegram = links.telegram;
+
+            toast.info("Updating social links... please approve transaction");
+
+            // Use near-kit to update profile
+            const near = nearAuth.getNearClient();
+            await near
+              .transaction(walletAccountId)
+              .functionCall("social.near", "set", {
+                data: {
+                  [accountId]: {
+                    profile: {
+                      linktree,
+                    },
+                  },
+                },
+              }, {
+                gas: "300 Tgas",
+                attachedDeposit: "0 NEAR",
+              })
+              .send();
+
+            console.log("Social links updated successfully");
+
+            // Update local state
+            setLocalProfile({
+              displayName,
+              description,
+              role,
+              tags,
+              projects,
+              socials: links,
+            });
+
+            setIsSocialLinksModalOpen(false);
+
+            // Invalidate profile to fetch updated data
+            await queryClient.invalidateQueries({ queryKey: ["social", "profile", accountId] });
+
+            toast.success("Social links updated on NEAR Social!");
+          } catch (error) {
+            console.error("Save error:", error);
+            toast.error(error instanceof Error ? error.message : "Failed to save social links");
+          } finally {
+            setIsSavingSocialLinks(false);
+          }
+        }}
+      />
     </div>
   );
 }
@@ -252,47 +569,40 @@ function ProfileHeader({
   avatarUrl,
   role,
   isOwnProfile,
-  isEditing,
-  onEditToggle,
+  children,
 }: {
   accountId: string;
   displayName: string;
   avatarUrl: string;
   role: string;
   isOwnProfile: boolean;
-  isEditing: boolean;
-  onEditToggle: () => void;
+  children?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-start gap-4">
-      <Avatar className="size-16 sm:size-14 border-2 border-primary/60">
+    <div className="flex items-start gap-3 sm:gap-4">
+      <Avatar className="size-14 sm:size-16 border-2 border-primary/60">
         <AvatarImage src={avatarUrl} />
         <AvatarFallback className="bg-primary/20 text-primary text-lg sm:text-base font-mono font-bold">
           {displayName.slice(0, 2).toUpperCase()}
         </AvatarFallback>
       </Avatar>
-      <div className="flex-1 space-y-2">
+      <div className="flex-1 space-y-1.5 sm:space-y-2">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <h2 className="text-xl sm:text-xl font-bold text-foreground">
+            <h2 className="text-lg sm:text-xl font-bold text-foreground">
               {displayName}
             </h2>
-            <p className="font-mono text-primary text-sm sm:text-sm">
+            <p className="font-mono text-primary text-xs sm:text-sm">
               {accountId}
             </p>
           </div>
-          {isOwnProfile && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onEditToggle}
-              className="shrink-0"
-            >
-              {isEditing ? "Cancel" : "Edit Profile"}
-            </Button>
+          {children && (
+            <div className="flex-shrink-0">
+              {children}
+            </div>
           )}
         </div>
-        <span className="inline-block text-xs bg-primary/25 text-primary px-3 py-1.5 font-mono font-medium">
+        <span className="inline-block text-xs bg-primary/25 text-primary px-2.5 py-1 sm:px-3 sm:py-1.5 font-mono font-medium">
           {role}
         </span>
       </div>
@@ -328,9 +638,9 @@ function LegionRankSection({
         NEAR Legion Status
       </h3>
       {isLoading ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted border-t-primary" />
-          Checking NFT holdings...
+        <div className="space-y-2">
+          <Skeleton className="h-10 w-32" />
+          <Skeleton className="h-10 w-48" />
         </div>
       ) : !rankData ? (
         <p className="text-sm text-muted-foreground">Unable to load rank data</p>
@@ -409,31 +719,75 @@ function ProfileAbout({ description }: { description: string }) {
 
 function ProfileProjects({
   projects,
+  isOwnProfile,
+  onEditProject,
+  onAddProject,
 }: {
   projects: { name: string; description: string; status: string }[];
+  isOwnProfile?: boolean;
+  onEditProject?: (index: number) => void;
+  onAddProject?: () => void;
 }) {
+  const [expandedProject, setExpandedProject] = useState<string | null>(null);
+
   return (
     <div className="space-y-3">
-      <h3 className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
-        Building
-      </h3>
-      <div className="space-y-3">
-        {projects.map((project) => (
-          <div
-            key={project.name}
-            className="p-4 border border-border/50 bg-muted/30 space-y-2"
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
+          Building
+        </h3>
+        {isOwnProfile && onAddProject && (
+          <button
+            type="button"
+            onClick={onAddProject}
+            className="text-xs text-primary hover:text-primary/80 font-mono underline underline-offset-4"
           >
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-mono text-foreground font-semibold text-base">
-                {project.name}
-              </span>
-              <ProjectStatus status={project.status} />
+            + Add Project
+          </button>
+        )}
+      </div>
+      <div className="space-y-3">
+        {projects.map((project, index) => {
+          const isExpanded = expandedProject === project.name;
+          return (
+            <div
+              key={project.name}
+              className="group p-4 border border-border/50 bg-muted/30 space-y-2 cursor-pointer hover:border-primary/30 transition-colors"
+              onClick={() => setExpandedProject(isExpanded ? null : project.name)}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-mono text-foreground font-semibold text-base">
+                  {project.name}
+                </span>
+                <div className="flex items-center gap-2">
+                  <ProjectStatus status={project.status} />
+                  <span className="text-muted-foreground text-xs">
+                    {isExpanded ? "▼" : "▶"}
+                  </span>
+                  {isOwnProfile && onEditProject && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEditProject(index);
+                      }}
+                      className="opacity-0 group-hover:opacity-100 text-xs text-primary hover:text-primary/80 transition-opacity"
+                    >
+                      Edit
+                    </button>
+                  )}
+                </div>
+              </div>
+              {isExpanded && (
+                <div className="pt-2 border-t border-border/30 mt-2">
+                  <div className="text-sm text-muted-foreground">
+                    <Markdown content={project.description} />
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="text-sm text-muted-foreground">
-              <Markdown content={project.description} />
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -460,58 +814,79 @@ function ProjectStatus({ status }: { status: string }) {
 
 function ProfileSocials({
   socials,
+  isOwnProfile,
+  onEdit,
 }: {
   socials: { github?: string; twitter?: string; website?: string; telegram?: string };
+  isOwnProfile?: boolean;
+  onEdit?: () => void;
 }) {
-  if (!socials.github && !socials.twitter && !socials.website && !socials.telegram) return null;
+  const hasLinks = socials.github || socials.twitter || socials.website || socials.telegram;
+
+  if (!hasLinks && !isOwnProfile) return null;
 
   return (
     <div className="space-y-3">
-      <h3 className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
-        Connect
-      </h3>
-      <div className="flex flex-wrap gap-4">
-        {socials.website && (
-          <a
-            href={socials.website.startsWith("http") ? socials.website : `https://${socials.website}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-primary hover:text-primary/80 transition-colors font-mono underline underline-offset-4"
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
+          Connect
+        </h3>
+        {isOwnProfile && onEdit && (
+          <button
+            type="button"
+            onClick={onEdit}
+            className="text-xs text-primary hover:text-primary/80 font-mono underline underline-offset-4"
           >
-            {socials.website.replace(/^https?:\/\//, "")}
-          </a>
-        )}
-        {socials.github && (
-          <a
-            href={`https://github.com/${socials.github}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-primary hover:text-primary/80 transition-colors font-mono underline underline-offset-4"
-          >
-            github/{socials.github}
-          </a>
-        )}
-        {socials.twitter && (
-          <a
-            href={`https://twitter.com/${socials.twitter}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-primary hover:text-primary/80 transition-colors font-mono underline underline-offset-4"
-          >
-            @{socials.twitter}
-          </a>
-        )}
-        {socials.telegram && (
-          <a
-            href={`https://t.me/${socials.telegram}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-primary hover:text-primary/80 transition-colors font-mono underline underline-offset-4"
-          >
-            t.me/{socials.telegram}
-          </a>
+            Edit
+          </button>
         )}
       </div>
+      {hasLinks ? (
+        <div className="flex flex-wrap gap-4">
+          {socials.website && (
+            <a
+              href={socials.website.startsWith("http") ? socials.website : `https://${socials.website}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-primary hover:text-primary/80 transition-colors font-mono underline underline-offset-4"
+            >
+              {socials.website.replace(/^https?:\/\//, "")}
+            </a>
+          )}
+          {socials.github && (
+            <a
+              href={`https://github.com/${socials.github}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-primary hover:text-primary/80 transition-colors font-mono underline underline-offset-4"
+            >
+              github/{socials.github}
+            </a>
+          )}
+          {socials.twitter && (
+            <a
+              href={`https://twitter.com/${socials.twitter}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-primary hover:text-primary/80 transition-colors font-mono underline underline-offset-4"
+            >
+              @{socials.twitter}
+            </a>
+          )}
+          {socials.telegram && (
+            <a
+              href={`https://t.me/${socials.telegram}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-primary hover:text-primary/80 transition-colors font-mono underline underline-offset-4"
+            >
+              t.me/{socials.telegram}
+            </a>
+          )}
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground italic">No social links added yet</p>
+      )}
     </div>
   );
 }
@@ -590,69 +965,71 @@ function ProfileEditForm({
   };
 
   return (
-    <div className="space-y-6">
-      {/* Display Name */}
-      <div className="space-y-2">
-        <label className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
-          Display Name
-        </label>
-        <Input
-          value={formData.displayName || ""}
-          onChange={(e) =>
-            setFormData((prev) => ({ ...prev, displayName: e.target.value }))
-          }
-          placeholder="Your display name"
-        />
+    <div className="space-y-8">
+      {/* Basic Info */}
+      <div className="space-y-4">
+        <h4 className="text-sm font-medium text-foreground">Basic Info</h4>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <label className="text-xs text-muted-foreground">Display Name</label>
+            <Input
+              value={formData.displayName || ""}
+              onChange={(e) =>
+                setFormData((prev) => ({ ...prev, displayName: e.target.value }))
+              }
+              placeholder="Your display name"
+              className="h-9"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs text-muted-foreground">Role</label>
+            <Input
+              value={formData.role || ""}
+              onChange={(e) =>
+                setFormData((prev) => ({ ...prev, role: e.target.value }))
+              }
+              placeholder="e.g., Developer, Designer"
+              className="h-9"
+            />
+          </div>
+        </div>
       </div>
 
-      {/* Role */}
-      <div className="space-y-2">
-        <label className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
-          Role
-        </label>
-        <Input
-          value={formData.role || ""}
-          onChange={(e) =>
-            setFormData((prev) => ({ ...prev, role: e.target.value }))
-          }
-          placeholder="e.g., Developer, Designer, Founder"
-        />
-      </div>
+      {/* Divider */}
+      <div className="border-b border-border/50" />
 
       {/* Description */}
       <div className="space-y-2">
         <label className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
           About
         </label>
-        <textarea
+        <MarkdownEditor
           value={formData.description || ""}
-          onChange={(e) =>
-            setFormData((prev) => ({ ...prev, description: e.target.value }))
+          onChange={(value) =>
+            setFormData((prev) => ({ ...prev, description: value }))
           }
           placeholder="Tell us about yourself..."
-          rows={3}
-          className="w-full px-2.5 py-1.5 bg-muted/10 border border-border/40 text-sm font-mono transition-all outline-none focus-visible:border-primary/40 focus-visible:bg-muted/20"
+          rows={5}
         />
       </div>
 
       {/* Skills/Tags */}
-      <div className="space-y-3">
-        <label className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
-          Skills
-        </label>
-        <div className="flex flex-wrap gap-2 mb-2">
+      <div className="space-y-4">
+        <h4 className="text-sm font-medium text-foreground">Skills</h4>
+        <div className="flex flex-wrap gap-2">
           {formData.tags?.map((tag) => (
             <span
               key={tag}
-              className="text-sm bg-muted/60 text-foreground px-3 py-1.5 border border-border/50 flex items-center gap-2"
+              className="text-sm bg-muted/60 text-foreground px-3 py-1.5 border border-border/50 flex items-center gap-2 rounded-md"
             >
               {tag}
               <button
                 type="button"
                 onClick={() => handleRemoveTag(tag)}
-                className="text-muted-foreground hover:text-destructive"
+                className="text-muted-foreground hover:text-destructive text-xs"
               >
-                x
+                ✕
               </button>
             </span>
           ))}
@@ -661,28 +1038,30 @@ function ProfileEditForm({
           <Input
             value={newTag}
             onChange={(e) => setNewTag(e.target.value)}
-            placeholder="Add a skill..."
+            placeholder="Type a skill and press Enter..."
             onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddTag())}
+            className="h-9"
           />
-          <Button type="button" variant="outline" onClick={handleAddTag}>
+          <Button type="button" variant="outline" onClick={handleAddTag} className="h-9">
             Add
           </Button>
         </div>
       </div>
 
+      {/* Divider */}
+      <div className="border-b border-border/50" />
+
       {/* Projects */}
-      <div className="space-y-3">
-        <label className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
-          Projects
-        </label>
-        <div className="space-y-3">
+      <div className="space-y-4">
+        <h4 className="text-sm font-medium text-foreground">Projects</h4>
+        <div className="space-y-2">
           {formData.projects?.map((project, index) => (
             <div
               key={index}
-              className="p-4 border border-border/50 bg-muted/30 space-y-2"
+              className="p-3 border border-border/50 bg-muted/20 space-y-2 rounded-lg"
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="font-mono text-foreground font-semibold text-base">
+                <span className="font-mono text-foreground font-semibold text-sm">
                   {project.name}
                 </span>
                 <div className="flex items-center gap-2">
@@ -692,11 +1071,11 @@ function ProfileEditForm({
                     onClick={() => handleRemoveProject(index)}
                     className="text-xs text-muted-foreground hover:text-destructive"
                   >
-                    Remove
+                    ✕
                   </button>
                 </div>
               </div>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground line-clamp-2">
                 {project.description}
               </p>
             </div>
@@ -704,48 +1083,63 @@ function ProfileEditForm({
         </div>
 
         {/* Add Project Form */}
-        <div className="p-4 border border-dashed border-border/50 space-y-3">
-          <Input
-            value={newProject.name}
-            onChange={(e) =>
-              setNewProject((prev) => ({ ...prev, name: e.target.value }))
-            }
-            placeholder="Project name"
-          />
-          <Input
-            value={newProject.description}
-            onChange={(e) =>
-              setNewProject((prev) => ({ ...prev, description: e.target.value }))
-            }
-            placeholder="Project description"
-          />
-          <div className="flex gap-2">
+        <div className="p-4 border border-dashed border-border/50 space-y-4 rounded-lg bg-muted/10">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            Add New Project
+          </p>
+          <div className="space-y-1.5">
+            <label className="text-xs text-muted-foreground">Project name</label>
+            <Input
+              value={newProject.name}
+              onChange={(e) =>
+                setNewProject((prev) => ({ ...prev, name: e.target.value }))
+              }
+              placeholder="My awesome project"
+              className="h-9"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs text-muted-foreground">Description</label>
+            <MarkdownEditor
+              value={newProject.description}
+              onChange={(value) =>
+                setNewProject((prev) => ({ ...prev, description: value }))
+              }
+              placeholder="What are you building?"
+              rows={3}
+              minimal
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
             <select
               value={newProject.status}
               onChange={(e) =>
                 setNewProject((prev) => ({ ...prev, status: e.target.value }))
               }
-              className="flex-1 h-8 px-2.5 bg-muted/10 border border-border/40 text-sm font-mono outline-none focus-visible:border-primary/40"
+              className="flex-1 h-9 px-2.5 bg-muted/10 border border-border/40 text-sm font-mono outline-none focus-visible:border-primary/40 rounded-md"
             >
               <option value="Active">Active</option>
               <option value="In Development">In Development</option>
               <option value="Beta">Beta</option>
               <option value="Completed">Completed</option>
             </select>
-            <Button type="button" variant="outline" onClick={handleAddProject}>
+            <Button type="button" variant="outline" onClick={handleAddProject} className="h-9">
               Add Project
             </Button>
           </div>
         </div>
       </div>
 
+      {/* Divider */}
+      <div className="border-b border-border/50" />
+
       {/* Socials */}
-      <div className="space-y-3">
-        <label className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
-          Social Links
-        </label>
+      <div className="space-y-4">
+        <h4 className="text-sm font-medium text-foreground">Social Links</h4>
         <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <label className="text-xs text-muted-foreground">Website</label>
             <Input
               value={formData.socials?.website || ""}
@@ -756,9 +1150,10 @@ function ProfileEditForm({
                 }))
               }
               placeholder="https://yoursite.com"
+              className="h-9"
             />
           </div>
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <label className="text-xs text-muted-foreground">GitHub</label>
             <Input
               value={formData.socials?.github || ""}
@@ -769,9 +1164,10 @@ function ProfileEditForm({
                 }))
               }
               placeholder="username"
+              className="h-9"
             />
           </div>
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <label className="text-xs text-muted-foreground">Twitter</label>
             <Input
               value={formData.socials?.twitter || ""}
@@ -782,9 +1178,10 @@ function ProfileEditForm({
                 }))
               }
               placeholder="username"
+              className="h-9"
             />
           </div>
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <label className="text-xs text-muted-foreground">Telegram</label>
             <Input
               value={formData.socials?.telegram || ""}
@@ -800,17 +1197,102 @@ function ProfileEditForm({
         </div>
       </div>
 
+      {/* Divider */}
+      <div className="border-b border-border/50" />
+
       {/* Save/Cancel buttons */}
-      <div className="flex gap-3 pt-4 border-t border-border/50">
+      <div className="flex gap-3">
         <Button
           onClick={handleSave}
           disabled={saveMutation.isPending}
+          className="h-9 px-6"
         >
           {saveMutation.isPending ? "Saving..." : "Save Profile"}
         </Button>
-        <Button variant="outline" onClick={onCancel}>
+        <Button variant="outline" onClick={onCancel} className="h-9 px-6">
           Cancel
         </Button>
+      </div>
+    </div>
+  );
+}
+
+function ProfileSkeleton() {
+  return (
+    <div className="flex-1 border border-primary/30 bg-background h-full overflow-y-auto">
+      <div className="p-4 sm:p-6 space-y-6">
+        {/* Header Skeleton */}
+        <div className="flex items-start gap-4">
+          <Skeleton className="size-16 sm:size-14 rounded-full" />
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-6 w-48" />
+            <Skeleton className="h-4 w-64" />
+            <Skeleton className="h-6 w-24" />
+          </div>
+          <Skeleton className="h-8 w-20" />
+        </div>
+
+        {/* Rank Section Skeleton */}
+        <div className="space-y-3">
+          <Skeleton className="h-4 w-40" />
+          <Skeleton className="h-10 w-32" />
+          <Skeleton className="h-10 w-48" />
+        </div>
+
+        {/* Skills Section Skeleton */}
+        <div className="space-y-3">
+          <Skeleton className="h-4 w-24" />
+          <div className="flex flex-wrap gap-2">
+            <Skeleton className="h-8 w-20" />
+            <Skeleton className="h-8 w-24" />
+            <Skeleton className="h-8 w-28" />
+            <Skeleton className="h-8 w-20" />
+          </div>
+        </div>
+
+        {/* About Section Skeleton */}
+        <div className="space-y-3">
+          <Skeleton className="h-4 w-20" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-3/4" />
+        </div>
+
+        {/* Projects Section Skeleton */}
+        <div className="space-y-3">
+          <Skeleton className="h-4 w-24" />
+          <div className="space-y-3">
+            <div className="p-4 border border-border/50 space-y-2">
+              <div className="flex items-center justify-between">
+                <Skeleton className="h-5 w-32" />
+                <Skeleton className="h-5 w-16" />
+              </div>
+              <Skeleton className="h-4 w-full" />
+            </div>
+            <div className="p-4 border border-border/50 space-y-2">
+              <div className="flex items-center justify-between">
+                <Skeleton className="h-5 w-36" />
+                <Skeleton className="h-5 w-20" />
+              </div>
+              <Skeleton className="h-4 w-full" />
+            </div>
+          </div>
+        </div>
+
+        {/* Socials Section Skeleton */}
+        <div className="space-y-3">
+          <Skeleton className="h-4 w-24" />
+          <div className="flex flex-wrap gap-4">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="h-4 w-24" />
+          </div>
+        </div>
+
+        {/* Actions Skeleton */}
+        <div className="pt-4 border-t border-border/50">
+          <Skeleton className="h-10 w-24" />
+        </div>
       </div>
     </div>
   );
