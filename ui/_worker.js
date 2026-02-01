@@ -1,43 +1,54 @@
 /**
- * Cloudflare Pages _worker.js (advanced mode)
+ * Cloudflare Pages Advanced Mode Worker
  * Handles API proxying and static asset serving
- *
- * This file is placed in the UI root to be copied to dist during build
- * It works with the service binding configured in ui/wrangler.toml
  */
+
+// Use environment-based worker URL
+const getWorkerUrl = (env) => {
+  // In production Pages, use the Pages Function worker
+  // In preview/demo, use the deployed worker
+  return env.WORKER_URL || "https://near-agent.kj95hgdgnn.workers.dev";
+};
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const pathname = url.pathname;
 
-    // Proxy API and auth requests to the Worker via service binding
+    // Proxy API and auth requests to the Worker
     if (pathname.startsWith('/api') || pathname.startsWith('/auth')) {
-      // Build the worker URL
-      const workerUrl = new URL(pathname + url.search, request.url);
+      const workerUrl = getWorkerUrl(env);
 
-      // Copy headers and preserve the original Host header
-      const proxyHeaders = new Headers();
-      for (const [key, value] of request.headers.entries()) {
-        proxyHeaders.set(key, value);
-      }
-      // Preserve original Host header for host guard validation
-      proxyHeaders.set('X-Original-Host', url.host);
+      // Build target URL with path and query
+      const targetUrl = new URL(pathname + url.search, workerUrl);
 
-      const proxyRequest = new Request(workerUrl, {
-        method: request.method,
-        headers: proxyHeaders,
-        body: request.method !== 'GET' && request.method !== 'HEAD' ? request.body : undefined,
-        duplex: 'half',
+      // Clone request
+      const proxyRequest = new Request(targetUrl, request);
+
+      // Copy all headers except host which we set explicitly
+      request.headers.forEach((value, key) => {
+        if (key !== 'host') {
+          proxyRequest.headers.set(key, value);
+        }
       });
 
-      // Use service binding if available (production)
-      if (env.API) {
-        return env.API.fetch(proxyRequest);
-      }
+      // Set CORS headers for browser requests
+      proxyRequest.headers.set('Access-Control-Allow-Origin', '*');
+      proxyRequest.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+      proxyRequest.proxy = true;
 
-      // Fallback for local development (won't have service binding)
       return fetch(proxyRequest);
+    }
+
+    // Handle OPTIONS for CORS preflight
+    if (request.method === 'OPTIONS') {
+      return new Response(null, {
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': '*',
+        },
+      });
     }
 
     // Serve static assets from ASSETS binding
