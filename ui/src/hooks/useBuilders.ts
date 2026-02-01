@@ -9,6 +9,7 @@ import type {
   NearBlocksHolder,
   NearBlocksHoldersResponse,
 } from "@/types/builders";
+import { useProfiles } from "@/integrations/near-social-js";
 
 // Get API base URL - always use same-origin to avoid CORS issues
 function getApiBaseUrl(): string {
@@ -31,12 +32,13 @@ async function fetchHolders({ contractId, page, limit }: FetchHoldersParams): Pr
   holders: string[];
   hasMore: boolean;
 }> {
+  // NEARBlocks API uses 1-based paging (page starts at 1, not 0)
   const response = await fetch(`${getApiBaseUrl()}/api/builders`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       path: `nfts/${contractId}/holders`,
-      params: { per_page: String(limit), page: String(page) },
+      params: { per_page: String(limit), page: String(page + 1) },
     }),
   });
 
@@ -148,7 +150,21 @@ export function useBuilders() {
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
-  // Merge all pages into a single list of builders
+  // Collect all unique account IDs for profile fetching
+  const allAccountIds = (() => {
+    const ids = new Set<string>();
+    for (const page of query.data?.pages || []) {
+      for (const id of [...page.legionHolders, ...page.initiateHolders]) {
+        ids.add(id);
+      }
+    }
+    return Array.from(ids);
+  })();
+
+  // Fetch profiles for all builders
+  const { profiles } = useProfiles(allAccountIds);
+
+  // Merge all pages into a single list of builders with profile data
   const builders = (() => {
     const builderMap = new Map<string, Builder>();
 
@@ -174,7 +190,45 @@ export function useBuilders() {
       }
     }
 
-    return Array.from(builderMap.values());
+    // Enrich with profile data
+    const enrichedBuilders: Builder[] = [];
+    for (const builder of builderMap.values()) {
+      const profile = profiles.get(builder.accountId);
+      if (profile) {
+        // Build avatar URL from NEAR Social profile (handle IPFS CID)
+        const avatarUrl = profile.image?.ipfs_cid
+          ? `https://ipfs.near.social/ipfs/${profile.image.ipfs_cid}`
+          : profile.image?.url || builder.avatar;
+
+        // Build background image URL from NEAR Social profile (handle IPFS CID)
+        const backgroundUrl = profile.backgroundImage?.ipfs_cid
+          ? `https://ipfs.near.social/ipfs/${profile.backgroundImage.ipfs_cid}`
+          : profile.backgroundImage?.url || builder.backgroundImage;
+
+        // Merge profile data into builder
+        enrichedBuilders.push({
+          ...builder,
+          displayName: profile.name || builder.displayName,
+          avatar: avatarUrl,
+          backgroundImage: backgroundUrl,
+          description: profile.description || builder.description,
+          tags: profile.tags
+            ? Object.keys(profile.tags).filter(Boolean)
+            : builder.tags,
+          socials: {
+            github: profile.linktree?.github || builder.socials.github,
+            twitter: profile.linktree?.twitter || builder.socials.twitter,
+            website: profile.linktree?.website || builder.socials.website,
+            telegram: profile.linktree?.telegram || builder.socials.telegram,
+          },
+          nearSocialProfile: profile,
+        });
+      } else {
+        enrichedBuilders.push(builder);
+      }
+    }
+
+    return enrichedBuilders;
   })();
 
   // Calculate total counts (sum of all holders across all pages)

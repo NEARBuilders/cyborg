@@ -10,22 +10,24 @@
 
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { Social } from "near-social-js";
 import type { Env } from "./types";
 import { createAuth, getSessionFromRequest } from "./auth";
 import { createDatabase } from "./db";
 import { NearService, createAgentService } from "./services";
 import { createApiRoutes } from "./routes/api";
 import { CacheService } from "./services/cache";
+import { handleBuildersRequest } from "./services/builders";
 
 // =============================================================================
 // APP SETUP
-// =============================================================================
+//=============================================================================
 
 const app = new Hono<{ Bindings: Env }>();
 
 // =============================================================================
 // MIDDLEWARE
-// =============================================================================
+//=============================================================================
 
 // Allowed origins for CORS
 const ALLOWED_ORIGINS = [
@@ -33,6 +35,19 @@ const ALLOWED_ORIGINS = [
   "http://localhost:3002",
   "http://localhost:8787",
   "https://near-agent.pages.dev",
+  "https://demo.near-agent.pages.dev",
+];
+
+// Allowed hosts for public API (builders, profiles)
+// Also allow the worker itself when called via service binding
+const ALLOWED_HOSTS = [
+  "near-agent.pages.dev",
+  "demo.near-agent.pages.dev",
+  "mains.pages.dev",
+  "near-agent.kj95hgdgnn.workers.dev",
+  "localhost:3000",
+  "localhost:3002",
+  "localhost:8787",
 ];
 
 // CORS middleware
@@ -42,8 +57,8 @@ app.use(
     origin: (origin) => {
       // Allow requests with no origin (e.g., mobile apps, curl)
       if (!origin) return "http://localhost:8787";
-      // Allow any *.near-agent.pages.dev subdomain
-      if (origin.endsWith(".near-agent.pages.dev")) return origin;
+      // Allow any *.pages.dev subdomain
+      if (origin.endsWith(".pages.dev")) return origin;
       // Allow explicitly listed origins
       if (ALLOWED_ORIGINS.includes(origin)) return origin;
       // Default fallback
@@ -56,11 +71,281 @@ app.use(
   })
 );
 
+// Host guard middleware for public endpoints
+function createHostGuard() {
+  return async (c: any, next: () => Promise<void>) => {
+    const url = new URL(c.req.url);
+
+    // Check multiple sources for the origin host:
+    // 1. X-Forwarded-Host header (set by Pages proxy)
+    // 2. X-Original-Host header
+    // 3. originHost query parameter
+    // 4. Origin header
+    // 5. Referer header (extract host from URL)
+    // 6. Fall back to URL hostname
+    let host = c.req.header("X-Forwarded-Host")
+      || c.req.header("X-Original-Host")
+      || url.searchParams.get("originHost");
+
+    if (!host) {
+      const origin = c.req.header("origin");
+      if (origin) {
+        try {
+          host = new URL(origin).host;
+        } catch {
+          // Invalid URL, ignore
+        }
+      }
+    }
+
+    if (!host) {
+      const referer = c.req.header("referer");
+      if (referer) {
+        try {
+          host = new URL(referer).host;
+        } catch {
+          // Invalid URL, ignore
+        }
+      }
+    }
+
+    if (!host) {
+      host = url.hostname;
+    }
+
+    // Check if host is allowed
+    const isAllowedHost = ALLOWED_HOSTS.some((allowed) => {
+      if (allowed === host) return true;
+      if (allowed.startsWith("localhost") && host.startsWith("localhost")) return true;
+      if (allowed.includes(".pages.dev") && host.endsWith(".pages.dev")) return true;
+      return false;
+    });
+
+    if (!isAllowedHost) {
+      console.log(`[HOST GUARD] Blocked request from: ${host}`);
+      return c.json({ error: "Forbidden - invalid host" }, 403);
+    }
+
+    await next();
+  };
+}
+
 // =============================================================================
-// HEALTH CHECK
+// PUBLIC HEALTH CHECKS
 // =============================================================================
 
 app.get("/health", (c) => c.text("OK"));
+app.get("/ping", (c) => c.json({
+  status: "ok",
+  timestamp: new Date().toISOString(),
+  service: "near-agent",
+}));
+
+// =============================================================================
+// PUBLIC BUILDERS ENDPOINTS (with host guard)
+// =============================================================================
+
+const publicRoutes = new Hono<{ Bindings: Env }>();
+
+// Apply host guard to public routes
+publicRoutes.use("*", createHostGuard());
+
+// Builders endpoints - public with host guard
+// Route mounted at /api/builders, so "/" becomes the list endpoint
+publicRoutes.get("/", async (c) => {
+  const queryParams = c.req.query();
+  const input = {
+    path: queryParams.path || "collections",
+    params: Object.fromEntries(
+      Object.entries(queryParams).filter(([k]) => k !== "path")
+    ),
+    nearblocksApiKey: c.env.NEARBLOCKS_API_KEY,
+  };
+
+  const result = await handleBuildersRequest(input);
+
+  if (result.success) {
+    return c.json(result.data);
+  } else {
+    return c.json({ error: result.error }, result.status as 400 | 500);
+  }
+});
+
+publicRoutes.post("/", async (c) => {
+  const body = await c.req.json();
+  const input = {
+    ...body,
+    nearblocksApiKey: c.env.NEARBLOCKS_API_KEY,
+  };
+
+  const result = await handleBuildersRequest(input);
+
+  if (result.success) {
+    return c.json(result.data);
+  } else {
+    return c.json({ error: result.error }, result.status as 400 | 500);
+  }
+});
+
+publicRoutes.get("/:id", async (c) => {
+  const id = c.req.param("id");
+  const queryParams = c.req.query();
+
+  const input = {
+    path: `collections/${id}`,
+    params: queryParams as Record<string, string>,
+    nearblocksApiKey: c.env.NEARBLOCKS_API_KEY,
+  };
+
+  const result = await handleBuildersRequest(input);
+
+  if (result.success) {
+    return c.json(result.data);
+  } else {
+    return c.json({ error: result.error }, result.status as 400 | 500);
+  }
+});
+
+// Mount public routes
+app.route("/api/builders", publicRoutes);
+
+// =============================================================================
+// PUBLIC PROFILES ENDPOINTS (with host guard)
+// =============================================================================
+
+const profilesRoutes = new Hono<{ Bindings: Env }>();
+profilesRoutes.use("*", createHostGuard());
+
+// Initialize NEAR Social client
+// Uses default api.near.social server for fetching from social.near contract
+const social = new Social({
+  network: "mainnet",
+});
+
+// Batch fetch with POST body
+profilesRoutes.post("/", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const accountIds = body.ids?.split(",").filter(Boolean) || [];
+
+  if (accountIds.length === 0) {
+    return c.json({});
+  }
+
+  const cache = new CacheService(c.env.CACHE);
+
+  // Try to get from KV cache first
+  const cachedProfiles = await cache.getProfiles(accountIds);
+  const uncachedIds = accountIds.filter((id: string) => !cachedProfiles.has(id));
+
+  // Fetch only uncached profiles using near-social-js
+  const fetchedProfiles: Record<string, any> = {};
+
+  if (uncachedIds.length > 0) {
+    await Promise.all(
+      uncachedIds.map(async (accountId: string) => {
+        try {
+          const profile = await social.getProfile(accountId);
+          if (profile) {
+            fetchedProfiles[accountId] = profile;
+          }
+        } catch (e) {
+          console.error(`[API] Error fetching profile for ${accountId}:`, e);
+        }
+      })
+    );
+
+    // Cache fetched profiles
+    await cache.setProfiles(fetchedProfiles);
+  }
+
+  // Merge cached and fetched profiles
+  // Convert Map to plain object for spreading
+  const cachedProfilesObj = Object.fromEntries(cachedProfiles.entries());
+  const allProfiles = { ...cachedProfilesObj, ...fetchedProfiles };
+
+  return c.json(allProfiles);
+});
+
+// Also keep GET for backwards compatibility
+profilesRoutes.get("/", async (c) => {
+  const url = new URL(c.req.url);
+  console.log(`[PROFILES] Full URL: ${c.req.url}`);
+  console.log(`[PROFILES] Search: ${url.search}`);
+  console.log(`[PROFILES] ids param: ${url.searchParams.get("ids")}`);
+  const idsParam = url.searchParams.get("ids");
+  const accountIds = idsParam?.split(",").filter(Boolean) || [];
+  console.log(`[PROFILES] Account IDs:`, accountIds);
+
+  if (accountIds.length === 0) {
+    return c.json({});
+  }
+
+  const cache = new CacheService(c.env.CACHE);
+
+  // Try to get from KV cache first
+  const cachedProfiles = await cache.getProfiles(accountIds);
+  const uncachedIds = accountIds.filter((id: string) => !cachedProfiles.has(id));
+
+  // Fetch only uncached profiles using near-social-js
+  const fetchedProfiles: Record<string, any> = {};
+
+  if (uncachedIds.length > 0) {
+    await Promise.all(
+      uncachedIds.map(async (accountId: string) => {
+        try {
+          const profile = await social.getProfile(accountId);
+          if (profile) {
+            fetchedProfiles[accountId] = profile;
+          }
+        } catch (e) {
+          console.error(`[API] Error fetching profile for ${accountId}:`, e);
+        }
+      })
+    );
+
+    // Cache fetched profiles
+    await cache.setProfiles(fetchedProfiles);
+  }
+
+  // Merge cached and fetched profiles
+  // Convert Map to plain object for spreading
+  const cachedProfilesObj = Object.fromEntries(cachedProfiles.entries());
+  const allProfiles = { ...cachedProfilesObj, ...fetchedProfiles };
+
+  return c.json(allProfiles);
+});
+
+profilesRoutes.get("/:accountId", async (c) => {
+  const accountId = c.req.param("accountId");
+  const cache = new CacheService(c.env.CACHE);
+
+  // Try KV cache first
+  const cached = await cache.getProfile(accountId);
+  if (cached) {
+    console.log(`[KV CACHE HIT] Profile for: ${accountId}`);
+    return c.json(cached);
+  }
+
+  // Fetch from NEAR Social smart contract
+  try {
+    const profile = await social.getProfile(accountId);
+
+    if (!profile) {
+      return c.json(null, 404);
+    }
+
+    // Cache in KV
+    await cache.setProfile(accountId, profile);
+
+    return c.json(profile);
+  } catch (e) {
+    console.error(`[API] Error fetching profile for ${accountId}:`, e);
+    return c.json(null, 500);
+  }
+});
+
+// Mount profiles routes
+app.route("/api/profiles", profilesRoutes);
 
 // =============================================================================
 // AUTH ROUTES
@@ -88,7 +373,7 @@ app.all("/api/auth/*", async (c) => {
     console.log(`[Auth] Response status: ${response.status}`);
 
     // Log Set-Cookie headers
-    const setCookies = response.headers.getSetCookie?.() || response.headers.get("set-cookie") || [];
+    const setCookies = (response.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie?.() || response.headers.get("set-cookie") || [];
     console.log(`[Auth] Set-Cookie headers:`, setCookies);
 
     // Log response body for non-success responses
@@ -117,19 +402,22 @@ app.all("/auth/*", async (c) => {
 });
 
 // =============================================================================
-// API ROUTES
+// AUTHENTICATED API ROUTES
 // =============================================================================
 
-app.all("/api/*", async (c) => {
+app.all("/api/chat", async (c) => {
   const env = c.env;
-  const isDev = false; // Workers are always production-like
-
-  // Initialize database
-  const db = createDatabase(env.DB);
 
   // Initialize auth and get session
   const auth = createAuth(env);
   const sessionContext = await getSessionFromRequest(auth, c.req.raw);
+
+  if (!sessionContext?.nearAccountId) {
+    return c.json({ error: "Authentication required" }, 401);
+  }
+
+  // Initialize database
+  const db = createDatabase(env.DB);
 
   // Initialize services
   const nearService = new NearService(db, {
@@ -148,34 +436,62 @@ app.all("/api/*", async (c) => {
     nearService
   );
 
-  // Create context getter for routes
-  const getContext = () => ({
-    db,
-    cache: new CacheService(env.CACHE),
-    agentService,
-    nearService,
-    nearAccountId: sessionContext?.nearAccountId,
-    role: sessionContext?.role,
-    nearblocksApiKey: env.NEARBLOCKS_API_KEY || env.NEAR_BLOCK,
-  });
+  // Route to the API chat handler
+  if (c.req.method === "POST" && c.req.path === "/api/chat") {
+    if (!agentService) {
+      return c.json({ error: "NEAR AI not connected" }, 503);
+    }
+    const body = await c.req.json();
+    const result = await agentService.processMessage(
+      sessionContext.nearAccountId,
+      body.message,
+      body.conversationId
+    );
+    return c.json(result);
+  }
 
-  // Create API routes with context
-  const apiRoutes = createApiRoutes(getContext);
+  if (c.req.method === "POST" && c.req.path === "/api/chat/stream") {
+    if (!agentService) {
+      return c.json({ error: "NEAR AI not connected" }, 503);
+    }
+    const body = await c.req.json();
 
-  // Strip /api prefix and route to API handlers
-  const url = new URL(c.req.url);
-  const apiPath = url.pathname.replace(/^\/api/, "") || "/";
-  const apiUrl = new URL(apiPath + url.search, url.origin);
+    // Create SSE stream
+    const stream = new ReadableStream({
+      async start(controller) {
+        const encoder = new TextEncoder();
 
-  // Create a new request with the modified URL
-  const apiRequest = new Request(apiUrl.toString(), {
-    method: c.req.method,
-    headers: c.req.raw.headers,
-    body: c.req.method !== "GET" && c.req.method !== "HEAD" ? c.req.raw.body : undefined,
-  });
+        try {
+          const generator = agentService.processMessageStream(
+            sessionContext.nearAccountId!, // Already validated above
+            body.message,
+            body.conversationId
+          );
 
-  // Execute the API routes
-  return apiRoutes.fetch(apiRequest, env);
+          for await (const event of generator) {
+            const sseData = `event: ${event.type}\nid: ${event.id}\ndata: ${JSON.stringify(event.data)}\n\n`;
+            controller.enqueue(encoder.encode(sseData));
+          }
+        } catch (error) {
+          console.error("[API] Stream error:", error);
+          const errorEvent = `event: error\ndata: ${JSON.stringify({ message: "Stream failed" })}\n\n`;
+          controller.enqueue(encoder.encode(errorEvent));
+        } finally {
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
+    });
+  }
+
+  return c.json({ error: "Not found" }, 404);
 });
 
 // =============================================================================

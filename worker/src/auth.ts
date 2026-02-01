@@ -63,6 +63,7 @@ export function createAuth(env: Env) {
       "http://localhost:3002",
       "http://localhost:8787",
       "https://near-agent.pages.dev",
+      "https://demo.near-agent.pages.dev",
     ],
     advanced: {
       useSecureCookies: true,

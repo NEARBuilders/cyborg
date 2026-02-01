@@ -7,8 +7,12 @@ export function UserNav() {
   const { data: session } = authClient.useSession();
   const nearState = authClient.useNearState();
 
-  // Get account ID from better-auth session or nearState
-  const nearName = session?.user?.name || nearState?.accountId;
+  // Get actual account ID (for profile link) and display name (for UI)
+  const accountId =
+    nearState?.accountId ||
+    (session?.user as any)?.nearAccount?.accountId ||
+    session?.user?.name;
+  const displayName = session?.user?.name || nearState?.accountId;
 
   const handleSignOut = async () => {
     try {
@@ -21,22 +25,17 @@ export function UserNav() {
     }
   };
 
-  if (session?.user && nearName) {
+  if (session?.user && accountId) {
     return (
       <>
         <Link
           to="/profile/$accountId"
-          params={{ accountId: nearName }}
+          params={{ accountId }}
           className="text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
         >
-          {nearName}
+          {displayName}
         </Link>
-        <Link
-          to="/builders"
-          className="text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
-        >
-          builders
-        </Link>
+
         <button
           type="button"
           onClick={handleSignOut}

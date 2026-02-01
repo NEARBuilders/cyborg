@@ -5,6 +5,22 @@ import { useBuildersWithProfiles, useUserRanks } from "@/hooks";
 
 export const Route = createFileRoute("/_layout/builders")({
   component: BuildersLayout,
+  head: () => {
+    return {
+      meta: [
+        { title: "NEAR Builders - Legion Social" },
+        { name: "description", content: "Explore NEAR ecosystem builders and their projects" },
+        { property: "og:title", content: "NEAR Builders - Legion Social" },
+        { property: "og:description", content: "Explore NEAR ecosystem builders and their projects" },
+        { property: "og:image", content: `${typeof window !== "undefined" ? window.location.origin : ""}/og.jpg` },
+        { property: "og:image:width", content: "1200" },
+        { property: "og:image:height", content: "630" },
+        { property: "og:type", content: "website" },
+        { name: "twitter:card", content: "summary_large_image" },
+        { name: "twitter:image", content: `${typeof window !== "undefined" ? window.location.origin : ""}/og.jpg` },
+      ],
+    };
+  },
 });
 
 function BuildersLayout() {
@@ -82,7 +98,7 @@ function BuildersLayout() {
       </div>
 
       {/* Right panel - Outlet for child routes */}
-      <div className={`${builderId ? "flex" : "hidden lg:flex"} w-full lg:flex-1 h-full flex-col`}>
+      <div className={`${builderId ? "flex" : "hidden lg:flex"} w-full lg:flex-1 h-full flex-col overflow-hidden`}>
         {/* Back button for mobile */}
         {builderId && (
           <div className="lg:hidden px-4 py-3 border-b border-primary/20 bg-primary/5">

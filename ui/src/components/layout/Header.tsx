@@ -12,12 +12,6 @@ export function Header({ accountId, userRole, onSignOut }: HeaderProps) {
     <header className="shrink-0 border-b border-border/20 bg-background/80 backdrop-blur-sm">
       <div className="px-3 sm:px-4 lg:px-6 py-2.5">
         <div className="flex items-center justify-end gap-3 sm:gap-4">
-          <Link
-            to="/builders"
-            className="text-xs text-muted-foreground/50 hover:text-primary transition-colors font-mono"
-          >
-            builders
-          </Link>
           <ThemeToggle />
           {accountId ? (
             <>

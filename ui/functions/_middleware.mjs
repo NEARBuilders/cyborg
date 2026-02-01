@@ -1,44 +1,35 @@
 /**
  * Cloudflare Pages _middleware
- * Proxies API requests to the Worker via service binding
+ * Proxies API requests to the Worker
  */
 
+const WORKER_URL = "https://near-agent.kj95hgdgnn.workers.dev";
+
 export async function onRequest(context) {
-  const { request, next, env } = context;
+  const { request, next } = context;
   const url = new URL(request.url);
   const pathname = url.pathname;
 
-  // Proxy API requests to Worker via service binding
+  // Proxy API and auth requests to Worker
   if (pathname.startsWith("/api") || pathname.startsWith("/auth")) {
-    // Use the service binding if available, otherwise fallback to origin
-    const workerUrl = new URL(pathname + url.search, request.url);
+    // Build full worker URL
+    const workerUrl = `${WORKER_URL}${pathname}${url.search}`;
 
-    // Copy headers and add our custom validation header
-    const proxyHeaders = new Headers();
-    for (const [key, value] of request.headers.entries()) {
-      proxyHeaders.set(key, value);
-    }
-    // Use X-Forwarded-Host (custom header, not forbidden)
-    proxyHeaders.set('X-Forwarded-Host', url.host);
+    // Clone headers and add forward host
+    const headers = new Headers(request.headers);
+    headers.set('X-Forwarded-Host', 'near-agent.pages.dev');
 
-    const proxyRequest = new Request(workerUrl, {
-      method: request.method,
-      headers: proxyHeaders,
-      body: request.method !== "GET" && request.method !== "HEAD"
-        ? request.body
-        : undefined,
-      duplex: "half",
-    });
-
-    // Use service binding if available (Cloudflare Pages)
-    if (env.API) {
-      return env.API.fetch(proxyRequest);
+    // Clone request with new URL
+    const proxyRequest = new Request(workerUrl, request);
+    // Replace headers
+    for (const [key, value] of headers.entries()) {
+      proxyRequest.headers.set(key, value);
     }
 
-    // Fallback for local development
     return fetch(proxyRequest);
   }
 
   // Serve static assets
   return next();
 }
+// Updated: Sat Jan 31 20:25:13 EST 2026

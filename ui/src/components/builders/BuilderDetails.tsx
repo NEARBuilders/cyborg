@@ -3,7 +3,10 @@
  * Right panel showing selected builder info
  */
 
+import { useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Markdown } from "@/components/ui/markdown";
 import type { Builder } from "./BuilderListItem";
 
 interface BuilderDetailsProps {
@@ -81,7 +84,7 @@ function BuilderAbout({ description }: { description: string }) {
       <h3 className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
         About
       </h3>
-      <p className="text-foreground text-base leading-relaxed">{description}</p>
+      <Markdown content={description} />
     </div>
   );
 }
@@ -91,28 +94,43 @@ function BuilderProjects({
 }: {
   projects: { name: string; description: string; status: string }[];
 }) {
+  const [expandedProject, setExpandedProject] = useState<string | null>(null);
+
   return (
     <div className="space-y-3">
       <h3 className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
         Building
       </h3>
       <div className="space-y-3">
-        {projects.map((project) => (
-          <div
-            key={project.name}
-            className="p-4 border border-border/50 bg-muted/30 space-y-2"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-mono text-foreground font-semibold text-base">
-                {project.name}
-              </span>
-              <ProjectStatus status={project.status} />
+        {projects.map((project) => {
+          const isExpanded = expandedProject === project.name;
+          return (
+            <div
+              key={project.name}
+              className="p-4 border border-border/50 bg-muted/30 space-y-2 cursor-pointer hover:border-primary/30 transition-colors"
+              onClick={() => setExpandedProject(isExpanded ? null : project.name)}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-mono text-foreground font-semibold text-base">
+                  {project.name}
+                </span>
+                <div className="flex items-center gap-2">
+                  <ProjectStatus status={project.status} />
+                  <span className="text-muted-foreground text-xs">
+                    {isExpanded ? "▼" : "▶"}
+                  </span>
+                </div>
+              </div>
+              {isExpanded && (
+                <div className="pt-2 border-t border-border/30 mt-2">
+                  <div className="text-sm text-muted-foreground">
+                    <Markdown content={project.description} />
+                  </div>
+                </div>
+              )}
             </div>
-            <p className="text-sm text-muted-foreground">
-              {project.description}
-            </p>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -138,9 +156,9 @@ function ProjectStatus({ status }: { status: string }) {
 function BuilderSocials({
   socials,
 }: {
-  socials: { github?: string; twitter?: string };
+  socials: { github?: string; twitter?: string; website?: string; telegram?: string };
 }) {
-  if (!socials.github && !socials.twitter) return null;
+  if (!socials.github && !socials.twitter && !socials.website && !socials.telegram) return null;
 
   return (
     <div className="space-y-3">
@@ -148,6 +166,16 @@ function BuilderSocials({
         Connect
       </h3>
       <div className="flex flex-wrap gap-4">
+        {socials.website && (
+          <a
+            href={socials.website.startsWith("http") ? socials.website : `https://${socials.website}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-primary hover:text-primary/80 transition-colors font-mono underline underline-offset-4"
+          >
+            {socials.website.replace(/^https?:\/\//, "")}
+          </a>
+        )}
         {socials.github && (
           <a
             href={`https://github.com/${socials.github}`}
@@ -166,6 +194,16 @@ function BuilderSocials({
             className="text-sm text-primary hover:text-primary/80 transition-colors font-mono underline underline-offset-4"
           >
             @{socials.twitter}
+          </a>
+        )}
+        {socials.telegram && (
+          <a
+            href={`https://t.me/${socials.telegram}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-primary hover:text-primary/80 transition-colors font-mono underline underline-offset-4"
+          >
+            t.me/{socials.telegram}
           </a>
         )}
       </div>

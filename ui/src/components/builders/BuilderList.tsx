@@ -4,7 +4,8 @@
  */
 
 import { useState, useMemo, useEffect, useRef } from "react";
-import { BuilderListItem, type Builder } from "./BuilderListItem";
+import { BuilderListItem } from "./BuilderListItem";
+import type { Builder } from "@/types/builders";
 import { useUserRank } from "@/hooks";
 import { useProfile } from "@/integrations/near-social-js";
 import { Search, X } from "lucide-react";

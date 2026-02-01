@@ -7,6 +7,7 @@ import { siwn } from "better-near-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { drizzle } from "drizzle-orm/libsql";
 import { createClient } from "@libsql/client";
+import { Social } from "near-social-js";
 import * as schema from "./src/db/schema";
 import path from "path";
 
@@ -50,6 +51,116 @@ export const auth = betterAuth({
 const app = new Hono();
 
 const PORT = Number(process.env.PORT) || 3015;
+
+// Initialize NEAR Social client for profile fetching
+const social = new Social({
+  network: "mainnet",
+});
+
+// Test the Social client on startup
+(async () => {
+  try {
+    const testProfile = await social.getProfile("near");
+    console.log("[Profile] Social client test - fetched 'near' profile:", testProfile ? "SUCCESS" : "NOT FOUND");
+  } catch (e) {
+    console.error("[Profile] Social client test FAILED:", e);
+  }
+})();
+
+// Simple in-memory cache for profiles (no KV in local dev)
+const profileCache = new Map<string, { data: any; expiry: number }>();
+const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
+async function getCachedProfile(accountId: string): Promise<any | null> {
+  const cached = profileCache.get(accountId);
+  if (cached && cached.expiry > Date.now()) {
+    return cached.data;
+  }
+  return null;
+}
+
+async function setCachedProfile(accountId: string, data: any): Promise<void> {
+  profileCache.set(accountId, {
+    data,
+    expiry: Date.now() + CACHE_TTL,
+  });
+}
+
+// =============================================================================
+// NEAR SOCIAL PROFILES ENDPOINTS
+// =============================================================================
+
+// GET /api/profiles/:accountId - Get single profile
+app.get("/api/profiles/:accountId", async (c) => {
+  const accountId = c.req.param("accountId");
+
+  // Check cache first
+  const cached = await getCachedProfile(accountId);
+  if (cached) {
+    console.log(`[Profile Cache HIT] ${accountId}`);
+    return c.json(cached);
+  }
+
+  console.log(`[Profile] Fetching from NEAR Social: ${accountId}`);
+
+  try {
+    const profile = await social.getProfile(accountId);
+
+    if (!profile) {
+      return c.json(null, 404);
+    }
+
+    // Cache the result
+    await setCachedProfile(accountId, profile);
+
+    return c.json(profile);
+  } catch (e) {
+    console.error(`[Profile] Error fetching ${accountId}:`, e);
+    return c.json(null, 500);
+  }
+});
+
+// POST /api/profiles - Batch get profiles
+app.post("/api/profiles", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const accountIds = body.ids?.split(",").filter(Boolean) || [];
+
+  if (accountIds.length === 0) {
+    return c.json({});
+  }
+
+  console.log(`[Profile] Batch fetching ${accountIds.length} profiles`);
+
+  const result: Record<string, any> = {};
+
+  await Promise.all(
+    accountIds.map(async (accountId) => {
+      // Check cache first
+      const cached = await getCachedProfile(accountId);
+      if (cached) {
+        result[accountId] = cached;
+        return;
+      }
+
+      // Fetch from NEAR Social
+      try {
+        const profile = await social.getProfile(accountId);
+        if (profile) {
+          result[accountId] = profile;
+          await setCachedProfile(accountId, profile);
+        }
+      } catch (e) {
+        console.error(`[Profile] Error fetching ${accountId}:`, e);
+      }
+    })
+  );
+
+  return c.json(result);
+});
+
+// =============================================================================
+// CORS MIDDLEWARE
+// =============================================================================
 
 // CORS middleware
 app.use(
@@ -107,6 +218,11 @@ app.all("*", async (c) => {
 
   // Don't proxy auth endpoints
   if (path.startsWith("/api/auth/") || path.startsWith("/auth/")) {
+    return c.text("Not Found", 404);
+  }
+
+  // Don't proxy profiles endpoints (handled locally)
+  if (path.startsWith("/api/profiles")) {
     return c.text("Not Found", 404);
   }
 

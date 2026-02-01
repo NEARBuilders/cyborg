@@ -23,6 +23,22 @@ export const Route = createFileRoute("/_layout/login")({
     }
   },
   component: LoginPage,
+  head: () => {
+    return {
+      meta: [
+        { title: "Sign In - Legion Social" },
+        { name: "description", content: "Sign in to Legion Social with your NEAR account" },
+        { property: "og:title", content: "Sign In - Legion Social" },
+        { property: "og:description", content: "Sign in to Legion Social with your NEAR account" },
+        { property: "og:image", content: `${typeof window !== "undefined" ? window.location.origin : ""}/og.jpg` },
+        { property: "og:image:width", content: "1200" },
+        { property: "og:image:height", content: "630" },
+        { property: "og:type", content: "website" },
+        { name: "twitter:card", content: "summary_large_image" },
+        { name: "twitter:image", content: `${typeof window !== "undefined" ? window.location.origin : ""}/og.jpg` },
+      ],
+    };
+  },
 });
 
 function LoginPage() {

@@ -12,8 +12,6 @@ import type { Database } from "../db";
 import * as schema from "../db/schema";
 import type { AgentService } from "../services/agent";
 import type { NearService } from "../services/near";
-import { handleBuildersRequest } from "../services/builders";
-import { CacheService } from "../services/cache";
 
 // =============================================================================
 // VALIDATION SCHEMAS
@@ -35,23 +33,16 @@ const GetConversationInputSchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 });
 
-const BuildersInputSchema = z.object({
-  path: z.string().optional().default("collections"),
-  params: z.record(z.string(), z.coerce.string()).optional().default({}),
-});
-
 // =============================================================================
 // CONTEXT TYPE
 // =============================================================================
 
 interface ApiContext {
   db: Database;
-  cache: CacheService;
   agentService: AgentService | null;
   nearService: NearService | null;
   nearAccountId?: string;
   role?: string;
-  nearblocksApiKey?: string;
 }
 
 // =============================================================================
@@ -410,171 +401,71 @@ export function createApiRoutes(getContext: () => ApiContext) {
   });
 
   // ===========================================================================
-  // BUILDERS
+  // IPFS UPLOAD (Server-side, no CORS)
   // ===========================================================================
 
-  api.get("/builders", async (c) => {
-    const ctx = getContext();
-    const queryParams = c.req.query();
-    const input = {
-      path: queryParams.path || "collections",
-      params: Object.fromEntries(
-        Object.entries(queryParams).filter(([k]) => k !== "path")
-      ),
-      nearblocksApiKey: ctx.nearblocksApiKey,
-      cache: ctx.cache,
-    };
-
-    const result = await handleBuildersRequest(input);
-
-    if (result.success) {
-      return c.json(result.data);
-    } else {
-      return c.json({ error: result.error }, result.status as 400 | 500);
-    }
-  });
-
-  api.post("/builders", async (c) => {
-    const ctx = getContext();
-    const body = await c.req.json();
-    const validation = BuildersInputSchema.safeParse(body);
-
-    if (!validation.success) {
-      return c.json({ error: validation.error.message }, 400);
-    }
-
-    const result = await handleBuildersRequest({
-      ...validation.data,
-      nearblocksApiKey: ctx.nearblocksApiKey,
-      cache: ctx.cache,
-    });
-
-    if (result.success) {
-      return c.json(result.data);
-    } else {
-      return c.json({ error: result.error }, result.status as 400 | 500);
-    }
-  });
-
-  api.get("/builders/:id", async (c) => {
-    const ctx = getContext();
-    const id = c.req.param("id");
-    const queryParams = c.req.query();
-
-    const input = {
-      path: `collections/${id}`,
-      params: queryParams as Record<string, string>,
-      nearblocksApiKey: ctx.nearblocksApiKey,
-      cache: ctx.cache,
-    };
-
-    const result = await handleBuildersRequest(input);
-
-    if (result.success) {
-      return c.json(result.data);
-    } else {
-      return c.json({ error: result.error }, result.status as 400 | 500);
-    }
-  });
-
-  // ===========================================================================
-  // PROFILES (NEAR Social) with KV caching
-  // ===========================================================================
-
-  api.get("/profiles", async (c) => {
-    const ctx = getContext();
-    const queryParams = c.req.query();
-    const accountIds = queryParams.ids?.split(",").filter(Boolean) || [];
-
-    if (accountIds.length === 0) {
-      return c.json({});
-    }
-
-    // Try to get from KV cache first
-    const cachedProfiles = await ctx.cache.getProfiles(accountIds);
-    const uncachedIds = accountIds.filter((id) => !cachedProfiles.has(id));
-
-    // Fetch only uncached profiles from NEAR Social
-    const fetchedProfiles: Record<string, any> = {};
-
-    if (uncachedIds.length > 0) {
-      await Promise.all(
-        uncachedIds.map(async (accountId) => {
-          try {
-            const response = await fetch(
-              `https://api.near.social/get`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  keys: [`${accountId}/profile/**`],
-                }),
-              }
-            );
-
-            if (response.ok) {
-              const data = await response.json();
-              if (data[accountId]?.profile) {
-                fetchedProfiles[accountId] = data[accountId].profile;
-              }
-            }
-          } catch (e) {
-            console.error(`[API] Error fetching profile for ${accountId}:`, e);
-          }
-        })
-      );
-
-      // Cache fetched profiles
-      await ctx.cache.setProfiles(fetchedProfiles);
-    }
-
-    // Merge cached and fetched profiles
-    const allProfiles = { ...cachedProfiles, ...fetchedProfiles };
-
-    return c.json(allProfiles);
-  });
-
-  api.get("/profiles/:accountId", async (c) => {
-    const ctx = getContext();
-    const accountId = c.req.param("accountId");
-
-    // Try KV cache first
-    const cached = await ctx.cache.getProfile(accountId);
-    if (cached) {
-      console.log(`[KV CACHE HIT] Profile for: ${accountId}`);
-      return c.json(cached);
-    }
-
-    // Fetch from NEAR Social
+  api.post("/ipfs/upload", async (c) => {
     try {
-      const response = await fetch("https://api.near.social/get", {
+      const body = await c.req.parseBody();
+
+      // Validate file is present
+      if (!body || typeof body !== 'object') {
+        return c.json({ error: "Invalid request body" }, 400);
+      }
+
+      const formData = body as any;
+
+      // Check if file exists in the form data
+      const fileEntry = formData.file;
+      if (!fileEntry) {
+        return c.json({ error: "No file provided" }, 400);
+      }
+
+      // Convert file to ArrayBuffer
+      const arrayBuffer = await fileEntry.arrayBuffer();
+      const fileBuffer = Buffer.from(arrayBuffer);
+
+      // Upload to nft.storage (server-side, no CORS)
+      const response = await fetch("https://api.nft.storage/upload", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${c.env.NFT_STORAGE_API_KEY || ""}`,
+        },
         body: JSON.stringify({
-          keys: [`${accountId}/profile/**`],
+          name: fileEntry.name,
+          type: fileEntry.type,
+          size: fileEntry.size,
+          data: fileBuffer.toString("base64"),
         }),
       });
 
       if (!response.ok) {
-        return c.json(null, 404);
+        const errorText = await response.text();
+        console.error("[IPFS] Upload failed:", response.status, errorText);
+        return c.json({ error: `IPFS upload failed: ${response.statusText}` }, 502);
       }
 
-      const data = await response.json();
-      const profile = data[accountId]?.profile;
+      const result = await response.json();
 
-      if (!profile) {
-        return c.json(null, 404);
+      if (!result.ok) {
+        return c.json({ error: result.error || "Upload failed" }, 400);
       }
 
-      // Cache in KV
-      await ctx.cache.setProfile(accountId, profile);
-
-      return c.json(profile);
-    } catch (e) {
-      console.error(`[API] Error fetching profile for ${accountId}:`, e);
-      return c.json(null, 500);
+      // Return the CID
+      return c.json({
+        cid: result.value?.ipfs || result.value?.url || "",
+      });
+    } catch (error) {
+      console.error("[API] IPFS upload error:", error);
+      return c.json({ error: "Failed to upload to IPFS" }, 500);
     }
   });
+
+  // ===========================================================================
+  // NOTE: /builders and /profiles endpoints are now public with host guard
+  // See worker/src/index.ts - they are no longer authenticated routes
+  // ===========================================================================
 
   return api;
 }

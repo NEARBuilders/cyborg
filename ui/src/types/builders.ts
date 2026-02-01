@@ -32,6 +32,20 @@ export interface Builder {
   };
   isLegion?: boolean;
   isInitiate?: boolean;
+  nearSocialProfile?: {
+    name?: string;
+    description?: string;
+    image?: {
+      ipfs_cid?: string;
+      url?: string;
+    };
+    backgroundImage?: {
+      ipfs_cid?: string;
+      url?: string;
+    };
+    linktree?: Record<string, string>;
+    tags?: Record<string, string>;
+  } | null;
 }
 
 export interface NearBlocksHolder {

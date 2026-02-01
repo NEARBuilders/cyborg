@@ -300,3 +300,7 @@ fabric.properties
 .turbo
 **/*.sqlite
 
+# Wrangler
+worker/.wrangler/tmp/
+worker/.wrangler/state/
+

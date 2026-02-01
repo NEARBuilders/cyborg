@@ -45,14 +45,18 @@ export function useProfiles(accountIds: string[]) {
     });
   }, [accountIds]);
 
-  // Use batch API endpoint for better performance
+  // Use batch API endpoint for better performance (POST with body)
   const query = useQuery({
     queryKey: socialKeys.profiles(uniqueIds),
     queryFn: async () => {
       if (uniqueIds.length === 0) {
         return {};
       }
-      const response = await fetch(`/api/profiles?ids=${uniqueIds.join(",")}`);
+      const response = await fetch(`/api/profiles`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: uniqueIds.join(",") }),
+      });
       if (!response.ok) {
         return {};
       }
@@ -88,6 +92,29 @@ export function usePoke() {
       // This would require a different implementation for server-side
       // For now, this is a placeholder
       throw new Error("Poke functionality requires client-side NEAR integration");
+    },
+  });
+}
+
+/**
+ * Update NEAR Social profile (images and background)
+ */
+export function useUpdateSocialProfile() {
+  return useMutation({
+    mutationFn: async (data: { image?: string; backgroundImage?: string }) => {
+      const response = await fetch("/api/social/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to update profile");
+      }
+
+      return response.json();
     },
   });
 }

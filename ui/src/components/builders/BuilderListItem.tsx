@@ -4,25 +4,7 @@
  */
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-
-export interface Builder {
-  id: string;
-  accountId: string;
-  displayName: string;
-  avatar: string | null;
-  role: string;
-  tags: string[];
-  description: string;
-  projects: {
-    name: string;
-    description: string;
-    status: string;
-  }[];
-  socials: {
-    github?: string;
-    twitter?: string;
-  };
-}
+import type { Builder } from "@/types/builders";
 
 interface BuilderListItemProps {
   builder: Builder;
@@ -48,10 +30,15 @@ export function BuilderListItem({ builder, isSelected, onSelect }: BuilderListIt
             {builder.displayName.slice(0, 2).toUpperCase()}
           </AvatarFallback>
         </Avatar>
-        <div className="flex-1 min-w-0 space-y-1.5">
+        <div className="flex-1 min-w-0 space-y-1">
           <span className="font-mono text-base text-foreground font-medium truncate block">
-            {builder.accountId}
+            {builder.displayName}
           </span>
+          {builder.displayName !== builder.accountId && (
+            <span className="font-mono text-xs text-muted-foreground truncate block">
+              {builder.accountId}
+            </span>
+          )}
           <div className="flex flex-wrap gap-1">
             <span className="text-xs text-primary/80 bg-primary/10 px-2 py-0.5 border border-primary/20">
               {builder.role}

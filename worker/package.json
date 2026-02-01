@@ -6,6 +6,11 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
+    "deploy:all": "bun run build:ui && bun run deploy:ui && bun run deploy:worker",
+    "build:ui": "cd ../ui && bun run build:pages && cp .assetsignore dist/.assetsignore",
+    "deploy:ui": "cd ../ui && npx wrangler pages deploy dist --project-name=near-agent",
+    "deploy:ui:demo": "cd ../ui && npx wrangler pages deploy dist --project-name=near-agent --branch demo",
+    "deploy:worker": "wrangler deploy --env=\"\"",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "wrangler d1 migrations apply near-agent-db",
     "db:migrate:local": "wrangler d1 migrations apply near-agent-db --local",
@@ -13,12 +18,14 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "hono": "^4.7.0",
-    "drizzle-orm": "^0.45.1",
     "better-auth": "^1.4.15",
     "better-near-auth": "^0.3.4",
-    "openai": "^4.77.0",
+    "drizzle-orm": "^0.45.1",
+    "hono": "^4.7.0",
     "nanoid": "^5.0.9",
+    "near-kit": "^0.10.0",
+    "near-social-js": "^2.0.4",
+    "openai": "^4.77.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {
