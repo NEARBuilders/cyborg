@@ -22,6 +22,7 @@
     "hono": "^4.6.0",
     "nanoid": "^5.1.6",
     "near-kit": "catalog:",
+    "near-social-js": "^2.0.4",
     "openai": "^6.16.0"
   },
   "devDependencies": {
@@ -33,8 +34,7 @@
     "dotenv": "^17.2.3",
     "every-plugin": "0.8.8",
     "vite-tsconfig-paths": "^6.0.5",
-    "vitest": "catalog:",
-    "zephyr-rspack-plugin": "^0.1.2"
+    "vitest": "catalog:"
   },
   "scripts": {
     "build": "rspack build",

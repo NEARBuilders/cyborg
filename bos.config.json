@@ -11,7 +11,7 @@
       "title": "NEAR Agent",
       "description": "Template for building NEAR AI applications",
       "development": "http://localhost:3000",
-      "production": "https://elliot-braem-1818-host-every-plugin-near-everythi-fdf320911-ze.zephyrcloud.app",
+      "production": "https://near-agent.pages.dev",
       "secrets": [
         "HOST_DATABASE_URL",
         "HOST_DATABASE_AUTH_TOKEN",
@@ -22,19 +22,19 @@
     "ui": {
       "name": "ui",
       "development": "http://localhost:3002",
-      "production": "https://elliot-braem-1786-ui-cyborg-nearbuilders-46d98f16b-ze.zephyrcloud.app",
+      "production": "https://near-agent.pages.dev",
       "exposes": {
         "App": "./App",
         "components": "./components",
         "providers": "./providers",
         "types": "./types"
       },
-      "ssr": "https://elliot-braem-1899-ui-cyborg-nearbuilders-3c6c03f0e-ze.zephyrcloud.app"
+      "ssr": "https://near-agent.pages.dev"
     },
     "api": {
       "name": "api",
       "development": "http://localhost:3014",
-      "production": "https://elliot-braem-1788-api-cyborg-nearbuilders-ac0e7b73a-ze.zephyrcloud.app",
+      "production": "https://near-agent.pages.dev/api",
       "variables": {
         "NEAR_AI_MODEL": "deepseek-ai/DeepSeek-V3.1",
         "NEAR_RPC_URL": "https://rpc.mainnet.near.org",
