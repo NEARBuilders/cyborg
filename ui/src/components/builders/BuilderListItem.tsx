@@ -14,14 +14,16 @@ interface BuilderListItemProps {
 
 export function BuilderListItem({ builder, isSelected, onSelect }: BuilderListItemProps) {
   // Determine which NFT badges to show
+  // Ascendant (highest tier) - don't show lower tier badges
   const badges = [];
   if (builder.isLegion) {
     badges.push({ label: "Ascendant", className: "bg-purple-500/20 text-purple-400 border-purple-500/40", icon: "🏆" });
-  }
-  if (builder.isInitiate) {
+  } else if (builder.isInitiate) {
+    // Only show Initiate if not Ascendant
     badges.push({ label: "Initiate", className: "bg-emerald-500/20 text-emerald-400 border-emerald-500/40", icon: "🌱" });
   }
   if (builder.isNearlegion) {
+    // Legion NFT can be shown alongside Ascendant
     badges.push({ label: "Legion", className: "bg-orange-500/20 text-orange-400 border-orange-500/40", icon: "⚔️" });
   }
 

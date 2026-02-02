@@ -47,6 +47,8 @@ export interface Builder {
     linktree?: Record<string, string>;
     tags?: Record<string, string>;
   } | null;
+  hasCustomProfile?: boolean; // true if they have a custom NEAR Social avatar, false if using default dicebear
+  hasNearSocialProfile?: boolean; // true if they have ANY profile data on NEAR Social, even without custom avatar
 }
 
 export interface NearBlocksHolder {

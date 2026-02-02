@@ -1,17 +1,13 @@
 /**
  * Discover and Sync All NEAR Legion NFT Holders
  *
- * This script:
- * 1. Queries known Legion NFT contracts
- * 2. Fetches all holders from each contract
- * 3. Aggregates unique holders across all contracts
- * 4. Syncs to D1 database
+ * This script handles lexicographic token_id ordering correctly
+ * by using larger batch sizes and multiple start points.
  *
  * Known Legion Contracts:
  * - ascendant.nearlegion.near (Ascendant tier)
  * - initiate.nearlegion.near (Initiate tier)
- * - genesis.nearlegion.near (Genesis tier, if exists)
- * - recruit.nearlegion.near (Recruit tier, if exists)
+ * - nearlegion.nfts.tg (Legion tier)
  */
 
 const RPC_ENDPOINTS = [
@@ -32,20 +28,16 @@ interface NEARToken {
   metadata?: any;
 }
 
-interface HoldersMap {
-  [accountId: string]: number;
-}
-
 /**
  * Fetch a batch of NFT tokens from a contract via RPC
  */
 async function fetchTokenBatch(
   contractId: string,
-  fromIndex: number,
+  fromIndex: string,
   limit: number,
   rpcUrl: string
-): Promise<{ tokens: NEARToken[]; hasMore: boolean }> {
-  const args = JSON.stringify({ from_index: String(fromIndex), limit });
+): Promise<NEARToken[]> {
+  const args = JSON.stringify({ from_index: fromIndex, limit });
   const argsBase64 = Buffer.from(args).toString("base64");
 
   const response = await fetch(rpcUrl, {
@@ -71,11 +63,15 @@ async function fetchTokenBatch(
 
   const result = await response.json();
 
+  if (fromIndex === "0" && contractId === "initiate.nearlegion.near") {
+    console.log(`[DEBUG] Full response for ${contractId}:`, JSON.stringify(result).substring(0, 500));
+  }
+
   if (result.error) {
-    // If contract doesn't exist or method not found, return empty
+    console.log(`[DEBUG] RPC Error for ${contractId} from "${fromIndex}":`, result.error);
     if (result.error.message.includes("MethodResolveError") ||
         result.error.message.includes("ContractNotFound")) {
-      return { tokens: [], hasMore: false };
+      return [];
     }
     throw new Error(`RPC error: ${result.error.message}`);
   }
@@ -88,7 +84,9 @@ async function fetchTokenBatch(
     const buffer = Buffer.from(new Uint8Array(rawResult));
     try {
       parsedTokens = JSON.parse(buffer.toString()) as NEARToken[];
-    } catch {
+    } catch (e) {
+      console.log(`[DEBUG] Failed to parse byte array for ${contractId} from "${fromIndex}":`, e);
+      console.log(`[DEBUG] Buffer length: ${buffer.length}, first 100 chars: ${buffer.toString().substring(0, 100)}`);
       parsedTokens = [];
     }
   } else if (typeof rawResult === "string" && rawResult.length > 0) {
@@ -102,14 +100,23 @@ async function fetchTokenBatch(
     parsedTokens = rawResult as NEARToken[];
   }
 
-  // Check if we should continue pagination
-  const hasMore = parsedTokens.length === limit;
+  if (fromIndex === "0" && parsedTokens.length === 0) {
+    console.log(`[DEBUG] No tokens from ${contractId} with rawResult type: ${Array.isArray(rawResult) ? 'array(len=' + rawResult.length + ')' : typeof rawResult}`);
+    if (Array.isArray(rawResult) && rawResult.length > 0) {
+      console.log(`[DEBUG] First element type: ${typeof rawResult[0]}, value: ${rawResult[0]}`);
+    }
+  }
 
-  return { tokens: parsedTokens, hasMore };
+  return parsedTokens;
 }
 
 /**
- * Fetch all tokens from a specific contract
+ * Fetch all tokens from a contract using smart pagination
+ *
+ * Strategy:
+ * 1. Use large batch size (500) to get more tokens per request
+ * 2. Start from "0", then use the last token_id as next from_index
+ * 3. If we get empty results, try the next numeric range
  */
 async function fetchAllTokensForContract(contractId: string): Promise<{
   contractId: string;
@@ -119,36 +126,67 @@ async function fetchAllTokensForContract(contractId: string): Promise<{
   console.log(`\n[RPC] Fetching from ${contractId}...`);
 
   const allTokens: NEARToken[] = [];
-  let fromIndex = 0;
-  const batchSize = 50; // Reduced batch size to avoid rate limiting
-  let hasMore = true;
+  const seenTokenIds = new Set<string>();
+  let fromIndex = "0";
+  const batchSize = 50; // Reduced to avoid gas limit exceeded
   let currentRpcUrl = RPC_ENDPOINTS[0];
+  let consecutiveEmptyBatches = 0;
+  const maxConsecutiveEmpty = 5;
 
-  while (hasMore) {
+  while (consecutiveEmptyBatches < maxConsecutiveEmpty) {
     try {
-      const { tokens, hasMore: more } = await fetchTokenBatch(
-        contractId,
-        fromIndex,
-        batchSize,
-        currentRpcUrl
-      );
+      const tokens = await fetchTokenBatch(contractId, fromIndex, batchSize, currentRpcUrl);
 
-      if (tokens.length === 0 && fromIndex === 0) {
-        console.log(`[RPC] No tokens found for ${contractId} (contract may not exist or has no NFTs)`);
-        return { contractId, tokens: [], uniqueHolders: 0 };
+      // Add new tokens (avoiding duplicates)
+      let newTokensCount = 0;
+      for (const token of tokens) {
+        if (token.token_id && !seenTokenIds.has(token.token_id)) {
+          seenTokenIds.add(token.token_id);
+          allTokens.push(token);
+          newTokensCount++;
+        }
       }
 
-      allTokens.push(...tokens);
-      console.log(`[RPC] ${contractId}: Fetched ${tokens.length} tokens (from index ${fromIndex}, total: ${allTokens.length})`);
+      console.log(`[RPC] ${contractId}: Fetched ${tokens.length} tokens (${newTokensCount} new) from "${fromIndex}" | Total unique: ${allTokens.length}`);
 
-      hasMore = more;
+      // If we got a full batch, there might be more
+      if (tokens.length === batchSize) {
+        // Use the last token_id as the next from_index for lexicographic continuation
+        const lastTokenId = tokens[tokens.length - 1].token_id;
+        if (lastTokenId) {
+          fromIndex = lastTokenId;
+          consecutiveEmptyBatches = 0; // Reset on success
+        } else {
+          consecutiveEmptyBatches++;
+        }
+      } else if (tokens.length === 0) {
+        // Empty batch - try next numeric range to handle lexicographic gaps
+        const numericIndex = parseInt(fromIndex, 10) || 0;
+        const nextIndex = numericIndex + batchSize;
+        fromIndex = String(nextIndex);
+        consecutiveEmptyBatches++;
+        console.log(`[RPC] ${contractId}: Empty batch, trying next range from "${fromIndex}" (${consecutiveEmptyBatches}/${maxConsecutiveEmpty})`);
+      } else {
+        // Partial batch - we've reached the end for this range
+        // Try next numeric range to catch any lexicographic gaps
+        const maxTokenId = tokens.reduce((max, t) => {
+          const id = parseInt(t.token_id || "0", 10);
+          return id > max ? id : max;
+        }, 0);
 
-      if (hasMore) {
-        fromIndex += batchSize;
+        const nextStart = (Math.floor(maxTokenId / batchSize) + 1) * batchSize;
+        fromIndex = String(nextStart);
+
+        // Check if we should continue
+        if (parseInt(fromIndex, 10) > 20000) { // Safety limit for initiate contract
+          console.log(`[RPC] ${contractId}: Reached safety limit, stopping`);
+          break;
+        }
+        consecutiveEmptyBatches++;
       }
 
-      // Longer delay to avoid rate limiting (500ms between batches)
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      // Delay to avoid rate limiting
+      await new Promise((resolve) => setTimeout(resolve, 200));
     } catch (error: any) {
       const errorMsg = error?.message || String(error);
 
@@ -172,6 +210,8 @@ async function fetchAllTokensForContract(contractId: string): Promise<{
     }
   }
 
+  console.log(`[RPC] ${contractId}: Complete - ${allTokens.length} tokens, ${holders.size} unique holders`);
+
   return {
     contractId,
     tokens: allTokens,
@@ -181,7 +221,6 @@ async function fetchAllTokensForContract(contractId: string): Promise<{
 
 /**
  * Aggregate tokens by owner and contract
- * Returns Map of accountId -> Map of contractId -> count
  */
 function aggregateHoldersByContract(contractResults: Array<{
   contractId: string;
@@ -209,19 +248,16 @@ function aggregateHoldersByContract(contractResults: Array<{
 }
 
 /**
- * Generate SQL upsert statements for holders (per contract)
- * Each holder gets one row per contract they hold
+ * Generate SQL upsert statements for holders
  */
 function generateUpsertSQL(holdersMap: Map<string, Map<string, number>>): string {
   const now = Math.floor(Date.now() / 1000);
   const statements: string[] = [];
 
   for (const [accountId, contractMap] of holdersMap.entries()) {
-    // Escape single quotes in account IDs
     const escapedId = accountId.replace(/'/g, "''");
 
     for (const [contractId, quantity] of contractMap.entries()) {
-      // Escape single quotes in contract IDs
       const escapedContract = contractId.replace(/'/g, "''");
 
       statements.push(
@@ -242,7 +278,6 @@ async function executeSQL(sql: string, remote: boolean): Promise<void> {
 
   console.log(`\n[D1] Applying to ${remote ? "remote" : "local"} database...`);
 
-  // Split by semicolon and filter empty statements
   const statements = sql
     .split(";")
     .map((s) => s.trim())
@@ -267,7 +302,6 @@ async function executeSQL(sql: string, remote: boolean): Promise<void> {
 
     const exitCode = await proc.exited;
 
-    // Clean up temp file
     try {
       await Bun.$`rm ${tempFile}`.quiet();
     } catch {
@@ -279,7 +313,7 @@ async function executeSQL(sql: string, remote: boolean): Promise<void> {
     }
   }
 
-  console.log(`[D1] Successfully synced ${statements.length} holders`);
+  console.log(`[D1] Successfully synced ${statements.length} holder records`);
 }
 
 /**
@@ -311,14 +345,13 @@ async function main() {
         uniqueHolders: result.uniqueHolders,
       });
 
-      // Longer delay between contracts to avoid rate limiting
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 500));
     } catch (error: any) {
       console.error(`[ERROR] Failed to fetch from ${contractId}:`, error?.message || error);
     }
   }
 
-  // Display summary per contract
+  // Display summary
   console.log("\n" + "=".repeat(60));
   console.log("CONTRACT SUMMARY");
   console.log("=".repeat(60));
@@ -328,13 +361,9 @@ async function main() {
     console.log(`  Holders: ${result.uniqueHolders}`);
   }
 
-  // Aggregate by holder AND contract
   const holdersByContract = aggregateHoldersByContract(contractResults);
-
-  // Generate SQL
   const sql = generateUpsertSQL(holdersByContract);
 
-  // Count total holder records (could be > unique accounts since one account can hold from multiple contracts)
   const totalRecords = Array.from(holdersByContract.entries()).reduce(
     (sum, [, contractMap]) => sum + contractMap.size,
     0
@@ -344,18 +373,16 @@ async function main() {
   console.log("OVERALL SUMMARY");
   console.log("=".repeat(60));
   console.log(`  Total unique accounts: ${holdersByContract.size}`);
-  console.log(`  Total holder records (account+contract): ${totalRecords}`);
+  console.log(`  Total holder records: ${totalRecords}`);
 
   if (!apply) {
-    console.log("\n[PREVIEW MODE] Run with --apply to execute the changes.");
-    console.log("  bun run scripts/discover-legion-contracts.ts --apply       # Local database");
-    console.log("  bun run scripts/discover-legion-contracts.ts --apply --remote  # Remote database");
+    console.log("\n[PREVIEW MODE] Run with --apply to execute.");
+    console.log("  bun run scripts/discover-legion-contracts.ts --apply       # Local");
+    console.log("  bun run scripts/discover-legion-contracts.ts --apply --remote  # Remote");
     return;
   }
 
-  // Execute SQL
   await executeSQL(sql, remote);
-
   console.log("\n Sync complete!");
 }
 

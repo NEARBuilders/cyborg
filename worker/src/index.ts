@@ -11,9 +11,11 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { Social } from "near-social-js";
+import { eq, like, or, sql } from "drizzle-orm";
 import type { Env } from "./types";
 import { createAuth, getSessionFromRequest } from "./auth";
 import { createDatabase } from "./db";
+import * as schema from "./db/schema";
 import { NearService, createAgentService } from "./services";
 import { createApiRoutes } from "./routes/api";
 import { CacheService } from "./services/cache";
@@ -219,6 +221,54 @@ app.get("/nfts/legion/holders/:accountId", async (c) => {
 });
 
 // =============================================================================
+// PUBLIC BUILDERS ENDPOINTS (Database-backed, no NEARBlocks API)
+// =============================================================================
+
+// Legacy route at /builders/:id (without /api prefix)
+const buildersLegacyRoutes = new Hono<{ Bindings: Env }>();
+buildersLegacyRoutes.use("*", createHostGuard());
+
+buildersLegacyRoutes.get("/:id", async (c) => {
+  const accountId = c.req.param("id");
+  const db = createDatabase(c.env.DB);
+
+  try {
+    // Fetch profile from database
+    const profile = await db.query.nearSocialProfiles.findFirst({
+      where: eq(schema.nearSocialProfiles.accountId, accountId),
+    });
+
+    if (!profile) {
+      return c.json({ error: "Profile not found" }, 404);
+    }
+
+    // Parse profile data JSON
+    const profileData = JSON.parse(profile.profileData);
+
+    // Check if user holds any Legion NFTs
+    const holdings = await db.query.legionHolders.findMany({
+      where: eq(schema.legionHolders.accountId, accountId),
+    });
+
+    return c.json({
+      accountId: profile.accountId,
+      profile: profileData,
+      holdings: holdings.map(h => ({
+        contractId: h.contractId,
+        quantity: h.quantity,
+      })),
+      lastSyncedAt: new Date(profile.lastSyncedAt * 1000).toISOString(),
+    });
+  } catch (error) {
+    console.error("[BUILDERS] Error fetching profile:", error);
+    return c.json({ error: "Failed to fetch profile" }, 500);
+  }
+});
+
+// Mount legacy routes
+app.route("/builders", buildersLegacyRoutes);
+
+// =============================================================================
 // PUBLIC BUILDERS ENDPOINTS (with host guard)
 // =============================================================================
 
@@ -283,6 +333,239 @@ publicRoutes.get("/:id", async (c) => {
     return c.json(result.data);
   } else {
     return c.json({ error: result.error }, result.status as 400 | 500);
+  }
+});
+
+// =============================================================================
+// BUILDERS WITH PROFILES - Single optimized endpoint
+// Returns holders + cached profiles from database in one call
+// =============================================================================
+
+// Get a single builder with their cached profile
+app.get("/api/builders/:accountId", async (c) => {
+  try {
+    const accountId = c.req.param("accountId");
+
+    // Use D1 binding to fetch holder data
+    const holderResult = await c.env.DB.prepare(
+      `
+      SELECT
+        account_id,
+        MAX(CASE WHEN contract_id = 'ascendant.nearlegion.near' THEN 1 ELSE 0 END) as is_ascendant,
+        MAX(CASE WHEN contract_id = 'initiate.nearlegion.near' THEN 1 ELSE 0 END) as is_initiate,
+        MAX(CASE WHEN contract_id = 'nearlegion.nfts.tg' THEN 1 ELSE 0 END) as is_nearlegion
+      FROM legion_holders
+      WHERE account_id = ?
+      GROUP BY account_id
+      `
+    ).bind(accountId).first();
+
+    // If not a holder, still return profile data if available
+    const isAscendant = holderResult?.is_ascendant === 1;
+    const isInitiate = holderResult?.is_initiate === 1;
+    const isNearlegion = holderResult?.is_nearlegion === 1;
+
+    // Fetch profile from database
+    const db = createDatabase(c.env.DB);
+    const profileRecord = await db.query.nearSocialProfiles.findFirst({
+      where: (profile, { eq }) => eq(profile.accountId, accountId),
+    });
+
+    const parsedProfile = profileRecord?.profileData
+      ? JSON.parse(profileRecord.profileData)
+      : null;
+
+    // Determine role and tags
+    let role = "Member";
+    let tags = ["Community Member"];
+
+    if (isAscendant) {
+      role = "Ascendant";
+      tags = ["NEAR Expert", "Developer", "Community Leader"];
+    } else if (isInitiate) {
+      role = "Initiate";
+      tags = ["Web3 Enthusiast", "NEAR Builder"];
+    } else if (isNearlegion) {
+      role = "Legion";
+      tags = ["NEAR Builder"];
+    }
+
+    // Check if custom avatar
+    const defaultAvatarPattern = /^https:\/\/api\.dicebear\.com\/7\.x\/avataaars\/svg/;
+    const avatarUrl = parsedProfile?.image?.ipfs_cid
+      ? `https://ipfs.near.social/ipfs/${parsedProfile.image.ipfs_cid}`
+      : parsedProfile?.image?.url ||
+        `https://api.dicebear.com/7.x/avataaars/svg?seed=${accountId}`;
+
+    const hasCustomAvatar = avatarUrl && !defaultAvatarPattern.test(avatarUrl);
+
+    const backgroundUrl = parsedProfile?.backgroundImage?.ipfs_cid
+      ? `https://ipfs.near.social/ipfs/${parsedProfile.backgroundImage.ipfs_cid}`
+      : parsedProfile?.backgroundImage?.url || null;
+
+    return c.json({
+      id: accountId,
+      accountId,
+      displayName: parsedProfile?.name || accountId.split(".")[0],
+      avatar: avatarUrl,
+      backgroundImage: backgroundUrl,
+      description:
+        parsedProfile?.description ||
+        `A passionate builder in the NEAR ecosystem.`,
+      tags: parsedProfile?.tags
+        ? Object.keys(parsedProfile.tags)
+        : tags,
+      role,
+      projects: [],
+      socials: {
+        github:
+          parsedProfile?.linktree?.github ||
+          accountId.replace(".near", "").toLowerCase(),
+        twitter: parsedProfile?.linktree?.twitter,
+        website: parsedProfile?.linktree?.website,
+        telegram: parsedProfile?.linktree?.telegram,
+      },
+      isLegion: isAscendant,
+      isInitiate: isInitiate,
+      isNearlegion: isNearlegion,
+      nearSocialProfile: parsedProfile,
+      hasCustomProfile: hasCustomAvatar,
+      hasNearSocialProfile: !!parsedProfile,
+    });
+  } catch (error) {
+    console.error("[API] Error fetching builder:", error);
+    return c.json({ error: "Failed to fetch builder", details: error instanceof Error ? error.message : String(error) }, 500);
+  }
+});
+
+app.get("/api/builders-with-profiles", async (c) => {
+  try {
+    const url = new URL(c.req.url);
+    const offset = parseInt(url.searchParams.get("offset") || "0");
+    const limit = parseInt(url.searchParams.get("limit") || "50");
+
+    // Use D1 binding directly for raw SQL
+    const result = await c.env.DB.prepare(
+      `
+      SELECT
+        account_id,
+        MAX(CASE WHEN contract_id = 'ascendant.nearlegion.near' THEN 1 ELSE 0 END) as is_ascendant,
+        MAX(CASE WHEN contract_id = 'initiate.nearlegion.near' THEN 1 ELSE 0 END) as is_initiate,
+        MAX(CASE WHEN contract_id = 'nearlegion.nfts.tg' THEN 1 ELSE 0 END) as is_nearlegion
+      FROM legion_holders
+      GROUP BY account_id
+      ORDER BY account_id
+      LIMIT ? OFFSET ?
+      `
+    ).bind(limit, offset).all();
+
+    // Fetch total count
+    const countResult = await c.env.DB.prepare(
+      `SELECT COUNT(DISTINCT account_id) as count FROM legion_holders`
+    ).first();
+
+    const total = countResult?.count as number || 0;
+    const rows = result.results || [];
+
+    // Get all account IDs for batch profile lookup
+    const accountIds = rows.map((r: any) => r.account_id);
+
+    // Use Drizzle for profile lookup
+    const db = createDatabase(c.env.DB);
+    const profiles = accountIds.length > 0 ? await db.query.nearSocialProfiles.findMany({
+      where: (profile, { inArray }) => inArray(profile.accountId, accountIds),
+    }) : [];
+
+    // Create a map for quick lookup
+    const profileMap = new Map(
+      profiles.map((p) => [
+        p.accountId,
+        {
+          name: p.name,
+          image: p.image,
+          description: p.description,
+          profileData: p.profileData,
+        },
+      ])
+    );
+
+    // Combine accounts with their profiles
+    const builders = rows.map((row: any) => {
+      const profile = profileMap.get(row.account_id);
+      const parsedProfile = profile?.profileData
+        ? JSON.parse(profile.profileData)
+        : null;
+
+      // Determine role and tags
+      let role = "Member";
+      let tags = ["Community Member"];
+
+      if (row.is_ascendant) {
+        role = "Ascendant";
+        tags = ["NEAR Expert", "Developer", "Community Leader"];
+      } else if (row.is_initiate) {
+        role = "Initiate";
+        tags = ["Web3 Enthusiast", "NEAR Builder"];
+      } else if (row.is_nearlegion) {
+        role = "Legion";
+        tags = ["NEAR Builder"];
+      }
+
+      // Check if custom avatar
+      const defaultAvatarPattern = /^https:\/\/api\.dicebear\.com\/7\.x\/avataaars\/svg/;
+      const avatarUrl = parsedProfile?.image?.ipfs_cid
+        ? `https://ipfs.near.social/ipfs/${parsedProfile.image.ipfs_cid}`
+        : parsedProfile?.image?.url ||
+          `https://api.dicebear.com/7.x/avataaars/svg?seed=${row.account_id}`;
+
+      const hasCustomAvatar = avatarUrl && !defaultAvatarPattern.test(avatarUrl);
+
+      // Background image
+      const backgroundUrl = parsedProfile?.backgroundImage?.ipfs_cid
+        ? `https://ipfs.near.social/ipfs/${parsedProfile.backgroundImage.ipfs_cid}`
+        : parsedProfile?.backgroundImage?.url || null;
+
+      return {
+        id: row.account_id,
+        accountId: row.account_id,
+        displayName: parsedProfile?.name || row.account_id.split(".")[0],
+        avatar: avatarUrl,
+        backgroundImage: backgroundUrl,
+        description:
+          parsedProfile?.description ||
+          `A passionate builder in the NEAR ecosystem.`,
+        tags: parsedProfile?.tags
+          ? Object.keys(parsedProfile.tags)
+          : tags,
+        role,
+        projects: [],
+        socials: {
+          github:
+            parsedProfile?.linktree?.github ||
+            row.account_id.replace(".near", "").toLowerCase(),
+          twitter: parsedProfile?.linktree?.twitter,
+          website: parsedProfile?.linktree?.website,
+          telegram: parsedProfile?.linktree?.telegram,
+        },
+        isLegion: row.is_ascendant,
+        isInitiate: row.is_initiate,
+        isNearlegion: row.is_nearlegion,
+        nearSocialProfile: parsedProfile,
+        hasCustomProfile: hasCustomAvatar,
+        hasNearSocialProfile: !!parsedProfile,
+      };
+    });
+
+    return c.json({
+      builders,
+      total,
+      offset,
+      limit,
+      hasMore: offset + builders.length < total,
+    });
+  } catch (error) {
+    console.error("[API] Error fetching builders with profiles:", error);
+    return c.json({ error: "Failed to fetch builders", details: error instanceof Error ? error.message : String(error) }, 500);
   }
 });
 
@@ -395,6 +678,67 @@ profilesRoutes.get("/", async (c) => {
   return c.json(allProfiles);
 });
 
+// Search profiles by account ID or name (for real-time search)
+profilesRoutes.get("/search", async (c) => {
+  const url = new URL(c.req.url);
+  const query = url.searchParams.get("q")?.trim().toLowerCase();
+
+  if (!query || query.length < 2) {
+    return c.json([]);
+  }
+
+  // Validate query to prevent injection - only allow safe characters
+  const validatedQuery = query.replace(/[^a-z0-9._@-]/g, "");
+  if (validatedQuery.length === 0) {
+    return c.json([]);
+  }
+
+  try {
+    const db = createDatabase(c.env.DB);
+
+    // Search for partial matches on account_id or name
+    // Limit results to 20 to prevent overwhelming responses
+    const results = await db
+      .select({
+        accountId: schema.nearSocialProfiles.accountId,
+        profileData: schema.nearSocialProfiles.profileData,
+        name: schema.nearSocialProfiles.name,
+        image: schema.nearSocialProfiles.image,
+        description: schema.nearSocialProfiles.description,
+      })
+      .from(schema.nearSocialProfiles)
+      .where(
+        or(
+          like(schema.nearSocialProfiles.accountId, `%${validatedQuery}%`),
+          like(schema.nearSocialProfiles.name, `%${validatedQuery}%`)
+        )
+      )
+      .limit(20);
+
+    // Return profiles as a flat array keyed by accountId
+    const profiles: Record<string, any> = {};
+    for (const result of results) {
+      if (result.accountId && result.profileData) {
+        try {
+          profiles[result.accountId] = JSON.parse(result.profileData);
+        } catch {
+          // If JSON parse fails, construct minimal profile
+          profiles[result.accountId] = {
+            name: result.name || result.accountId,
+            image: result.image,
+            description: result.description,
+          };
+        }
+      }
+    }
+
+    return c.json(profiles);
+  } catch (error) {
+    console.error("[PROFILES] Search error:", error);
+    return c.json({}, 500);
+  }
+});
+
 profilesRoutes.get("/:accountId", async (c) => {
   const accountId = c.req.param("accountId");
   const cache = new CacheService(c.env.CACHE);
@@ -480,6 +824,79 @@ app.all("/auth/*", async (c) => {
   const response = await auth.handler(c.req.raw);
   return response;
 });
+
+// =============================================================================
+// PUBLIC PROFILE UPSERT ENDPOINT (with host guard)
+// Saves NEAR Social profiles to database to keep data fresh
+// =============================================================================
+
+const profileUpsertRoutes = new Hono<{ Bindings: Env }>();
+profileUpsertRoutes.use("*", createHostGuard());
+
+profileUpsertRoutes.post("/", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { accountId, profileData } = body;
+
+    if (!accountId || !profileData) {
+      return c.json({ error: "Missing accountId or profileData" }, 400);
+    }
+
+    // Validate accountId - only allow safe characters
+    const validatedAccountId = String(accountId)
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9._-]/g, ""); // Only allow alphanumeric, dots, hyphens, underscores
+
+    if (validatedAccountId.length === 0 || validatedAccountId.length > 100) {
+      return c.json({ error: "Invalid accountId format" }, 400);
+    }
+
+    const db = createDatabase(c.env.DB);
+    const now = Math.floor(Date.now() / 1000);
+
+    // Extract common fields for faster queries
+    const name = String(profileData?.name || "").substring(0, 200); // Limit name length
+    const imageValue = profileData?.image;
+    let image = "";
+    if (typeof imageValue === "string") {
+      image = imageValue.substring(0, 500); // Limit URL length
+    } else if (imageValue && typeof imageValue === "object") {
+      image = (imageValue.url || imageValue.ipfs_cid || "").substring(0, 500);
+    }
+    const description = String(profileData?.description || "").substring(0, 2000); // Limit description
+
+    // Upsert profile to database
+    await db.insert(schema.nearSocialProfiles)
+      .values({
+        accountId: validatedAccountId,
+        profileData: JSON.stringify(profileData),
+        name,
+        image,
+        description,
+        lastSyncedAt: now,
+        syncedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: [schema.nearSocialProfiles.accountId],
+        set: {
+          profileData: JSON.stringify(profileData),
+          name,
+          image,
+          description,
+          lastSyncedAt: now,
+          syncedAt: now,
+        },
+      });
+
+    return c.json({ success: true, accountId: validatedAccountId });
+  } catch (error) {
+    console.error("[API] Error upserting profile:", error);
+    return c.json({ error: "Failed to save profile" }, 500);
+  }
+});
+
+app.route("/api/profiles/upsert", profileUpsertRoutes);
 
 // =============================================================================
 // AUTHENTICATED API ROUTES

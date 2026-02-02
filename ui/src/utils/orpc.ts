@@ -50,15 +50,22 @@ function createApiLink() {
     url: getApiUrl,
     interceptors: [
       onError((error: unknown) => {
-        console.error('oRPC API Error:', error);
-        
+        // Only show toasts for network errors, not "Not Found"
+        // We're using direct database endpoints now, not oRPC for everything
         if (error && typeof error === 'object' && 'message' in error) {
           const message = String(error.message).toLowerCase();
+
+          // Only show toast for network/fetch errors
           if (message.includes('fetch') || message.includes('network') || message.includes('failed to fetch')) {
             toast.error('Unable to connect to API', {
               id: 'api-connection-error',
               description: 'The API is currently unavailable. Please try again later.',
             });
+          }
+
+          // Silently ignore "Not Found" errors
+          if (!message.includes('not found')) {
+            console.error('oRPC API Error:', error);
           }
         }
       }),

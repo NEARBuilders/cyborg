@@ -1,10 +1,11 @@
 import { createFileRoute, useParams } from "@tanstack/react-router";
 import { BuilderDetails } from "@/components/builders/BuilderDetails";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useBuildersWithProfiles, useUserRank } from "@/hooks";
+import { useBuilders, useUserRank } from "@/hooks";
 import { useProfile } from "@/integrations/near-social-js";
 import type { Builder } from "@/types/builders";
 import { useMemo, useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 export const Route = createFileRoute("/_layout/builders/$builderId")({
   component: BuilderDetailPage,
@@ -37,27 +38,60 @@ export const Route = createFileRoute("/_layout/builders/$builderId")({
 
 function BuilderDetailPage() {
   const { builderId } = useParams({ strict: false });
-  const { builders, isLoading: isLoadingBuilders } = useBuildersWithProfiles();
+  const { builders, isLoading: isLoadingBuilders } = useBuilders();
 
-  // Find the builder from the NFT holder list
+  // Find the builder from the already-loaded list
   const builderFromList = useMemo(
     () => builders.find((b) => b.accountId === builderId),
     [builders, builderId],
   );
 
-  // Fetch NEAR Social profile directly for this account
-  const { data: profile, isLoading: isLoadingProfile } = useProfile(builderId);
+  // If builder is not in the loaded list, fetch from database API
+  const { data: builderFromDb, isLoading: isLoadingFromDb } = useQuery({
+    queryKey: ["builder", builderId],
+    queryFn: async () => {
+      const response = await fetch(`/api/builders/${builderId}`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch builder: ${response.statusText}`);
+      }
+      return response.json() as Promise<Builder>;
+    },
+    enabled: !builderFromList && !!builderId, // Only fetch if not in list
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+
+  // Determine which builder to use
+  const builder = builderFromList || builderFromDb;
+
+  // Fetch NEAR Social profile directly only if builder not found in DB
+  const { data: profile, isLoading: isLoadingProfile } = useProfile(
+    builder ? undefined : builderId
+  ); // Only fetch if we don't have builder data
+
+  // Upsert profile to database when loaded from NEAR Social
+  useEffect(() => {
+    if (profile && !builder) {
+      fetch("/api/profiles/upsert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accountId: builderId,
+          profileData: profile,
+        }),
+      }).catch((err) => {
+        console.warn("[BuilderProfile] Failed to upsert profile:", err);
+      });
+    }
+  }, [profile, builderId, builder]);
 
   // Prefetch rank for this builder
   useUserRank(builderId as string);
 
-  // Create a builder object from NEAR Social profile if not in the list
-  const builder = useMemo(() => {
-    if (builderFromList) {
-      return builderFromList;
+  // Create a builder object from NEAR Social profile if not found anywhere
+  const finalBuilder = useMemo(() => {
+    if (builder) {
+      return builder;
     }
-
-    // If not in the list but has a NEAR Social profile, create a builder from it
     if (profile) {
       const avatarUrl = profile.image?.ipfs_cid
         ? `https://ipfs.near.social/ipfs/${profile.image.ipfs_cid}`
@@ -69,13 +103,17 @@ function BuilderDetailPage() {
 
       const displayName = profile.name || builderId.split(".")[0];
 
+      const finalAvatar = avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${builderId}`;
+
+      // Check if they have a custom avatar
+      const defaultAvatarPattern = /^https:\/\/api\.dicebear\.com\/7\.x\/avataaars\/svg/;
+      const hasCustomAvatar = finalAvatar && !defaultAvatarPattern.test(finalAvatar);
+
       return {
         id: builderId,
         accountId: builderId,
         displayName,
-        avatar:
-          avatarUrl ||
-          `https://api.dicebear.com/7.x/avataaars/svg?seed=${builderId}`,
+        avatar: finalAvatar,
         backgroundImage: backgroundUrl,
         description: profile.description || "A member of the NEAR community.",
         tags: profile.tags ? Object.keys(profile.tags) : ["NEAR Community"],
@@ -91,23 +129,25 @@ function BuilderDetailPage() {
         isLegion: false,
         isInitiate: false,
         nearSocialProfile: profile,
+        hasCustomProfile: hasCustomAvatar,
+        hasNearSocialProfile: true,
       } as Builder;
     }
 
     return null;
-  }, [builderFromList, profile, builderId]);
+  }, [builder, profile, builderId]);
 
-  const isLoading = isLoadingBuilders || isLoadingProfile;
+  const isLoading = isLoadingBuilders || isLoadingFromDb || isLoadingProfile;
 
   // Add minimum duration for smoother transitions
   const [showSkeleton, setShowSkeleton] = useState(true);
   const [minDurationElapsed, setMinDurationElapsed] = useState(false);
 
   useEffect(() => {
-    // Show skeleton for at least 300ms to avoid flash
+    // Show skeleton for at least 800ms for smooth transition feel
     const timer = setTimeout(() => {
       setMinDurationElapsed(true);
-    }, 300);
+    }, 800);
 
     return () => clearTimeout(timer);
   }, [builderId]);
@@ -129,7 +169,7 @@ function BuilderDetailPage() {
     return <BuilderDetailSkeleton />;
   }
 
-  if (!builder) {
+  if (!finalBuilder) {
     return (
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center space-y-3">
@@ -150,7 +190,7 @@ function BuilderDetailPage() {
 
   return (
     <div className="flex-1 min-h-0 overflow-y-scroll animate-in fade-in duration-300">
-      <BuilderDetails builder={builder} />
+      <BuilderDetails builder={finalBuilder} />
     </div>
   );
 }

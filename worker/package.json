@@ -10,7 +10,7 @@
     "build:ui": "cd ../ui && bun run build:pages && cp .assetsignore dist/.assetsignore",
     "deploy:ui": "cd ../ui && npx wrangler pages deploy dist --project-name=near-agent",
     "deploy:ui:demo": "cd ../ui && npx wrangler pages deploy dist --project-name=near-agent --branch demo",
-    "deploy:worker": "wrangler deploy --env=\"\"",
+    "deploy:worker": "wrangler deploy",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "wrangler d1 migrations apply near-agent-db",
     "db:migrate:local": "wrangler d1 migrations apply near-agent-db --local",
@@ -18,6 +18,10 @@
     "holders:preview": "bun run scripts/sync-holders.ts",
     "holders:sync:local": "bun run scripts/sync-holders.ts --apply",
     "holders:sync:remote": "bun run scripts/sync-holders.ts --apply --remote",
+    "profiles:sync:local": "bun run scripts/sync-profiles.ts",
+    "profiles:sync:remote": "bun run scripts/sync-profiles.ts --remote",
+    "sync:all:local": "bun run scripts/sync-all.ts",
+    "sync:all:remote": "bun run scripts/sync-all.ts --remote",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -33,8 +37,9 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241230.0",
-    "wrangler": "^3.99.0",
+    "better-sqlite3": "^12.6.2",
     "drizzle-kit": "^0.31.8",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "wrangler": "^3.99.0"
   }
 }

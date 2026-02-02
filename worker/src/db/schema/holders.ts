@@ -53,3 +53,29 @@ export const ascendantHolders = sqliteTable(
 );
 
 export type AscendantHolder = typeof ascendantHolders.$inferSelect;
+
+// =============================================================================
+// NEAR SOCIAL PROFILES
+// Cached profiles from social.near contract
+// =============================================================================
+
+export const nearSocialProfiles = sqliteTable(
+  "near_social_profiles",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    accountId: text("account_id").notNull().unique(),
+    profileData: text("profile_data").notNull(), // JSON string of profile data
+    name: text("name"), // Extracted name for faster queries
+    image: text("image"), // Extracted image URL for faster queries
+    description: text("description"), // Extracted bio/description
+    lastSyncedAt: integer("last_synced_at").notNull(),
+    syncedAt: integer("synced_at").notNull(),
+  },
+  (table) => ({
+    accountIdIdx: index("near_social_profiles_account_id_idx").on(table.accountId),
+    nameIdx: index("near_social_profiles_name_idx").on(table.name),
+    lastSyncedAtIdx: index("near_social_profiles_last_synced_at_idx").on(table.lastSyncedAt),
+  })
+);
+
+export type NearSocialProfile = typeof nearSocialProfiles.$inferSelect;

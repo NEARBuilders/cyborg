@@ -73,9 +73,6 @@ function BuildersLayout() {
     );
   }
 
-  // Find selected builder for highlighting in list
-  const selectedBuilder = builders.find(b => b.accountId === builderId);
-
   return (
     <div className="h-full flex flex-col lg:flex-row">
       {/* Builder List - Hidden on mobile when builder is selected */}
@@ -84,7 +81,7 @@ function BuildersLayout() {
       >
         <BuilderList
           builders={builders}
-          selectedId={selectedBuilder?.id || ""}
+          selectedId={builderId || ""}
           onSelect={handleSelectBuilder}
           isLoading={isLoading}
           isLoadingMore={isLoadingMore}

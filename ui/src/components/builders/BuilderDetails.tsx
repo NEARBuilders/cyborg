@@ -7,7 +7,7 @@ import { useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Markdown } from "@/components/ui/markdown";
-import type { Builder } from "./BuilderListItem";
+import type { Builder } from "@/types/builders";
 
 interface BuilderDetailsProps {
   builder: Builder;
