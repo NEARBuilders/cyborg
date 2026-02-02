@@ -15,6 +15,9 @@
     "db:migrate": "wrangler d1 migrations apply near-agent-db",
     "db:migrate:local": "wrangler d1 migrations apply near-agent-db --local",
     "db:studio": "drizzle-kit studio",
+    "holders:preview": "bun run scripts/sync-holders.ts",
+    "holders:sync:local": "bun run scripts/sync-holders.ts --apply",
+    "holders:sync:remote": "bun run scripts/sync-holders.ts --apply --remote",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

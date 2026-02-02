@@ -16,7 +16,19 @@ interface BuilderDetailsProps {
 export function BuilderDetails({ builder }: BuilderDetailsProps) {
   return (
     <div className="flex-1 min-h-0 border border-primary/30 bg-background overflow-y-auto">
-      <div className="p-4 sm:p-6 space-y-6">
+      {/* Background Image Banner */}
+      {builder.backgroundImage && (
+        <div className="relative h-48 sm:h-56 lg:h-64 overflow-hidden">
+          <img
+            src={builder.backgroundImage}
+            alt=""
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-background/80 via-background/40 to-background" />
+        </div>
+      )}
+
+      <div className={`p-4 sm:p-6 space-y-6 ${builder.backgroundImage ? "-mt-16 sm:-mt-20 relative" : ""}`}>
         {/* Header */}
         <BuilderHeader builder={builder} />
 

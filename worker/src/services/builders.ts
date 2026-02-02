@@ -19,8 +19,8 @@ interface BuildersResult {
   data: unknown;
 }
 
-const CACHE_TTL_SECONDS = 300; // 5 minutes for builders
-const COUNT_CACHE_TTL_SECONDS = 600; // 10 minutes for counts
+const CACHE_TTL_SECONDS = 86400; // 24 hours for builders list (rarely changes)
+const COUNT_CACHE_TTL_SECONDS = 86400; // 24 hours for counts
 
 /**
  * Handle builders API request
@@ -102,10 +102,25 @@ export async function handleBuildersRequest(input: BuildersInput): Promise<Build
     if (!response.ok) {
       console.error(`[API] NEARBlocks API error: ${response.status} ${response.statusText} for ${targetUrl}`);
 
-      if (response.status === 429) {
+      // If rate limited, try to return stale cached data
+      if (response.status === 429 && cache) {
+        console.log(`[API] Rate limited, checking for stale cache for: ${path}`);
+        const staleKey = `nearblocks:${path}:${queryString}:stale`;
+        const staleData = await cache.get<any>(staleKey);
+
+        if (staleData) {
+          console.log(`[API] Returning stale cached data for: ${path}`);
+          return {
+            success: true,
+            error: null,
+            status: 200,
+            data: staleData,
+          };
+        }
+
         return {
           success: false,
-          error: `Rate limited by NEARBlocks API (${path}). Please try again later.`,
+          error: `Rate limited by NEARBlocks API (${path}). No cached data available. Please try again in a few minutes.`,
           status: response.status,
           data: null,
         };
@@ -124,8 +139,14 @@ export async function handleBuildersRequest(input: BuildersInput): Promise<Build
     // Cache successful response in KV
     if (cache) {
       const cacheKey = `nearblocks:${path}:${queryString}`;
+      const staleKey = `nearblocks:${path}:${queryString}:stale`;
+
+      // Store fresh cache with normal TTL
       await cache.set(cacheKey, data, ttl);
-      console.log(`[KV CACHE] Stored data for: ${path}, TTL: ${ttl}s`);
+      // Store stale cache with much longer TTL for fallback when rate limited
+      await cache.set(staleKey, data, ttl * 2); // 2x longer for stale cache (48 hours)
+
+      console.log(`[KV CACHE] Stored data for: ${path}, TTL: ${ttl}s (stale: ${ttl * 4}s)`);
     }
 
     console.log(`[API] Successfully fetched data from NEARBlocks:`, Object.keys(data as object));

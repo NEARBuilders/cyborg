@@ -1,5 +1,5 @@
 /**
- * Hook for fetching Builder data from NEARBlocks API
+ * Hook for fetching Builder data from NEAR NFT collections
  * Uses TanStack Query's useInfiniteQuery for reliable infinite scroll
  */
 
@@ -19,61 +19,82 @@ function getApiBaseUrl(): string {
 
 // Configuration constants
 const PAGE_SIZE = 25;
-const LEGION_CONTRACT = "ascendant.nearlegion.near";
+
+// Legion NFT contracts
+const ASCENDANT_CONTRACT = "ascendant.nearlegion.near";
 const INITIATE_CONTRACT = "initiate.nearlegion.near";
+const NEARLEGION_CONTRACT = "nearlegion.nfts.tg";
 
 interface FetchHoldersParams {
-  contractId: string;
   page: number;
   limit: number;
 }
 
-async function fetchHolders({ contractId, page, limit }: FetchHoldersParams): Promise<{
-  holders: string[];
+/**
+ * Fetch all Legion NFT holders in a single API call
+ * Returns holders separated by contract type
+ */
+async function fetchAllLegionHolders({ page, limit }: FetchHoldersParams): Promise<{
+  ascendantHolders: string[];
+  initiateHolders: string[];
+  nearlegionHolders: string[];
   hasMore: boolean;
 }> {
-  // NEARBlocks API uses 1-based paging (page starts at 1, not 0)
-  const response = await fetch(`${getApiBaseUrl()}/api/builders`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      path: `nfts/${contractId}/holders`,
-      params: { per_page: String(limit), page: String(page + 1) },
-    }),
-  });
+  const offset = (page - 1) * limit;
+  const response = await fetch(
+    `${getApiBaseUrl()}/nfts/ascendant/holders?offset=${offset}&limit=${limit * 3}`
+  );
 
   if (!response.ok) {
     throw new Error(`API ${response.status}: ${response.statusText}`);
   }
 
-  if (response.status === 429) {
-    throw new Error("Rate limited by NEARBlocks API. Please try again later.");
-  }
-
-  const data = await response.json() as NearBlocksHoldersResponse;
+  const data = await response.json();
   const holdersList = data.holders || [];
 
-  const holders = holdersList
-    .filter((h: NearBlocksHolder) => h.account)
-    .map((h: NearBlocksHolder) => h.account);
+  // Parse by contract type
+  const ascendantHolders: string[] = [];
+  const initiateHolders: string[] = [];
+  const nearlegionHolders: string[] = [];
 
-  const hasMore = holdersList.length === limit;
+  for (const h of holdersList) {
+    if (h.contractId === ASCENDANT_CONTRACT) {
+      ascendantHolders.push(h.account);
+    } else if (h.contractId === INITIATE_CONTRACT) {
+      initiateHolders.push(h.account);
+    } else if (h.contractId === NEARLEGION_CONTRACT) {
+      nearlegionHolders.push(h.account);
+    }
+  }
 
-  return { holders, hasMore };
+  const total = data.total || 0;
+  const hasMore = offset + holdersList.length < total;
+
+  return { ascendantHolders, initiateHolders, nearlegionHolders, hasMore };
 }
 
 function transformToBuilder(
   accountId: string,
-  isLegion: boolean,
+  isAscendant: boolean,
   isInitiate: boolean,
+  isNearlegion: boolean,
 ): Builder {
   const displayName = accountId.split(".")[0];
-  const role = isLegion ? "Ascendant" : isInitiate ? "Initiate" : "Member";
-  const tags = isLegion
-    ? ["NEAR Expert", "Developer", "Community Leader"]
-    : isInitiate
-      ? ["Web3 Enthusiast", "NEAR Builder"]
-      : ["Community Member"];
+
+  // Determine role based on highest tier held
+  let role = "Member";
+  let tags = ["Community Member"];
+
+  if (isAscendant) {
+    role = "Ascendant";
+    tags = ["NEAR Expert", "Developer", "Community Leader"];
+  } else if (isInitiate) {
+    role = "Initiate";
+    tags = ["Web3 Enthusiast", "NEAR Builder"];
+  } else if (isNearlegion) {
+    role = "Legion";
+    tags = ["NEAR Builder"];
+  }
 
   const githubHandle = accountId
     .replace(".near", "")
@@ -88,19 +109,21 @@ function transformToBuilder(
     role,
     tags,
     description: `A passionate builder in the NEAR ecosystem. ${
-      isLegion
+      isAscendant
         ? "As an Ascendant member of the Legion, I contribute to advanced NEAR protocol development."
         : isInitiate
           ? "Currently on an Initiate journey, learning and contributing to the NEAR ecosystem."
+          : isNearlegion
+          ? "Holding Legion NFTs and building for the future."
           : "Active participant in the NEAR community."
     }`,
     projects: [
       {
-        name: isLegion ? "NEAR Protocol Core" : "NEAR Learning Path",
-        description: isLegion
+        name: isAscendant ? "NEAR Protocol Core" : "NEAR Learning Path",
+        description: isAscendant
           ? "Contributing to the core protocol features and improvements."
           : "Exploring and documenting NEAR protocol capabilities.",
-        status: isLegion ? "Active" : "In Development",
+        status: isAscendant ? "Active" : "In Development",
       },
       {
         name: "Community Initiatives",
@@ -112,8 +135,9 @@ function transformToBuilder(
       github: githubHandle,
       twitter: githubHandle,
     },
-    isLegion,
-    isInitiate,
+    isLegion: isAscendant,
+    isInitiate: isInitiate,
+    isNearlegion: isNearlegion,
   };
 }
 
@@ -123,26 +147,19 @@ export function useBuilders() {
     queryFn: async ({ pageParam }) => {
       const page = pageParam as number || 1;
 
-      // Fetch both contracts in parallel
-      const [legionResult, initiateResult] = await Promise.all([
-        fetchHolders({ contractId: LEGION_CONTRACT, page, limit: PAGE_SIZE }),
-        fetchHolders({ contractId: INITIATE_CONTRACT, page, limit: PAGE_SIZE }),
-      ]);
+      // Fetch all contract types in one call
+      const result = await fetchAllLegionHolders({ page, limit: PAGE_SIZE });
 
       return {
-        legionHolders: legionResult.holders,
-        initiateHolders: initiateResult.holders,
-        legionPage: page,
-        initiatePage: page,
-        hasMoreLegion: legionResult.hasMore,
-        hasMoreInitiate: initiateResult.hasMore,
+        ...result,
+        page,
       };
     },
     initialPageParam: 1,
     getNextPageParam: (lastPage) => {
-      // Continue if either contract has more data
-      if (lastPage.hasMoreLegion || lastPage.hasMoreInitiate) {
-        return lastPage.legionPage + 1;
+      // Continue if there's more data
+      if (lastPage.hasMore) {
+        return lastPage.page + 1;
       }
       return undefined;
     },
@@ -154,7 +171,11 @@ export function useBuilders() {
   const allAccountIds = (() => {
     const ids = new Set<string>();
     for (const page of query.data?.pages || []) {
-      for (const id of [...page.legionHolders, ...page.initiateHolders]) {
+      for (const id of [
+        ...page.ascendantHolders,
+        ...page.initiateHolders,
+        ...page.nearlegionHolders,
+      ]) {
         ids.add(id);
       }
     }
@@ -169,23 +190,42 @@ export function useBuilders() {
     const builderMap = new Map<string, Builder>();
 
     for (const page of query.data?.pages || []) {
-      // Add legion holders
-      for (const accountId of page.legionHolders) {
+      // Process ascendant holders
+      for (const accountId of page.ascendantHolders) {
         const existing = builderMap.get(accountId);
         if (existing) {
-          builderMap.set(accountId, { ...existing, isLegion: true });
+          builderMap.set(accountId, {
+            ...existing,
+            isLegion: true,
+          });
         } else {
-          builderMap.set(accountId, transformToBuilder(accountId, true, false));
+          builderMap.set(accountId, transformToBuilder(accountId, true, false, false));
         }
       }
 
-      // Add initiate holders
+      // Process initiate holders
       for (const accountId of page.initiateHolders) {
         const existing = builderMap.get(accountId);
         if (existing) {
-          builderMap.set(accountId, { ...existing, isInitiate: true });
+          builderMap.set(accountId, {
+            ...existing,
+            isInitiate: true,
+          });
         } else {
-          builderMap.set(accountId, transformToBuilder(accountId, false, true));
+          builderMap.set(accountId, transformToBuilder(accountId, false, true, false));
+        }
+      }
+
+      // Process nearlegion holders
+      for (const accountId of page.nearlegionHolders) {
+        const existing = builderMap.get(accountId);
+        if (existing) {
+          builderMap.set(accountId, {
+            ...existing,
+            isNearlegion: true,
+          });
+        } else {
+          builderMap.set(accountId, transformToBuilder(accountId, false, false, true));
         }
       }
     }
@@ -233,15 +273,17 @@ export function useBuilders() {
 
   // Calculate total counts (sum of all holders across all pages)
   const totalCounts = (() => {
-    let legionCount = 0;
+    let ascendantCount = 0;
     let initiateCount = 0;
+    let nearlegionCount = 0;
 
     for (const page of query.data?.pages || []) {
-      legionCount += page.legionHolders.length;
+      ascendantCount += page.ascendantHolders.length;
       initiateCount += page.initiateHolders.length;
+      nearlegionCount += page.nearlegionHolders.length;
     }
 
-    return { legion: legionCount, initiate: initiateCount };
+    return { legion: ascendantCount, initiate: initiateCount, nearlegion: nearlegionCount };
   })();
 
   const loadMoreError = query.error instanceof Error ? query.error.message : null;

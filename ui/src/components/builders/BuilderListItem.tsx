@@ -13,6 +13,18 @@ interface BuilderListItemProps {
 }
 
 export function BuilderListItem({ builder, isSelected, onSelect }: BuilderListItemProps) {
+  // Determine which NFT badges to show
+  const badges = [];
+  if (builder.isLegion) {
+    badges.push({ label: "Ascendant", className: "bg-purple-500/20 text-purple-400 border-purple-500/40", icon: "🏆" });
+  }
+  if (builder.isInitiate) {
+    badges.push({ label: "Initiate", className: "bg-emerald-500/20 text-emerald-400 border-emerald-500/40", icon: "🌱" });
+  }
+  if (builder.isNearlegion) {
+    badges.push({ label: "Legion", className: "bg-orange-500/20 text-orange-400 border-orange-500/40", icon: "⚔️" });
+  }
+
   return (
     <button
       type="button"
@@ -39,11 +51,21 @@ export function BuilderListItem({ builder, isSelected, onSelect }: BuilderListIt
               {builder.accountId}
             </span>
           )}
-          <div className="flex flex-wrap gap-1">
-            <span className="text-xs text-primary/80 bg-primary/10 px-2 py-0.5 border border-primary/20">
-              {builder.role}
-            </span>
-          </div>
+          {/* Show NFT type badges */}
+          {badges.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {badges.map((badge) => (
+                <span
+                  key={badge.label}
+                  className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 font-mono font-medium border ${badge.className}`}
+                  title={`Holds ${badge.label} NFT${badge.label === "Ascendant" ? "" : "s"}`}
+                >
+                  <span>{badge.icon}</span>
+                  {badge.label}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
         <span className="text-muted-foreground/50 text-xl">›</span>
       </div>

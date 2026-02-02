@@ -32,6 +32,7 @@ export interface Builder {
   };
   isLegion?: boolean;
   isInitiate?: boolean;
+  isNearlegion?: boolean; // NEW: holds nearlegion.nfts.tg
   nearSocialProfile?: {
     name?: string;
     description?: string;

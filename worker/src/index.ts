@@ -18,6 +18,7 @@ import { NearService, createAgentService } from "./services";
 import { createApiRoutes } from "./routes/api";
 import { CacheService } from "./services/cache";
 import { handleBuildersRequest } from "./services/builders";
+import { getAscendantHolders, getHolderTypes } from "./services/holders";
 
 // =============================================================================
 // APP SETUP
@@ -142,6 +143,82 @@ app.get("/ping", (c) => c.json({
 }));
 
 // =============================================================================
+// PUBLIC ASCENDANT HOLDERS (Database-based, no RPC on edge)
+// =============================================================================
+
+app.get("/nfts/ascendant/holders", async (c) => {
+  const queryParams = c.req.query();
+  const limit = queryParams.limit ? parseInt(queryParams.limit as string) : undefined;
+  const offset = queryParams.offset ? parseInt(queryParams.offset as string) : undefined;
+
+  const db = createDatabase(c.env.DB);
+
+  try {
+    const data = await getAscendantHolders({ db });
+
+    let holders = data.holders;
+
+    // Apply pagination if requested
+    if (offset !== undefined || limit !== undefined) {
+      const start = offset || 0;
+      const end = limit !== undefined ? start + limit : undefined;
+      holders = holders.slice(start, end);
+    }
+
+    return c.json({
+      holders,
+      total: data.holders.length,
+      lastUpdated: data.lastUpdated,
+    });
+  } catch (error) {
+    console.error("[API] Error fetching holders:", error);
+    return c.json(
+      { error: "Failed to fetch Ascendant holders" },
+      500
+    );
+  }
+});
+
+/**
+ * Get holder types for a specific account
+ * Returns which Legion NFT contracts the account holds
+ *
+ * Example: GET /nfts/legion/holders/account.near
+ *
+ * Response:
+ * {
+ *   accountId: "account.near",
+ *   isAscendant: true,
+ *   isInitiate: false,
+ *   isNearlegion: true,
+ *   contracts: [
+ *     { contractId: "ascendant.nearlegion.near", quantity: 1 },
+ *     { contractId: "nearlegion.nfts.tg", quantity: 3 }
+ *   ],
+ *   totalTokens: 4
+ * }
+ */
+app.get("/nfts/legion/holders/:accountId", async (c) => {
+  const accountId = c.req.param("accountId");
+  const db = createDatabase(c.env.DB);
+
+  try {
+    const types = await getHolderTypes(db, accountId);
+
+    return c.json({
+      accountId,
+      ...types,
+    });
+  } catch (error) {
+    console.error("[API] Error fetching holder types:", error);
+    return c.json(
+      { error: "Failed to fetch holder types" },
+      500
+    );
+  }
+});
+
+// =============================================================================
 // PUBLIC BUILDERS ENDPOINTS (with host guard)
 // =============================================================================
 
@@ -160,6 +237,7 @@ publicRoutes.get("/", async (c) => {
       Object.entries(queryParams).filter(([k]) => k !== "path")
     ),
     nearblocksApiKey: c.env.NEARBLOCKS_API_KEY,
+    cache: new CacheService(c.env.CACHE),
   };
 
   const result = await handleBuildersRequest(input);
@@ -176,6 +254,7 @@ publicRoutes.post("/", async (c) => {
   const input = {
     ...body,
     nearblocksApiKey: c.env.NEARBLOCKS_API_KEY,
+    cache: new CacheService(c.env.CACHE),
   };
 
   const result = await handleBuildersRequest(input);
@@ -195,6 +274,7 @@ publicRoutes.get("/:id", async (c) => {
     path: `collections/${id}`,
     params: queryParams as Record<string, string>,
     nearblocksApiKey: c.env.NEARBLOCKS_API_KEY,
+    cache: new CacheService(c.env.CACHE),
   };
 
   const result = await handleBuildersRequest(input);

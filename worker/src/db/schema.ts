@@ -134,3 +134,10 @@ export const nearAccount = sqliteTable("nearAccount", {
   createdAt: integer("createdAt", { mode: "timestamp" }).notNull(),
   updatedAt: integer("updatedAt", { mode: "timestamp" }),
 });
+
+// =============================================================================
+// ASCENDANT NFT HOLDERS
+// Cached list of Ascendant NFT holders for fast querying
+// =============================================================================
+
+export * from "./schema/holders";

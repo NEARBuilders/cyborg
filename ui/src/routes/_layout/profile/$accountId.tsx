@@ -17,7 +17,7 @@ import { SocialLinksModal } from "../../../components/ui/social-links-modal";
 import { Skeleton } from "../../../components/ui/skeleton";
 import { Settings } from "lucide-react";
 import { useProfile, usePoke } from "../../../integrations/near-social-js";
-import { useUserRank, type RankData } from "../../../hooks";
+import { useUserRank, useHolderTypes, type RankData, type HolderTypesData } from "../../../hooks";
 import { authClient } from "../../../lib/auth-client";
 import { sessionQueryOptions } from "../../../lib/session";
 import { apiClient } from "../../../utils/orpc";
@@ -153,6 +153,9 @@ function ProfilePage() {
   // Load user rank from API (shared cache across components)
   const { data: rankData, isLoading: isLoadingRank } = useUserRank(accountId);
 
+  // Load holder types (NEW - shows all NFT contracts held)
+  const { data: holderTypes, isLoading: isLoadingHolderTypes } = useHolderTypes(accountId);
+
   // Load builder profile from KV store
   const { data: storedProfile } = useQuery({
     queryKey: ["kv", PROFILE_KEY, accountId],
@@ -277,7 +280,11 @@ function ProfilePage() {
         ) : (
           <>
             {/* NEAR Legion Rank */}
-            <LegionRankSection rankData={rankData} isLoading={isLoadingRank} />
+            <LegionRankSection
+              rankData={rankData}
+              holderTypes={holderTypes}
+              isLoading={isLoadingRank || isLoadingHolderTypes}
+            />
 
             {/* About */}
             <ProfileAbout description={description} />
@@ -612,9 +619,11 @@ function ProfileHeader({
 
 function LegionRankSection({
   rankData,
+  holderTypes,
   isLoading,
 }: {
   rankData?: RankData;
+  holderTypes?: HolderTypesData;
   isLoading: boolean;
 }) {
   const getRankStyles = (r: string | null) => {
@@ -632,6 +641,31 @@ function LegionRankSection({
     }
   };
 
+  const getContractBadge = (contractId: string, quantity: number) => {
+    if (contractId.includes("ascendant")) {
+      return {
+        label: `Ascendant ${quantity > 1 ? `(${quantity})` : ""}`,
+        className: "bg-purple-500/20 text-purple-400 border-purple-500/40",
+        icon: "🏆",
+      };
+    }
+    if (contractId.includes("initiate")) {
+      return {
+        label: `Initiate ${quantity > 1 ? `(${quantity})` : ""}`,
+        className: "bg-emerald-500/20 text-emerald-400 border-emerald-500/40",
+        icon: "🌱",
+      };
+    }
+    if (contractId.includes("nearlegion.nfts")) {
+      return {
+        label: `Legion ${quantity > 1 ? `(${quantity})` : ""}`,
+        className: "bg-orange-500/20 text-orange-400 border-orange-500/40",
+        icon: "⚔️",
+      };
+    }
+    return null;
+  };
+
   return (
     <div className="space-y-3">
       <h3 className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
@@ -642,9 +676,9 @@ function LegionRankSection({
           <Skeleton className="h-10 w-32" />
           <Skeleton className="h-10 w-48" />
         </div>
-      ) : !rankData ? (
+      ) : (!rankData && !holderTypes) ? (
         <p className="text-sm text-muted-foreground">Unable to load rank data</p>
-      ) : !rankData.hasNft && !rankData.hasInitiate ? (
+      ) : (!rankData?.hasNft && !rankData?.hasInitiate && !holderTypes?.contracts.length) ? (
         <p className="text-sm text-muted-foreground">
           No NEAR Legion NFTs found.{" "}
           <a
@@ -657,8 +691,9 @@ function LegionRankSection({
           </a>
         </p>
       ) : (
-        <div className="flex flex-wrap items-center gap-2">
-          {rankData.hasNft && rankData.rank && (
+        <div className="space-y-3">
+          {/* Show rank badge if available (for backward compatibility) */}
+          {rankData?.hasNft && rankData.rank && (
             <span
               className={`inline-flex items-center gap-1.5 text-sm px-4 py-2 font-mono font-medium border ${getRankStyles(rankData.rank)}`}
             >
@@ -674,7 +709,28 @@ function LegionRankSection({
               )}
             </span>
           )}
-          {rankData.hasInitiate && (
+
+          {/* Show all contract types held (NEW) */}
+          {holderTypes?.contracts && holderTypes.contracts.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              {holderTypes.contracts.map((contract) => {
+                const badge = getContractBadge(contract.contractId, contract.quantity);
+                if (!badge) return null;
+                return (
+                  <span
+                    key={contract.contractId}
+                    className={`inline-flex items-center gap-1.5 text-sm px-4 py-2 font-mono font-medium border ${badge.className}`}
+                  >
+                    <span className="text-base">{badge.icon}</span>
+                    {badge.label}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Legacy initiate badge (for backward compatibility with old data) */}
+          {rankData?.hasInitiate && !holderTypes?.isInitiate && (
             <span className="inline-flex items-center gap-1.5 text-sm bg-emerald-500/20 text-emerald-400 border-emerald-500/40 px-4 py-2 font-mono font-medium border">
               <span className="text-base">🌱</span>
               Initiate
