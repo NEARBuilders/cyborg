@@ -3,13 +3,26 @@
  * Uses the new database-backed endpoint
  */
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
 
-// Get API base URL
+// Get API base URL - use worker URL for Pages deployments
 function getApiBaseUrl(): string {
   if (typeof window === "undefined") return "";
-  return window.location.origin;
+
+  const origin = window.location.origin;
+
+  // In development, use same origin
+  if (origin.includes("localhost") || origin.includes("127.0.0.1")) {
+    return origin;
+  }
+
+  // In Pages production, use the worker URL for API calls
+  if (origin.includes("pages.dev")) {
+    return "https://near-agent.kj95hgdgnn.workers.dev";
+  }
+
+  return origin;
 }
 
 export interface HolderTypesData {

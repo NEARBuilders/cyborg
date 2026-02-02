@@ -11,10 +11,23 @@ import type {
 } from "@/types/builders";
 import { useProfiles } from "@/integrations/near-social-js";
 
-// Get API base URL - always use same-origin to avoid CORS issues
+// Get API base URL - use worker URL for Pages deployments
 function getApiBaseUrl(): string {
   if (typeof window === "undefined") return "";
-  return window.location.origin;
+
+  const origin = window.location.origin;
+
+  // In development, use same origin
+  if (origin.includes("localhost") || origin.includes("127.0.0.1")) {
+    return origin;
+  }
+
+  // In Pages production, use the worker URL for API calls
+  if (origin.includes("pages.dev")) {
+    return "https://near-agent.kj95hgdgnn.workers.dev";
+  }
+
+  return origin;
 }
 
 // Configuration constants
