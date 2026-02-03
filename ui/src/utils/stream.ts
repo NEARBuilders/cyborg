@@ -2,7 +2,12 @@
  * SSE streaming utilities for consuming chat stream
  */
 
-const API_BASE_URL = typeof window !== "undefined" ? window.location.origin : "";
+// Use worker URL for API calls, Pages for static assets
+const API_BASE_URL = typeof window !== "undefined"
+  ? (window.location.hostname.includes('pages.dev')
+      ? 'https://near-agent.kj95hgdgnn.workers.dev'
+      : window.location.origin)
+  : 'https://near-agent.kj95hgdgnn.workers.dev';
 
 export interface StreamEvent {
   id: string;
