@@ -14,6 +14,11 @@ export interface Project {
   image?: string;
 }
 
+export interface NFTHolding {
+  contractId: string;
+  quantity: number;
+}
+
 export interface Builder {
   id: string;
   accountId: string;
@@ -21,6 +26,7 @@ export interface Builder {
   avatar: string | null;
   backgroundImage?: string | null;
   role: string;
+  roleEmoji?: string;
   tags: string[];
   description: string;
   projects: Project[];
@@ -32,7 +38,8 @@ export interface Builder {
   };
   isLegion?: boolean;
   isInitiate?: boolean;
-  isNearlegion?: boolean; // NEW: holds nearlegion.nfts.tg
+  isNearlegion?: boolean; // holds nearlegion.nfts.tg
+  holdings?: NFTHolding[]; // NFT holdings data
   nearSocialProfile?: {
     name?: string;
     description?: string;

@@ -92,7 +92,7 @@ export function BuilderCard({ builder }: BuilderCardProps) {
                   rel="noopener noreferrer"
                   className="text-primary hover:text-primary/80 transition-colors font-mono underline underline-offset-4"
                 >
-                  coool Website
+                  Website
                 </a>
               )}
               {builder.socials.github && (
@@ -117,6 +117,58 @@ export function BuilderCard({ builder }: BuilderCardProps) {
               )}
             </div>
           )}
+
+        {/* NFT Holdings - show for nearlegion.nfts.tg and ascendant.nearlegion.near */}
+        {builder.holdings && builder.holdings.length > 0 && (
+          <div className="pt-2 border-t border-border/50">
+            <div className="text-xs text-muted-foreground mb-2">NFT Holdings</div>
+            <div className="space-y-1.5">
+              {builder.holdings.map((holding) => {
+                const contractName = holding.contractId
+                  .replace('.nearlegion.near', '')
+                  .replace('.nfts.tg', '')
+                  .replace('near.', '');
+                const isNearLegion = holding.contractId === 'nearlegion.nfts.tg';
+                const isAscendant = holding.contractId === 'ascendant.nearlegion.near';
+
+                // Only show nearlegion.nfts.tg and ascendant.nearlegion.near
+                if (!isNearLegion && !isAscendant) return null;
+
+                return (
+                  <div
+                    key={holding.contractId}
+                    className="flex items-center justify-between text-xs bg-muted/30 px-2 py-1.5 rounded border border-border/50"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-foreground">
+                        {contractName}
+                      </span>
+                      {isAscendant && (
+                        <span className="text-orange-500">🔥</span>
+                      )}
+                      {isNearLegion && (
+                        <span className="text-purple-500">💎</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">
+                        Qty: {holding.quantity}
+                      </span>
+                      <a
+                        href={`https://explorer.oneverse.near.org/accounts/${builder.accountId}?tab=nfts`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:text-primary/80 transition-colors underline underline-offset-2"
+                      >
+                        View →
+                      </a>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1046,22 +1046,24 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
     const builders = await Promise.all(
       profiles.map(async (profile) => {
         const profileData = JSON.parse(profile.profileData);
-        const holderData = await this.db.query.legionHolders.findFirst({
+        const holdings = await this.db.query.legionHolders.findMany({
           where: eq(schema.legionHolders.accountId, profile.accountId),
         });
 
+        // Determine role based on holdings (Ascendant > Initiate > Holder > Member)
         let role = "Member";
         let roleEmoji = "";
-        if (holderData) {
-          if (holderData.contractId === "ascendant.nearlegion.near") {
+        for (const h of holdings) {
+          if (h.contractId === "ascendant.nearlegion.near") {
             role = "Ascendant";
             roleEmoji = "🔥";
+            break;
           }
-          else if (holderData.contractId === "initiate.nearlegion.near") {
+          else if (h.contractId === "initiate.nearlegion.near") {
             role = "Initiate";
             roleEmoji = "⚡";
           }
-          else {
+          else if (h.contractId === "nearlegion.nfts.tg") {
             role = "Holder";
             roleEmoji = "💎";
           }
@@ -1088,7 +1090,10 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
           tags,
           socials: { github, twitter, website },
           explorerUrl: `https://explorer.oneverse.near.org/accounts/${profile.accountId}?tab=nfts`,
-          nftTokenId: profile.nftAvatarUrl ? holderData?.contractId : null
+          holdings: holdings.map(h => ({
+            contractId: h.contractId,
+            quantity: h.quantity
+          }))
         };
       })
     );
@@ -1432,6 +1437,10 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
             where: eq(schema.nearSocialProfiles.accountId, accountId),
           });
 
+          const holdings = await this.db.query.legionHolders.findMany({
+            where: eq(schema.legionHolders.accountId, accountId),
+          });
+
           const profileData = profile?.profileData ? JSON.parse(profile.profileData) : null;
           const displayName = profile?.name || accountId.split(".")[0];
           const tags = profileData?.tags ? Object.keys(profileData.tags) : [];
@@ -1454,7 +1463,11 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
             description: profile?.description || "",
             tags,
             socials: { github, twitter, website },
-            explorerUrl: `https://explorer.oneverse.near.org/accounts/${accountId}?tab=nfts`
+            explorerUrl: `https://explorer.oneverse.near.org/accounts/${accountId}?tab=nfts`,
+            holdings: holdings.map(h => ({
+              contractId: h.contractId,
+              quantity: h.quantity
+            }))
           };
         })
       );
