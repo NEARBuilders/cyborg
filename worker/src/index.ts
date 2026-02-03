@@ -360,6 +360,21 @@ app.get("/api/builders/:accountId", async (c) => {
       `
     ).bind(accountId).first();
 
+    // Fetch ALL holdings for this account
+    const holdingsResult = await c.env.DB.prepare(
+      `
+      SELECT contract_id, quantity
+      FROM legion_holders
+      WHERE account_id = ?
+      ORDER BY contract_id
+      `
+    ).bind(accountId).all();
+
+    const holdings = (holdingsResult.results || []).map((h: any) => ({
+      contractId: h.contract_id,
+      quantity: h.quantity,
+    }));
+
     // If not a holder, still return profile data if available
     const isAscendant = holderResult?.is_ascendant === 1;
     const isInitiate = holderResult?.is_initiate === 1;
@@ -429,6 +444,7 @@ app.get("/api/builders/:accountId", async (c) => {
       isLegion: isAscendant,
       isInitiate: isInitiate,
       isNearlegion: isNearlegion,
+      holdings,
       nearSocialProfile: parsedProfile,
       hasCustomProfile: hasCustomAvatar,
       hasNearSocialProfile: !!parsedProfile,
@@ -476,6 +492,27 @@ app.get("/api/builders-with-profiles", async (c) => {
     const profiles = accountIds.length > 0 ? await db.query.nearSocialProfiles.findMany({
       where: (profile, { inArray }) => inArray(profile.accountId, accountIds),
     }) : [];
+
+    // Fetch holdings for all accounts
+    const holdingsResults = accountIds.length > 0 ? await c.env.DB.prepare(
+      `
+      SELECT account_id, contract_id, quantity
+      FROM legion_holders
+      WHERE account_id IN (${accountIds.map(() => '?').join(',')})
+      ORDER BY account_id, contract_id
+      `
+    ).bind(...accountIds).all() : { results: [] };
+
+    // Group holdings by account_id for quick lookup
+    const holdingsMap = new Map<string, Array<{ contractId: string; quantity: number }>>();
+    for (const accountId of accountIds) {
+      holdingsMap.set(accountId, []);
+    }
+    for (const h of (holdingsResults.results || [])) {
+      const holdings = holdingsMap.get(h.account_id) || [];
+      holdings.push({ contractId: h.contract_id, quantity: h.quantity });
+      holdingsMap.set(h.account_id, holdings);
+    }
 
     // Create a map for quick lookup
     const profileMap = new Map(
@@ -553,6 +590,7 @@ app.get("/api/builders-with-profiles", async (c) => {
         isLegion: row.is_ascendant,
         isInitiate: row.is_initiate,
         isNearlegion: row.is_nearlegion,
+        holdings: holdingsMap.get(row.account_id) || [],
         nearSocialProfile: parsedProfile,
         hasCustomProfile: hasCustomAvatar,
         hasNearSocialProfile: !!parsedProfile,

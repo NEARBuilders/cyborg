@@ -41,6 +41,9 @@ export function BuilderDetails({ builder }: BuilderDetailsProps) {
         {/* Projects */}
         <BuilderProjects projects={builder.projects} />
 
+        {/* NFT Holdings Grid */}
+        {(builder.holdings && builder.holdings.length > 0) && <NFTGrid holdings={builder.holdings} accountId={builder.accountId} />}
+
         {/* Socials */}
         {builder.socials && <BuilderSocials socials={builder.socials} />}
       </div>
@@ -218,6 +221,55 @@ function BuilderSocials({
             t.me/{socials.telegram}
           </a>
         )}
+      </div>
+    </div>
+  );
+}
+
+function NFTGrid({ holdings, accountId }: { holdings: Array<{ contractId: string; quantity: number }>; accountId: string }) {
+  if (holdings.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-4">
+      <h3 className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
+        NFT Collection
+      </h3>
+
+      <div className="space-y-2">
+        {holdings.map((holding) => {
+          const contractName = holding.contractId
+            .replace('.nearlegion.near', '')
+            .replace('.nfts.tg', '')
+            .replace('near.', '');
+
+          const isNearLegion = holding.contractId === 'nearlegion.nfts.tg';
+          const isAscendant = holding.contractId === 'ascendant.nearlegion.near';
+          const isInitiate = holding.contractId === 'initiate.nearlegion.near';
+
+          return (
+            <div key={holding.contractId} className="flex items-center justify-between p-3 bg-muted/20 border border-primary/20 rounded-lg">
+              <div className="flex items-center gap-3">
+                {isAscendant && <span className="text-lg">🏆</span>}
+                {isInitiate && <span className="text-lg">🌱</span>}
+                {isNearLegion && <span className="text-lg">⚔️</span>}
+                <div>
+                  <span className="text-sm font-medium">{contractName}</span>
+                  <span className="text-xs text-muted-foreground ml-2">×{holding.quantity}</span>
+                </div>
+              </div>
+              <a
+                href={`https://explorer.oneverse.near.org/accounts/${accountId}?tab=nfts`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-primary hover:text-primary/80 font-mono underline underline-offset-2"
+              >
+                View →
+              </a>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
