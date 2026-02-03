@@ -897,6 +897,7 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
 
   /**
    * Search builders by interests, skills, or description
+   * Falls back to Legion members if text search finds nothing
    */
   private async searchBuilders(params: {
     query: string;
@@ -910,6 +911,9 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
     }
 
     try {
+      // Check if user is asking for NFT holders, Legion members, etc.
+      const isHolderQuery = /holder|nft|legion|member/i.test(query);
+
       // Search in profiles table for matching descriptions, names, or tags
       const results = await this.db
         .select({
@@ -930,80 +934,135 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
         )
         .limit(limit);
 
-      if (results.length === 0) {
-        return `No builders found matching "${params.query}". Try different keywords like specific technologies (react, rust, defi) or broader terms.`;
+      // If text search found results, use them
+      if (results.length > 0) {
+        return await this.formatBuildersAsMarkdown(results, params.query, limit);
       }
 
-      const builders = await Promise.all(
-        results.map(async (profile) => {
-          const profileData = JSON.parse(profile.profileData);
-          const holderData = await this.db.query.legionHolders.findFirst({
-            where: eq(schema.legionHolders.accountId, profile.accountId),
-          });
+      // Fallback: If asking for holders/members, show Legion members from the holders table
+      if (isHolderQuery) {
+        // Get Legion holders directly from legion_holders table
+        const holders = await this.db.query.legionHolders.findMany({
+          limit,
+          offset: 0,
+        });
 
-          let role = "Member";
-          let roleEmoji = "";
-          if (holderData) {
-            if (holderData.contractId === "ascendant.nearlegion.near") {
-              role = "Ascendant";
-              roleEmoji = "🔥";
-            }
-            else if (holderData.contractId === "initiate.nearlegion.near") {
-              role = "Initiate";
-              roleEmoji = "⚡";
-            }
-            else {
-              role = "Holder";
-              roleEmoji = "💎";
-            }
+        // Group by account and get unique accounts
+        const accountSet = new Set<string>();
+        const holderList: Array<{ accountId: string; contractId: string }> = [];
+
+        for (const holder of holders) {
+          if (!accountSet.has(holder.accountId)) {
+            accountSet.add(holder.accountId);
+            holderList.push(holder);
           }
+          if (holderList.length >= limit) break;
+        }
 
-          // Use NFT avatar if available, otherwise fall back to profile image
-          const avatar = profile.nftAvatarUrl || profile.image || profileData?.image?.url ||
-            (profileData?.image?.ipfs_cid
-              ? `https://ipfs.near.social/ipfs/${profileData.image.ipfs_cid}`
-              : `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile.accountId}`);
+        // Now fetch profiles for these holders
+        const profileResults = await Promise.all(
+          holderList.map(async (holder) => {
+            return await this.db.query.nearSocialProfiles.findFirst({
+              where: eq(schema.nearSocialProfiles.accountId, holder.accountId),
+            });
+          })
+        );
 
-          const displayName = profile.name || profile.accountId.split(".")[0];
-          const tags = profileData?.tags ? Object.keys(profileData.tags) : [];
-          const github = profileData?.linktree?.github;
-          const twitter = profileData?.linktree?.twitter;
-          const website = profileData?.linktree?.website;
+        const validProfiles = profileResults.filter((p): p is NonNullable<typeof p> => p !== null);
 
-          // Build markdown card for this builder
-          let markdown = `### **${roleEmoji} @${profile.accountId}**\n`;
-          if (role !== "Member") {
-            markdown += `###### **${role}**\n`;
-          }
-          markdown += `![${displayName}](${avatar})\n\n`;
+        if (validProfiles.length > 0) {
+          return await this.formatBuildersAsMarkdown(validProfiles, `NFT holders (${params.query})`, limit);
+        }
+      }
 
-          if (profile.description) {
-            markdown += `${profile.description}\n\n`;
-          }
-
-          if (tags.length > 0) {
-            markdown += `**Interests:** ${tags.map(t => `\`${t}\``).join(", ")}\n\n`;
-          }
-
-          if (github || twitter || website) {
-            markdown += `**Connect:** `;
-            const links = [];
-            if (github) links.push(`[GitHub](https://github.com/${github})`);
-            if (twitter) links.push(`[Twitter](https://twitter.com/${twitter})`);
-            if (website) links.push(`[Website](${website})`);
-            markdown += links.join(" • ");
-            markdown += "\n";
-          }
-
-          return markdown;
-        })
-      );
-
-      return `Found ${builders.length} builder${builders.length === 1 ? '' : 's'} matching "${params.query}":\n\n` + builders.join("\n\n---\n\n");
+      return `No builders found matching "${params.query}". Try different keywords like specific technologies (react, rust, defi), account names, or ask for "NFT holders", "Legion members", "Ascendant members".`;
     } catch (error) {
       console.error("[searchBuilders] Error:", error);
       return "Failed to search builders. Please try again.";
     }
+  }
+
+  /**
+   * Format builders as markdown cards
+   */
+  private async formatBuildersAsMarkdown(
+    profiles: Array<{
+      accountId: string;
+      name: string | null;
+      description: string | null;
+      profileData: string;
+      image: string | null;
+      nftAvatarUrl: string | null;
+    }>,
+    queryTitle: string,
+    limit: number
+  ): Promise<string> {
+    const builders = await Promise.all(
+      profiles.map(async (profile) => {
+        const profileData = JSON.parse(profile.profileData);
+        const holderData = await this.db.query.legionHolders.findFirst({
+          where: eq(schema.legionHolders.accountId, profile.accountId),
+        });
+
+        let role = "Member";
+        let roleEmoji = "";
+        if (holderData) {
+          if (holderData.contractId === "ascendant.nearlegion.near") {
+            role = "Ascendant";
+            roleEmoji = "🔥";
+          }
+          else if (holderData.contractId === "initiate.nearlegion.near") {
+            role = "Initiate";
+            roleEmoji = "⚡";
+          }
+          else {
+            role = "Holder";
+            roleEmoji = "💎";
+          }
+        }
+
+        // Use NFT avatar if available
+        const avatar = profile.nftAvatarUrl || profile.image || profileData?.image?.url ||
+          (profileData?.image?.ipfs_cid
+            ? `https://ipfs.near.social/ipfs/${profileData.image.ipfs_cid}`
+            : `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile.accountId}`);
+
+        const displayName = profile.name || profile.accountId.split(".")[0];
+        const tags = profileData?.tags ? Object.keys(profileData.tags) : [];
+        const github = profileData?.linktree?.github;
+        const twitter = profileData?.linktree?.twitter;
+        const website = profileData?.linktree?.website;
+
+        // Build markdown card for this builder
+        let markdown = `### **${roleEmoji} @${profile.accountId}**\n`;
+        if (role !== "Member") {
+          markdown += `###### **${role}**\n`;
+        }
+        markdown += `![${displayName}](${avatar})\n\n`;
+
+        if (profile.description) {
+          markdown += `${profile.description}\n\n`;
+        }
+
+        if (tags.length > 0) {
+          markdown += `**Interests:** ${tags.map(t => `\`${t}\``).join(", ")}\n\n`;
+        }
+
+        if (github || twitter || website) {
+          markdown += `**Connect:** `;
+          const links = [];
+          if (github) links.push(`[GitHub](https://github.com/${github})`);
+          if (twitter) links.push(`[Twitter](https://twitter.com/${twitter})`);
+          if (website) links.push(`[Website](${website})`);
+          markdown += links.join(" • ");
+          markdown += "\n";
+        }
+
+        return markdown;
+      })
+    );
+
+    return `Found ${builders.length} builder${builders.length === 1 ? '' : 's'} matching "${queryTitle}":\n\n` + builders.join("\n\n---\n\n");
   }
 
   /**
