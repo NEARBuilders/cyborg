@@ -67,6 +67,9 @@ export const nearSocialProfiles = sqliteTable(
     profileData: text("profile_data").notNull(), // JSON string of profile data
     name: text("name"), // Extracted name for faster queries
     image: text("image"), // Extracted image URL for faster queries
+    nftAvatarUrl: text("nft_avatar_url"), // NFT avatar URL from Legion NFT
+    nftAvatarTokenId: text("nft_avatar_token_id"), // Token ID for NFT avatar
+    nftAvatarSyncedAt: integer("nft_avatar_synced_at"), // When NFT avatar was synced
     description: text("description"), // Extracted bio/description
     lastSyncedAt: integer("last_synced_at").notNull(),
     syncedAt: integer("synced_at").notNull(),
