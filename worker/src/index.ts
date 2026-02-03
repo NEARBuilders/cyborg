@@ -902,7 +902,8 @@ app.route("/api/profiles/upsert", profileUpsertRoutes);
 // AUTHENTICATED API ROUTES
 // =============================================================================
 
-app.all("/api/chat", async (c) => {
+// Non-streaming chat endpoint
+app.post("/api/chat", async (c) => {
   const env = c.env;
 
   // Initialize auth and get session
@@ -933,62 +934,90 @@ app.all("/api/chat", async (c) => {
     nearService
   );
 
-  // Route to the API chat handler
-  if (c.req.method === "POST" && c.req.path === "/api/chat") {
-    if (!agentService) {
-      return c.json({ error: "NEAR AI not connected" }, 503);
-    }
-    const body = await c.req.json();
-    const result = await agentService.processMessage(
-      sessionContext.nearAccountId,
-      body.message,
-      body.conversationId
-    );
-    return c.json(result);
+  if (!agentService) {
+    return c.json({ error: "NEAR AI not connected" }, 503);
   }
 
-  if (c.req.method === "POST" && c.req.path === "/api/chat/stream") {
-    if (!agentService) {
-      return c.json({ error: "NEAR AI not connected" }, 503);
-    }
-    const body = await c.req.json();
+  const body = await c.req.json();
+  const result = await agentService.processMessage(
+    sessionContext.nearAccountId,
+    body.message,
+    body.conversationId
+  );
+  return c.json(result);
+});
 
-    // Create SSE stream
-    const stream = new ReadableStream({
-      async start(controller) {
-        const encoder = new TextEncoder();
+// Streaming chat endpoint
+app.post("/api/chat/stream", async (c) => {
+  const env = c.env;
 
-        try {
-          const generator = agentService.processMessageStream(
-            sessionContext.nearAccountId!, // Already validated above
-            body.message,
-            body.conversationId
-          );
+  // Initialize auth and get session
+  const auth = createAuth(env);
+  const sessionContext = await getSessionFromRequest(auth, c.req.raw);
 
-          for await (const event of generator) {
-            const sseData = `event: ${event.type}\nid: ${event.id}\ndata: ${JSON.stringify(event.data)}\n\n`;
-            controller.enqueue(encoder.encode(sseData));
-          }
-        } catch (error) {
-          console.error("[API] Stream error:", error);
-          const errorEvent = `event: error\ndata: ${JSON.stringify({ message: "Stream failed" })}\n\n`;
-          controller.enqueue(encoder.encode(errorEvent));
-        } finally {
-          controller.close();
+  if (!sessionContext?.nearAccountId) {
+    return c.json({ error: "Authentication required" }, 401);
+  }
+
+  // Initialize database
+  const db = createDatabase(env.DB);
+
+  // Initialize services
+  const nearService = new NearService(db, {
+    rpcUrl: env.NEAR_RPC_URL,
+    contractId: env.NEAR_LEGION_CONTRACT,
+    initiateContractId: env.NEAR_INITIATE_CONTRACT,
+  });
+
+  const agentService = createAgentService(
+    db,
+    {
+      apiKey: env.NEAR_AI_API_KEY,
+      baseUrl: env.NEAR_AI_BASE_URL,
+      model: env.NEAR_AI_MODEL,
+    },
+    nearService
+  );
+
+  if (!agentService) {
+    return c.json({ error: "NEAR AI not connected" }, 503);
+  }
+
+  const body = await c.req.json();
+
+  // Create SSE stream
+  const stream = new ReadableStream({
+    async start(controller) {
+      const encoder = new TextEncoder();
+
+      try {
+        const generator = agentService.processMessageStream(
+          sessionContext.nearAccountId,
+          body.message,
+          body.conversationId
+        );
+
+        for await (const event of generator) {
+          const sseData = `event: ${event.type}\nid: ${event.id}\ndata: ${JSON.stringify(event.data)}\n\n`;
+          controller.enqueue(encoder.encode(sseData));
         }
-      },
-    });
+      } catch (error) {
+        console.error("[API] Stream error:", error);
+        const errorEvent = `event: error\ndata: ${JSON.stringify({ message: "Stream failed", details: error instanceof Error ? error.message : String(error) })}\n\n`;
+        controller.enqueue(encoder.encode(errorEvent));
+      } finally {
+        controller.close();
+      }
+    },
+  });
 
-    return new Response(stream, {
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        Connection: "keep-alive",
-      },
-    });
-  }
-
-  return c.json({ error: "Not found" }, 404);
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+  });
 });
 
 // =============================================================================
