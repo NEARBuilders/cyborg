@@ -474,16 +474,11 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
         for (const toolCall of toolCalls) {
           try {
             // Validate JSON before parsing
-            let args: Record<string, unknown>;
-            try {
-              args = JSON.parse(toolCall.function.arguments);
-            } catch (parseError) {
-              console.error("[AgentService] Failed to parse tool arguments:", {
+            if (!this.isValidJson(toolCall.function.arguments)) {
+              console.error("[AgentService] Invalid JSON in tool call:", {
                 tool: toolCall.function.name,
                 arguments: toolCall.function.arguments,
-                error: parseError,
               });
-              // Return error message to the model
               currentMessages.push({
                 role: "tool",
                 tool_call_id: toolCall.id,
@@ -495,6 +490,7 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
               continue;
             }
 
+            const args = JSON.parse(toolCall.function.arguments);
             const result = await this.executeToolCall({
               id: toolCall.id,
               name: toolCall.function.name,
@@ -659,6 +655,29 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
 
         // Check if model wants to call tools
         if (accumulatedToolCalls.length > 0) {
+          // Validate all tool calls have complete JSON arguments
+          const validToolCalls: OpenAI.ChatCompletionMessageToolCall[] = [];
+          let hasInvalidJson = false;
+
+          for (const toolCall of accumulatedToolCalls) {
+            if (this.isValidJson(toolCall.function.arguments)) {
+              validToolCalls.push(toolCall);
+            } else {
+              console.warn("[AgentService] Incomplete JSON for tool call:", {
+                tool: toolCall.function.name,
+                arguments: toolCall.function.arguments,
+              });
+              hasInvalidJson = true;
+            }
+          }
+
+          // Only proceed if we have valid tool calls
+          if (validToolCalls.length === 0) {
+            // All tool calls have invalid JSON, break and let the model respond normally
+            console.warn("[AgentService] No valid tool calls, breaking loop");
+            break;
+          }
+
           // Yield a special event indicating tools are being used
           yield {
             type: "chunk",
@@ -669,35 +688,13 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
           currentMessages.push({
             role: "assistant",
             content: accumulatedContent,
-            tool_calls: accumulatedToolCalls,
+            tool_calls: validToolCalls,
           });
 
-          // Execute all tool calls
-          for (const toolCall of accumulatedToolCalls) {
+          // Execute all valid tool calls
+          for (const toolCall of validToolCalls) {
             try {
-              // Validate JSON before parsing
-              let args: Record<string, unknown>;
-              try {
-                args = JSON.parse(toolCall.function.arguments);
-              } catch (parseError) {
-                console.error("[AgentService] Failed to parse tool arguments:", {
-                  tool: toolCall.function.name,
-                  arguments: toolCall.function.arguments,
-                  error: parseError,
-                });
-                // Return error message to the model
-                currentMessages.push({
-                  role: "tool",
-                  tool_call_id: toolCall.id,
-                  content: JSON.stringify({
-                    error: "Invalid JSON in tool call arguments",
-                    tool: toolCall.function.name,
-                    arguments: toolCall.function.arguments,
-                  }),
-                });
-                continue;
-              }
-
+              const args = JSON.parse(toolCall.function.arguments);
               const result = await this.executeToolCall({
                 id: toolCall.id,
                 name: toolCall.function.name,
@@ -849,6 +846,54 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
   // ===========================================================================
   // TOOL HANDLERS - Functions the AI can call
   // ===========================================================================
+
+  /**
+   * Validate if a string is complete, valid JSON
+   */
+  private isValidJson(str: string): boolean {
+    if (!str || str.trim().length === 0) return false;
+
+    // Quick check for common incomplete JSON patterns
+    const trimmed = str.trim();
+    if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) return false;
+
+    // Count braces to ensure they're balanced
+    let braceCount = 0;
+    let inString = false;
+    let escaped = false;
+
+    for (const char of trimmed) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+
+      if (char === '\\') {
+        escaped = true;
+        continue;
+      }
+
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+
+      if (!inString) {
+        if (char === '{') braceCount++;
+        if (char === '}') braceCount--;
+      }
+    }
+
+    if (braceCount !== 0) return false;
+
+    // Try to parse - this is the final validation
+    try {
+      JSON.parse(trimmed);
+      return true;
+    } catch {
+      return false;
+    }
+  }
 
   /**
    * Search builders by interests, skills, or description
