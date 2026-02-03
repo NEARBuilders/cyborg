@@ -25,13 +25,18 @@ export function BuilderCard({ builder }: BuilderCardProps) {
           <h3 className="text-sm font-bold text-foreground truncate">
             {builder.displayName}
           </h3>
-          <p className="font-mono text-primary text-xs truncate">{builder.accountId}</p>
+          <p className="font-mono text-primary text-xs truncate">
+            {builder.accountId}
+          </p>
           <div className="flex items-center gap-2 mt-1">
             <span className="inline-block text-xs bg-primary/25 text-primary px-2 py-0.5 font-mono font-medium">
               {builder.role}
             </span>
             <a
-              href={builder.explorerUrl || `https://explorer.oneverse.near.org/accounts/${builder.accountId}?tab=nfts`}
+              href={
+                builder.explorerUrl ||
+                `https://explorer.oneverse.near.org/accounts/${builder.accountId}?tab=nfts`
+              }
               target="_blank"
               rel="noopener noreferrer"
               className="text-xs text-primary hover:text-primary/80 underline underline-offset-2"
@@ -71,40 +76,47 @@ export function BuilderCard({ builder }: BuilderCardProps) {
         )}
 
         {/* Social Links */}
-        {builder.socials && (builder.socials.github || builder.socials.twitter || builder.socials.website) && (
-          <div className="flex flex-wrap gap-3 text-xs">
-            {builder.socials.website && (
-              <a
-                href={builder.socials.website.startsWith("http") ? builder.socials.website : `https://${builder.socials.website}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:text-primary/80 transition-colors font-mono underline underline-offset-4"
-              >
-                Website
-              </a>
-            )}
-            {builder.socials.github && (
-              <a
-                href={`https://github.com/${builder.socials.github}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:text-primary/80 transition-colors font-mono underline underline-offset-4"
-              >
-                GitHub
-              </a>
-            )}
-            {builder.socials.twitter && (
-              <a
-                href={`https://twitter.com/${builder.socials.twitter}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:text-primary/80 transition-colors font-mono underline underline-offset-4"
-              >
-                @{builder.socials.twitter}
-              </a>
-            )}
-          </div>
-        )}
+        {builder.socials &&
+          (builder.socials.github ||
+            builder.socials.twitter ||
+            builder.socials.website) && (
+            <div className="flex flex-wrap gap-3 text-xs">
+              {builder.socials.website && (
+                <a
+                  href={
+                    builder.socials.website.startsWith("http")
+                      ? builder.socials.website
+                      : `https://${builder.socials.website}`
+                  }
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:text-primary/80 transition-colors font-mono underline underline-offset-4"
+                >
+                  coool Website
+                </a>
+              )}
+              {builder.socials.github && (
+                <a
+                  href={`https://github.com/${builder.socials.github}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:text-primary/80 transition-colors font-mono underline underline-offset-4"
+                >
+                  GitHub
+                </a>
+              )}
+              {builder.socials.twitter && (
+                <a
+                  href={`https://twitter.com/${builder.socials.twitter}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:text-primary/80 transition-colors font-mono underline underline-offset-4"
+                >
+                  @{builder.socials.twitter}
+                </a>
+              )}
+            </div>
+          )}
       </div>
     </div>
   );

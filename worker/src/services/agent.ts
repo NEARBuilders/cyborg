@@ -1283,7 +1283,7 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
   }
 
   /**
-   * Get detailed builder profile
+   * Get detailed builder profile - Returns structured JSON for UI rendering
    */
   private async getBuilderProfile(params: { accountId: string }): Promise<string> {
     try {
@@ -1292,7 +1292,10 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
       });
 
       if (!profile) {
-        return `No profile found for ${params.accountId}`;
+        return JSON.stringify({
+          type: "error",
+          message: `No profile found for ${params.accountId}`
+        });
       }
 
       const profileData = JSON.parse(profile.profileData);
@@ -1338,53 +1341,34 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
       const website = profileData?.linktree?.website;
       const telegram = profileData?.linktree?.telegram;
 
-      // Build detailed markdown profile
-      let markdown = `### **${roleEmoji} @${params.accountId}**\n`;
-      markdown += `###### **${role}**\n\n`;
-      const explorerLink = `https://explorer.oneverse.near.org/accounts/${params.accountId}?tab=nfts`;
-      markdown += `![${displayName}](${avatar})\n\n`;
-      markdown += `🔗 **[View NFTs on NEAR Explorer](${explorerLink})**\n\n`;
-
-      if (profile.description) {
-        markdown += `**Bio:** ${profile.description}\n\n`;
-      }
-
-      if (tags.length > 0) {
-        markdown += `**Interests:** ${tags.map(t => `\`${t}\``).join(", ")}\n\n`;
-      }
-
-      // Contracts held
-      if (holdings.length > 0) {
-        markdown += `**NFTs Held:** [View all on NEAR Explorer](https://explorer.oneverse.near.org/accounts/${params.accountId}?tab=nfts)\n\n`;
-        for (const h of holdings) {
-          const contractName = h.contractId.replace('.nearlegion.near', '').replace('.nfts.tg', '').replace('near.', '');
-          markdown += `- **${contractName}**: \`${h.contractId}\` (Qty: ${h.quantity})\n`;
+      const result = {
+        type: "builder",
+        data: {
+          accountId: params.accountId,
+          displayName,
+          avatar,
+          role,
+          roleEmoji,
+          description: profile.description || "",
+          tags,
+          socials: { github, twitter, website, telegram },
+          explorerUrl: `https://explorer.oneverse.near.org/accounts/${params.accountId}?tab=nfts`,
+          holdings: holdings.map(h => ({
+            contractId: h.contractId,
+            quantity: h.quantity
+          }))
         }
-        // Add avatar NFT link if available
-        if (profile.nftAvatarTokenId) {
-          markdown += `\n**Avatar NFT:** [View Token #${profile.nftAvatarTokenId}](https://explorer.oneverse.near.org/contracts/${holdings[0]?.contractId || 'nearlegion.nfts.tg'}/${profile.nftAvatarTokenId})\n`;
-        }
-        markdown += "\n";
-      }
+      };
 
-      // Social links
-      if (github || twitter || website || telegram) {
-        markdown += `**Connect:**\n`;
-        if (github) markdown += `- [GitHub](https://github.com/${github})\n`;
-        if (twitter) markdown += `- [Twitter](https://twitter.com/${twitter})\n`;
-        if (telegram) markdown += `- [Telegram](${telegram})\n`;
-        if (website) markdown += `- [Website](${website})\n`;
-      }
-
-      return markdown;
+      return JSON.stringify(result);
     } catch (error) {
       console.error("[getBuilderProfile] Error:", error);
-      return "Failed to fetch profile. Please try again.";
+      return JSON.stringify({ type: "error", message: "Failed to fetch profile. Please try again." });
     }
   }
 
   /**
-   * List Legion members with optional role filter
+   * List Legion members with optional role filter - Returns structured JSON for UI rendering
    */
   private async listLegionMembers(params: {
     role?: string;
@@ -1435,11 +1419,14 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
       }
 
       if (filteredAccounts.length === 0) {
-        return `No Legion members found${params.role && params.role !== "any" ? ` with role "${params.role}"` : ""}.`;
+        return JSON.stringify({
+          type: "error",
+          message: `No Legion members found${params.role && params.role !== "any" ? ` with role "${params.role}"` : ""}.`
+        });
       }
 
-      // Fetch profiles for filtered accounts and build markdown
-      const memberCards = await Promise.all(
+      // Fetch profiles for filtered accounts and build JSON
+      const builders = await Promise.all(
         filteredAccounts.slice(0, limit).map(async ({ accountId, role, roleEmoji }) => {
           const profile = await this.db.query.nearSocialProfiles.findFirst({
             where: eq(schema.nearSocialProfiles.accountId, accountId),
@@ -1448,6 +1435,9 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
           const profileData = profile?.profileData ? JSON.parse(profile.profileData) : null;
           const displayName = profile?.name || accountId.split(".")[0];
           const tags = profileData?.tags ? Object.keys(profileData.tags) : [];
+          const github = profileData?.linktree?.github;
+          const twitter = profileData?.linktree?.twitter;
+          const website = profileData?.linktree?.website;
 
           // Use NFT avatar if available
           const avatar = profile?.nftAvatarUrl || profile?.image || profileData?.image?.url ||
@@ -1455,31 +1445,27 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
               ? `https://ipfs.near.social/ipfs/${profileData.image.ipfs_cid}`
               : `https://api.dicebear.com/7.x/avataaars/svg?seed=${accountId}`);
 
-          const explorerLink = `https://explorer.oneverse.near.org/accounts/${accountId}?tab=nfts`;
-
-          let markdown = `### **${roleEmoji} @${accountId}**\n`;
-          markdown += `###### **${role}**\n\n`;
-          markdown += `![${displayName}](${avatar})\n\n`;
-          // Add clickable NFT link
-          markdown += `🔗 **[View NFTs on NEAR Explorer](${explorerLink})**\n\n`;
-
-          if (profile?.description) {
-            markdown += `${profile.description}\n\n`;
-          }
-
-          if (tags.length > 0) {
-            markdown += `**Interests:** ${tags.map(t => `\`${t}\``).join(", ")}\n\n`;
-          }
-
-          return markdown;
+          return {
+            accountId,
+            displayName,
+            avatar,
+            role,
+            roleEmoji,
+            description: profile?.description || "",
+            tags,
+            socials: { github, twitter, website },
+            explorerUrl: `https://explorer.oneverse.near.org/accounts/${accountId}?tab=nfts`
+          };
         })
       );
 
-      const roleFilter = params.role && params.role !== "any" ? ` with role **${params.role}**` : "";
-      return `Found ${memberCards.length} Legion member${memberCards.length === 1 ? '' : 's'}${roleFilter}:\n\n` + memberCards.join("\n\n---\n\n");
+      return JSON.stringify({
+        type: "builders",
+        data: builders
+      });
     } catch (error) {
       console.error("[listLegionMembers] Error:", error);
-      return "Failed to list members. Please try again.";
+      return JSON.stringify({ type: "error", message: "Failed to list members. Please try again." });
     }
   }
 

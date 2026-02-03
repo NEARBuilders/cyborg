@@ -13,7 +13,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "build:types": "tsc --declaration --emitDeclarationOnly --outDir dist/types",
-    "deploy": "bun run build:pages && cp .assetsignore dist/.assetsignore && npx wrangler pages deploy dist --project-name=near-agent --branch main",
+    "deploy": "bun run build:pages && cp .assetsignore dist/.assetsignore && cp _worker.js dist/_worker.js && npx wrangler pages deploy dist --project-name=near-agent --branch main",
     "deploy:demo": "bun run build:pages && cp .assetsignore dist/.assetsignore && npx wrangler pages deploy dist --project-name=near-agent --branch demo",
     "deploy:prod": "bun run build:pages && cp .assetsignore dist/.assetsignore && npx wrangler pages deploy dist --project-name=near-agent --branch main",
     "deploy:worker": "cd ../worker && bun run deploy:worker",

@@ -1,0 +1,2 @@
+# Ignore Pages worker file when deploying to Workers
+_worker.js
