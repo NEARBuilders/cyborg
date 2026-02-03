@@ -82,3 +82,28 @@ export const nearSocialProfiles = sqliteTable(
 );
 
 export type NearSocialProfile = typeof nearSocialProfiles.$inferSelect;
+
+// =============================================================================
+// LEGION NFT IMAGES
+// Stores NFT token metadata including image URLs for displaying NFT grids
+// =============================================================================
+
+export const legionNftImages = sqliteTable(
+  "legion_nft_images",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    tokenId: text("token_id").notNull(),
+    accountId: text("account_id").notNull(),
+    contractId: text("contract_id").notNull().default('nearlegion.nfts.tg'),
+    imageUrl: text("image_url"),
+    title: text("title"),
+    lastSyncedAt: integer("last_synced_at").notNull(),
+    syncedAt: integer("synced_at").notNull(),
+  },
+  (table) => ({
+    uniqueTokenContract: unique("unique_token_contract").on(table.tokenId, table.contractId),
+    accountIdIdx: index("legion_nft_images_account_id_idx").on(table.accountId),
+  })
+);
+
+export type LegionNftImage = typeof legionNftImages.$inferSelect;

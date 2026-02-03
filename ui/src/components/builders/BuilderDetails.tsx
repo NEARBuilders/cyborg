@@ -3,7 +3,7 @@
  * Right panel showing selected builder info
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Markdown } from "@/components/ui/markdown";
@@ -227,9 +227,35 @@ function BuilderSocials({
 }
 
 function NFTGrid({ holdings, accountId }: { holdings: Array<{ contractId: string; quantity: number }>; accountId: string }) {
+  const [nftImages, setNftImages] = useState<Array<{ contractId: string; tokens: Array<{ tokenId: string; imageUrl: string; title: string }> }> | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (holdings.length === 0) return;
+
+    // Check if user has nearlegion.nfts.tg holdings
+    const hasNearLegion = holdings.some(h => h.contractId === 'nearlegion.nfts.tg');
+    if (!hasNearLegion) return;
+
+    setIsLoading(true);
+    fetch(`/api/nfts/images/${accountId}`)
+      .then((res) => res.json())
+      .then((data) => {
+        setNftImages(data.images);
+      })
+      .catch((error) => {
+        console.error('[NFTGrid] Error fetching images:', error);
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  }, [accountId, holdings]);
+
   if (holdings.length === 0) {
     return null;
   }
+
+  const hasNearLegion = holdings.some(h => h.contractId === 'nearlegion.nfts.tg');
 
   return (
     <div className="space-y-4">
@@ -237,14 +263,55 @@ function NFTGrid({ holdings, accountId }: { holdings: Array<{ contractId: string
         NFT Collection
       </h3>
 
-      <div className="space-y-2">
-        {holdings.map((holding) => {
+      {/* Show NFT images grid for nearlegion.nfts.tg */}
+      {hasNearLegion && (
+        <div className="space-y-2">
+          {isLoading ? (
+            <div className="text-xs text-muted-foreground">Loading NFT images...</div>
+          ) : nftImages && nftImages.length > 0 ? (
+            nftImages.map((contract) => (
+              contract.contractId === 'nearlegion.nfts.tg' && contract.tokens.length > 0 && (
+                <div key={contract.contractId} className="space-y-2">
+                  <div className="text-xs text-muted-foreground/80">
+                    Legion Collection ({contract.tokens.length} items)
+                  </div>
+                  <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2">
+                    {contract.tokens.slice(0, 20).map((token) => (
+                      <div
+                        key={token.tokenId}
+                        className="aspect-square rounded-lg bg-muted/30 border border-primary/30 overflow-hidden relative group"
+                      >
+                        <img
+                          src={token.imageUrl}
+                          alt={`Legion NFT #${token.tokenId}`}
+                          className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                          loading="lazy"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${token.tokenId}`;
+                          }}
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            ))
+          ) : (
+            <div className="text-xs text-muted-foreground">No NFT images available</div>
+          )}
+        </div>
+      )}
+
+      {/* Other holdings without images - just show count */}
+      {holdings
+        .filter(h => h.contractId !== 'nearlegion.nfts.tg')
+        .map((holding) => {
           const contractName = holding.contractId
             .replace('.nearlegion.near', '')
             .replace('.nfts.tg', '')
             .replace('near.', '');
 
-          const isNearLegion = holding.contractId === 'nearlegion.nfts.tg';
           const isAscendant = holding.contractId === 'ascendant.nearlegion.near';
           const isInitiate = holding.contractId === 'initiate.nearlegion.near';
 
@@ -253,7 +320,6 @@ function NFTGrid({ holdings, accountId }: { holdings: Array<{ contractId: string
               <div className="flex items-center gap-3">
                 {isAscendant && <span className="text-lg">🏆</span>}
                 {isInitiate && <span className="text-lg">🌱</span>}
-                {isNearLegion && <span className="text-lg">⚔️</span>}
                 <div>
                   <span className="text-sm font-medium">{contractName}</span>
                   <span className="text-xs text-muted-foreground ml-2">×{holding.quantity}</span>
@@ -270,7 +336,6 @@ function NFTGrid({ holdings, accountId }: { holdings: Array<{ contractId: string
             </div>
           );
         })}
-      </div>
     </div>
   );
 }

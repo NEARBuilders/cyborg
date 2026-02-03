@@ -12,11 +12,11 @@
 
 // Multiple RPC endpoints for fallback (ordered by priority)
 const RPC_ENDPOINTS = [
-  "https://near.lava.build",     // Try this first (no rate limits in testing)
+  "https://near.lava.build", // Try this first (no rate limits in testing)
   "https://rpc.mainnet.near.org", // Official RPC (may be rate limited)
 ];
 
-const CONTRACT_ID = "ascendant.nearlegion.near";
+const CONTRACT_ID = "nearlegion.nfts.tg.near";
 
 interface NEARToken {
   token_id?: string;
@@ -31,7 +31,11 @@ interface HoldersMap {
 /**
  * Fetch a batch of NFT tokens from the contract via RPC
  */
-async function fetchTokenBatch(fromIndex: number, limit: number, rpcUrl: string): Promise<NEARToken[]> {
+async function fetchTokenBatch(
+  fromIndex: number,
+  limit: number,
+  rpcUrl: string,
+): Promise<NEARToken[]> {
   const args = JSON.stringify({ from_index: String(fromIndex), limit });
   const argsBase64 = Buffer.from(args).toString("base64");
 
@@ -48,7 +52,7 @@ async function fetchTokenBatch(fromIndex: number, limit: number, rpcUrl: string)
         account_id: CONTRACT_ID,
         method_name: "nft_tokens",
         args_base64: argsBase64,
-      }
+      },
     }),
   });
 
@@ -71,7 +75,11 @@ async function fetchTokenBatch(fromIndex: number, limit: number, rpcUrl: string)
   let parsedTokens: NEARToken[] = [];
 
   // Handle byte array format from RPC
-  if (Array.isArray(rawResult) && rawResult.length > 0 && typeof rawResult[0] === 'number') {
+  if (
+    Array.isArray(rawResult) &&
+    rawResult.length > 0 &&
+    typeof rawResult[0] === "number"
+  ) {
     // RPC returns byte array - convert to buffer then parse JSON
     const buffer = Buffer.from(new Uint8Array(rawResult));
     parsedTokens = JSON.parse(buffer.toString()) as NEARToken[];
@@ -110,7 +118,9 @@ async function fetchAllTokens(): Promise<NEARToken[]> {
     try {
       const batch = await fetchTokenBatch(fromIndex, batchSize, currentRpcUrl);
       allTokens.push(...batch);
-      console.log(`[RPC] Fetched ${batch.length} tokens (from index ${fromIndex})`);
+      console.log(
+        `[RPC] Fetched ${batch.length} tokens (from index ${fromIndex})`,
+      );
 
       // Check if we need to fetch more
       if (batch.length < batchSize) {
@@ -120,8 +130,7 @@ async function fetchAllTokens(): Promise<NEARToken[]> {
       }
 
       // Small delay to avoid rate limiting
-      await new Promise(resolve => setTimeout(resolve, 200));
-
+      await new Promise((resolve) => setTimeout(resolve, 200));
     } catch (error) {
       const errorMsg = (error as Error).message;
 
@@ -156,7 +165,9 @@ function aggregateHolders(tokens: NEARToken[]): HoldersMap {
     }
   }
 
-  console.log(`[AGGREGATE] Found ${Object.keys(holders).length} unique holders`);
+  console.log(
+    `[AGGREGATE] Found ${Object.keys(holders).length} unique holders`,
+  );
   return holders;
 }
 
@@ -170,7 +181,7 @@ function generateUpsertSQL(holders: HoldersMap): string {
   for (const [accountId, quantity] of Object.entries(holders)) {
     // Use INSERT OR REPLACE for SQLite upsert
     statements.push(
-      `INSERT OR REPLACE INTO ascendant_holders (account_id, quantity, last_synced_at, synced_at) VALUES ('${accountId}', ${quantity}, ${now}, ${now});`
+      `INSERT OR REPLACE INTO ascendant_holders (account_id, quantity, last_synced_at, synced_at) VALUES ('${accountId}', ${quantity}, ${now}, ${now});`,
     );
   }
 
@@ -198,7 +209,9 @@ async function executeSQL(sql: string, remote: boolean): Promise<void> {
 
     // Execute via wrangler
     const command = `wrangler d1 execute ${dbName} ${remoteFlag} --file=${tempFile}`;
-    console.log(`[D1] Batch ${Math.floor(i / 50) + 1}/${Math.ceil(statements.length / 50)}...`);
+    console.log(
+      `[D1] Batch ${Math.floor(i / 50) + 1}/${Math.ceil(statements.length / 50)}...`,
+    );
 
     const proc = Bun.spawn(["sh", "-c", command], {
       stdout: "inherit",
@@ -248,8 +261,12 @@ async function main() {
 
   if (!apply) {
     console.log("\n[PREVIEW MODE] Run with --apply to execute the changes.");
-    console.log("  bun run scripts/sync-holders.ts --apply     # Local database");
-    console.log("  bun run scripts/sync-holders.ts --apply --remote  # Remote database");
+    console.log(
+      "  bun run scripts/sync-holders.ts --apply     # Local database",
+    );
+    console.log(
+      "  bun run scripts/sync-holders.ts --apply --remote  # Remote database",
+    );
     return;
   }
 

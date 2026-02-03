@@ -610,6 +610,186 @@ app.get("/api/builders-with-profiles", async (c) => {
   }
 });
 
+// =============================================================================
+// NFT METADATA ENDPOINT - Fetch NFT images for Legion holdings
+// =============================================================================
+
+app.get("/api/nfts/:accountId", async (c) => {
+  try {
+    const accountId = c.req.param("accountId");
+    const db = createDatabase(c.env.DB);
+
+    // Get holdings for this account
+    const holdings = await db.query.legionHolders.findMany({
+      where: (h, { eq }) => eq(h.accountId, accountId),
+    });
+
+    if (holdings.length === 0) {
+      return c.json({ holdings: [] });
+    }
+
+    // Fetch NFT tokens for each contract
+    const holdingsWithTokens = await Promise.all(
+      holdings.map(async (holding) => {
+        try {
+          const tokens = await fetchNFTTokensForAccount(accountId, holding.contractId);
+          return {
+            contractId: holding.contractId,
+            quantity: holding.quantity,
+            tokens: tokens.map((token) => ({
+              tokenId: token.token_id,
+              imageUrl: extractImageUrl(token.metadata),
+              title: token.metadata?.title,
+              description: token.metadata?.description,
+            })),
+          };
+        } catch (error) {
+          console.error(`[NFT] Error fetching tokens for ${holding.contractId}:`, error);
+          return {
+            contractId: holding.contractId,
+            quantity: holding.quantity,
+            tokens: [],
+            error: "Failed to fetch tokens",
+          };
+        }
+      })
+    );
+
+    return c.json({ holdings: holdingsWithTokens });
+  } catch (error) {
+    console.error("[NFT] Error:", error);
+    return c.json({ error: "Failed to fetch NFT metadata" }, 500);
+  }
+});
+
+/**
+ * Fetch NFT tokens for an account from a specific contract
+ */
+async function fetchNFTTokensForAccount(
+  accountId: string,
+  contractId: string,
+  limit = 50
+): Promise<Array<{ token_id: string; metadata?: any }>> {
+  const args = JSON.stringify({
+    account_id: accountId,
+    limit,
+  });
+  const argsBase64 = Buffer.from(args).toString("base64");
+
+  const response = await fetch("https://rpc.mainnet.near.org", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: `nft-${contractId}-${accountId}`,
+      method: "query",
+      params: {
+        request_type: "call_function",
+        finality: "final",
+        account_id: contractId,
+        method_name: "nft_tokens_for_owner",
+        args_base64: argsBase64,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`RPC request failed: ${response.statusText}`);
+  }
+
+  const result = await response.json();
+
+  if (result.error) {
+    throw new Error(`RPC error: ${result.error.message}`);
+  }
+
+  // Parse the byte array result
+  const rawResult = result.result?.result || [];
+  let tokens: any[] = [];
+
+  if (Array.isArray(rawResult) && rawResult.length > 0 && typeof rawResult[0] === 'number') {
+    const buffer = Buffer.from(new Uint8Array(rawResult));
+    tokens = JSON.parse(buffer.toString());
+  } else if (typeof rawResult === "string" && rawResult.length > 0) {
+    const buffer = Buffer.from(rawResult, "base64");
+    tokens = JSON.parse(buffer.toString());
+  } else if (Array.isArray(rawResult)) {
+    tokens = rawResult;
+  }
+
+  return tokens;
+}
+
+/**
+ * Extract image URL from NFT metadata
+ */
+function extractImageUrl(metadata: any): string | null {
+  if (!metadata) return null;
+
+  // Try reference field (usually points to JSON metadata)
+  if (metadata.reference) {
+    return metadata.reference;
+  }
+
+  // Try media field (direct image URL)
+  if (metadata.media) {
+    return metadata.media;
+  }
+
+  // Try base_uri + media pattern
+  if (metadata.base_uri && metadata.media) {
+    const baseUri = metadata.base_uri;
+    const media = metadata.media.startsWith("/")
+      ? metadata.media.substring(1)
+      : metadata.media;
+    return baseUri.endsWith("/")
+      ? baseUri + media
+      : baseUri + "/" + media;
+  }
+
+  return null;
+}
+
+// =============================================================================
+// NFT IMAGES ENDPOINT - Get cached NFT images for Legion holders
+// =============================================================================
+
+app.get("/api/nfts/images/:accountId", async (c) => {
+  try {
+    const accountId = c.req.param("accountId");
+    const db = createDatabase(c.env.DB);
+
+    // Fetch NFT images from database
+    const nftImages = await db.query.legionNftImages.findMany({
+      where: (img, { eq }) => eq(img.accountId, accountId),
+    });
+
+    // Group by contract
+    const byContract: Record<string, typeof nftImages> = {};
+    for (const img of nftImages) {
+      if (!byContract[img.contractId]) {
+        byContract[img.contractId] = [];
+      }
+      byContract[img.contractId].push(img);
+    }
+
+    return c.json({
+      accountId,
+      images: Object.entries(byContract).map(([contractId, images]) => ({
+        contractId,
+        tokens: images.map((img) => ({
+          tokenId: img.tokenId,
+          imageUrl: img.imageUrl,
+          title: img.title,
+        })),
+      })),
+    });
+  } catch (error) {
+    console.error("[NFT IMAGES] Error:", error);
+    return c.json({ error: "Failed to fetch NFT images" }, 500);
+  }
+});
+
 // Mount public routes
 app.route("/api/builders", publicRoutes);
 
