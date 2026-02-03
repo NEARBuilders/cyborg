@@ -1,9 +1,12 @@
 /**
  * Chat Message Component
- * Displays a single chat message
+ * Displays a single chat message with markdown support
  */
 
 import { cn } from "../../lib/utils";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
 
 interface Message {
   id: string;
@@ -45,12 +48,99 @@ export function ChatMessage({ message, isStreaming }: ChatMessageProps) {
               : "bg-muted/20 text-foreground/90"
           )}
         >
-          <div className="whitespace-pre-wrap break-words leading-relaxed">
-            {message.content}
-            {isStreaming && (
-              <span className="inline-block w-1 h-3 ml-0.5 bg-primary/50 animate-pulse" />
-            )}
-          </div>
+          {isUser ? (
+            // User messages: plain text with line breaks
+            <div className="whitespace-pre-wrap break-words leading-relaxed">
+              {message.content}
+            </div>
+          ) : (
+            // AI messages: render as markdown
+            <div className="prose prose-sm dark:prose-invert max-w-none prose-p:leading-relaxed prose-p:my-1">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                rehypePlugins={[rehypeRaw]}
+                components={{
+                  // Links
+                  a: ({ node, ...props }) => (
+                    <a
+                      {...props}
+                      className="text-primary hover:text-primary/80 underline underline-offset-2"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    />
+                  ),
+                  // Code blocks
+                  code: ({ node, inline, ...props }) =>
+                    inline ? (
+                      <code
+                        className="px-1.5 py-0.5 rounded bg-muted/50 text-foreground/90 text-xs font-mono"
+                        {...props}
+                      />
+                    ) : (
+                      <code
+                        className="block px-2 py-1.5 rounded bg-muted/30 text-foreground text-xs font-mono overflow-x-auto"
+                        {...props}
+                      />
+                    ),
+                  // Headings
+                  h1: ({ node, ...props }) => (
+                    <h1 className="text-lg font-semibold mt-2 mb-1" {...props} />
+                  ),
+                  h2: ({ node, ...props }) => (
+                    <h2 className="text-base font-semibold mt-2 mb-1" {...props} />
+                  ),
+                  h3: ({ node, ...props }) => (
+                    <h3 className="text-sm font-semibold mt-1.5 mb-1" {...props} />
+                  ),
+                  // Lists
+                  ul: ({ node, ...props }) => (
+                    <ul className="my-1 ml-4 list-disc" {...props} />
+                  ),
+                  ol: ({ node, ...props }) => (
+                    <ol className="my-1 ml-4 list-decimal" {...props} />
+                  ),
+                  li: ({ node, ...props }) => (
+                    <li className="my-0.5" {...props} />
+                  ),
+                  // Blockquotes
+                  blockquote: ({ node, ...props }) => (
+                    <blockquote
+                      className="border-l-2 border-muted-foreground/20 pl-3 italic my-2 text-muted-foreground/80"
+                      {...props}
+                    />
+                  ),
+                  // Strong/bold
+                  strong: ({ node, ...props }) => (
+                    <strong className="font-semibold" {...props} />
+                  ),
+                  // Em/italic
+                  em: ({ node, ...props }) => (
+                    <em className="italic" {...props} />
+                  ),
+                  // Tables (for GFM tables)
+                  table: ({ node, ...props }) => (
+                    <div className="my-2 overflow-x-auto">
+                      <table className="min-w-full divide-y divide-border" {...props} />
+                    </div>
+                  ),
+                  thead: ({ node, ...props }) => (
+                    <thead className="bg-muted/30" {...props} />
+                  ),
+                  th: ({ node, ...props }) => (
+                    <th className="px-2 py-1 text-left text-xs font-medium" {...props} />
+                  ),
+                  td: ({ node, ...props }) => (
+                    <td className="px-2 py-1 text-xs border-t border-border/30" {...props} />
+                  ),
+                }}
+              >
+                {message.content}
+              </ReactMarkdown>
+              {isStreaming && (
+                <span className="inline-block w-1 h-3 ml-0.5 bg-primary/50 animate-pulse" />
+              )}
+            </div>
+          )}
         </div>
 
         {/* Timestamp */}
