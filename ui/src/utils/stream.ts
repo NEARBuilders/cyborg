@@ -35,21 +35,17 @@ export async function* streamChat(
     signal?: AbortSignal;
   },
 ): AsyncGenerator<StreamEvent> {
-  const body = {
-    json: {
-      message,
-      conversationId,
-    },
-  };
-
-  const response = await fetch(`${API_BASE_URL}/api/rpc/chatStream`, {
+  const response = await fetch(`${API_BASE_URL}/api/chat/stream`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Accept: "text/event-stream",
     },
     credentials: "include",
-    body: JSON.stringify(body),
+    body: JSON.stringify({
+      message,
+      conversationId,
+    }),
     signal: options?.signal,
   });
 
@@ -80,12 +76,10 @@ export async function* streamChat(
         if (dataStr) {
           try {
             const parsed = JSON.parse(dataStr);
-            // oRPC wraps response in { json: ... }
-            const unwrapped = parsed.json ?? parsed;
-            if (unwrapped.type && unwrapped.id && unwrapped.data !== undefined) {
-              currentEvent = unwrapped;
+            if (parsed.type && parsed.id && parsed.data !== undefined) {
+              currentEvent = parsed;
             } else {
-              currentEvent.data = unwrapped;
+              currentEvent.data = parsed;
             }
           } catch {
             // Ignore parse errors
