@@ -222,13 +222,26 @@ export class AgentService {
 
 **You have access to tools that can:**
 - Search for builders by interests, skills, and what they do
-- Get detailed profiles for specific builders
+- Get detailed profiles for specific builders (including NFT avatars!)
 - List Legion members by rank (Ascendant, Initiate, Holder)
 - Check member rank tiers
 
-When users ask about finding people, connecting with others, or discovering builders with specific skills/interests, use the available tools to search the builder database and provide helpful recommendations.
+**When presenting builders to users:**
+- Always use markdown formatting for better readability
+- Include their NFT avatar image if available
+- Highlight their role (Ascendant, Initiate, Holder)
+- Show their key interests and skills
+- Mention their social links (github, twitter)
+- Present in a visually appealing way with bullet points and formatting
 
-Be conversational and helpful. When you find builders through tools, present them in an engaging way with their key details, interests, and how to connect.`;
+Example format:
+### **@builder.near** 🔥 Ascendant
+![Avatar](https://...)
+- **Skills:** React, TypeScript, Smart Contracts
+- **Interests:** DeFi, NFTs, Gaming
+- **GitHub:** [@username](https://github.com/...)
+
+When users ask about finding people, connecting with others, or discovering builders with specific skills/interests, use the available tools to search the builder database and provide helpful recommendations in a visually engaging format.`;
 
     if (!this.nearService) {
       return basePrompt;
@@ -459,17 +472,55 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
 
         // Execute all tool calls
         for (const toolCall of toolCalls) {
-          const result = await this.executeToolCall({
-            id: toolCall.id,
-            name: toolCall.function.name,
-            arguments: JSON.parse(toolCall.function.arguments),
-          });
+          try {
+            // Validate JSON before parsing
+            let args: Record<string, unknown>;
+            try {
+              args = JSON.parse(toolCall.function.arguments);
+            } catch (parseError) {
+              console.error("[AgentService] Failed to parse tool arguments:", {
+                tool: toolCall.function.name,
+                arguments: toolCall.function.arguments,
+                error: parseError,
+              });
+              // Return error message to the model
+              currentMessages.push({
+                role: "tool",
+                tool_call_id: toolCall.id,
+                content: JSON.stringify({
+                  error: "Invalid JSON in tool call arguments",
+                  tool: toolCall.function.name,
+                }),
+              });
+              continue;
+            }
 
-          currentMessages.push({
-            role: "tool",
-            tool_call_id: toolCall.id,
-            content: result,
-          });
+            const result = await this.executeToolCall({
+              id: toolCall.id,
+              name: toolCall.function.name,
+              arguments: args,
+            });
+
+            currentMessages.push({
+              role: "tool",
+              tool_call_id: toolCall.id,
+              content: result,
+            });
+          } catch (toolError) {
+            console.error("[AgentService] Tool execution failed:", {
+              tool: toolCall.function.name,
+              error: toolError,
+            });
+            // Return error to model so it can recover
+            currentMessages.push({
+              role: "tool",
+              tool_call_id: toolCall.id,
+              content: JSON.stringify({
+                error: toolError instanceof Error ? toolError.message : "Tool execution failed",
+                tool: toolCall.function.name,
+              }),
+            });
+          }
         }
 
         // Get next response from model with tool results
@@ -623,17 +674,56 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
 
           // Execute all tool calls
           for (const toolCall of accumulatedToolCalls) {
-            const result = await this.executeToolCall({
-              id: toolCall.id,
-              name: toolCall.function.name,
-              arguments: JSON.parse(toolCall.function.arguments),
-            });
+            try {
+              // Validate JSON before parsing
+              let args: Record<string, unknown>;
+              try {
+                args = JSON.parse(toolCall.function.arguments);
+              } catch (parseError) {
+                console.error("[AgentService] Failed to parse tool arguments:", {
+                  tool: toolCall.function.name,
+                  arguments: toolCall.function.arguments,
+                  error: parseError,
+                });
+                // Return error message to the model
+                currentMessages.push({
+                  role: "tool",
+                  tool_call_id: toolCall.id,
+                  content: JSON.stringify({
+                    error: "Invalid JSON in tool call arguments",
+                    tool: toolCall.function.name,
+                    arguments: toolCall.function.arguments,
+                  }),
+                });
+                continue;
+              }
 
-            currentMessages.push({
-              role: "tool",
-              tool_call_id: toolCall.id,
-              content: result,
-            });
+              const result = await this.executeToolCall({
+                id: toolCall.id,
+                name: toolCall.function.name,
+                arguments: args,
+              });
+
+              currentMessages.push({
+                role: "tool",
+                tool_call_id: toolCall.id,
+                content: result,
+              });
+            } catch (toolError) {
+              console.error("[AgentService] Tool execution failed:", {
+                tool: toolCall.function.name,
+                error: toolError,
+              });
+              // Return error to model so it can recover
+              currentMessages.push({
+                role: "tool",
+                tool_call_id: toolCall.id,
+                content: JSON.stringify({
+                  error: toolError instanceof Error ? toolError.message : "Tool execution failed",
+                  tool: toolCall.function.name,
+                }),
+              });
+            }
           }
 
           toolIteration++;
@@ -771,7 +861,7 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
     const limit = Math.min(params.limit || 10, 50);
 
     if (query.length < 2) {
-      return JSON.stringify({ error: "Query must be at least 2 characters" });
+      return "Error: Query must be at least 2 characters";
     }
 
     try {
@@ -783,6 +873,7 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
           description: schema.nearSocialProfiles.description,
           profileData: schema.nearSocialProfiles.profileData,
           image: schema.nearSocialProfiles.image,
+          nftAvatarUrl: schema.nearSocialProfiles.nftAvatarUrl,
         })
         .from(schema.nearSocialProfiles)
         .where(
@@ -795,10 +886,7 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
         .limit(limit);
 
       if (results.length === 0) {
-        return JSON.stringify({
-          message: `No builders found matching "${params.query}". Try different keywords like specific technologies (react, rust, defi) or broader terms.`,
-          results: [],
-        });
+        return `No builders found matching "${params.query}". Try different keywords like specific technologies (react, rust, defi) or broader terms.`;
       }
 
       const builders = await Promise.all(
@@ -809,39 +897,67 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
           });
 
           let role = "Member";
+          let roleEmoji = "";
           if (holderData) {
-            if (holderData.contractId === "ascendant.nearlegion.near") role = "Ascendant";
-            else if (holderData.contractId === "initiate.nearlegion.near") role = "Initiate";
-            else role = "Holder";
+            if (holderData.contractId === "ascendant.nearlegion.near") {
+              role = "Ascendant";
+              roleEmoji = "🔥";
+            }
+            else if (holderData.contractId === "initiate.nearlegion.near") {
+              role = "Initiate";
+              roleEmoji = "⚡";
+            }
+            else {
+              role = "Holder";
+              roleEmoji = "💎";
+            }
           }
 
-          const avatar = profile.image || profileData?.image?.url ||
-            `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile.accountId}`;
+          // Use NFT avatar if available, otherwise fall back to profile image
+          const avatar = profile.nftAvatarUrl || profile.image || profileData?.image?.url ||
+            (profileData?.image?.ipfs_cid
+              ? `https://ipfs.near.social/ipfs/${profileData.image.ipfs_cid}`
+              : `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile.accountId}`);
 
-          return {
-            accountId: profile.accountId,
-            displayName: profile.name || profile.accountId.split(".")[0],
-            description: profile.description || "",
-            tags: profileData?.tags ? Object.keys(profileData.tags) : [],
-            role,
-            avatar,
-            socials: {
-              github: profileData?.linktree?.github,
-              twitter: profileData?.linktree?.twitter,
-              website: profileData?.linktree?.website,
-            },
-          };
+          const displayName = profile.name || profile.accountId.split(".")[0];
+          const tags = profileData?.tags ? Object.keys(profileData.tags) : [];
+          const github = profileData?.linktree?.github;
+          const twitter = profileData?.linktree?.twitter;
+          const website = profileData?.linktree?.website;
+
+          // Build markdown card for this builder
+          let markdown = `### **${roleEmoji} @${profile.accountId}**\n`;
+          if (role !== "Member") {
+            markdown += `###### **${role}**\n`;
+          }
+          markdown += `![${displayName}](${avatar})\n\n`;
+
+          if (profile.description) {
+            markdown += `${profile.description}\n\n`;
+          }
+
+          if (tags.length > 0) {
+            markdown += `**Interests:** ${tags.map(t => `\`${t}\``).join(", ")}\n\n`;
+          }
+
+          if (github || twitter || website) {
+            markdown += `**Connect:** `;
+            const links = [];
+            if (github) links.push(`[GitHub](https://github.com/${github})`);
+            if (twitter) links.push(`[Twitter](https://twitter.com/${twitter})`);
+            if (website) links.push(`[Website](${website})`);
+            markdown += links.join(" • ");
+            markdown += "\n";
+          }
+
+          return markdown;
         })
       );
 
-      return JSON.stringify({
-        query: params.query,
-        count: builders.length,
-        results: builders,
-      }, null, 2);
+      return `Found ${builders.length} builder${builders.length === 1 ? '' : 's'} matching "${params.query}":\n\n` + builders.join("\n\n---\n\n");
     } catch (error) {
       console.error("[searchBuilders] Error:", error);
-      return JSON.stringify({ error: "Failed to search builders" });
+      return "Failed to search builders. Please try again.";
     }
   }
 
@@ -855,10 +971,7 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
       });
 
       if (!profile) {
-        return JSON.stringify({
-          error: "Profile not found",
-          message: `No profile found for ${params.accountId}`,
-        });
+        return `No profile found for ${params.accountId}`;
       }
 
       const profileData = JSON.parse(profile.profileData);
@@ -867,45 +980,78 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
       });
 
       let role = "Member";
+      let roleEmoji = "👤";
       let isLegion = false;
       let isInitiate = false;
 
       for (const h of holdings) {
-        if (h.contractId === "ascendant.nearlegion.near") { role = "Ascendant"; isLegion = true; }
-        else if (h.contractId === "initiate.nearlegion.near") { isInitiate = true; }
+        if (h.contractId === "ascendant.nearlegion.near") {
+          role = "Ascendant";
+          roleEmoji = "🔥";
+          isLegion = true;
+        }
+        else if (h.contractId === "initiate.nearlegion.near") {
+          isInitiate = true;
+        }
       }
 
-      if (isInitiate && !isLegion) role = "Initiate";
-      else if (!isLegion && !isInitiate && holdings.length > 0) role = "Holder";
+      if (isInitiate && !isLegion) {
+        role = "Initiate";
+        roleEmoji = "⚡";
+      }
+      else if (!isLegion && !isInitiate && holdings.length > 0) {
+        role = "Holder";
+        roleEmoji = "💎";
+      }
 
-      const avatar = profile.image || profileData?.image?.url ||
+      // Use NFT avatar if available
+      const avatar = profile.nftAvatarUrl || profile.image || profileData?.image?.url ||
         (profileData?.image?.ipfs_cid
           ? `https://ipfs.near.social/ipfs/${profileData.image.ipfs_cid}`
           : `https://api.dicebear.com/7.x/avataaars/svg?seed=${params.accountId}`);
 
-      return JSON.stringify({
-        accountId: params.accountId,
-        displayName: profile.name || params.accountId.split(".")[0],
-        description: profile.description || "No description provided",
-        tags: profileData?.tags ? Object.keys(profileData.tags) : [],
-        interests: profileData?.tags || {},
-        role,
-        isLegion,
-        isInitiate,
-        avatar,
-        backgroundImage: profileData?.backgroundImage,
-        socials: {
-          github: profileData?.linktree?.github,
-          twitter: profileData?.linktree?.twitter,
-          telegram: profileData?.linktree?.telegram,
-          website: profileData?.linktree?.website,
-        },
-        bio: profileData?.bio,
-        lastUpdated: new Date(profile.lastSyncedAt * 1000).toISOString(),
-      }, null, 2);
+      const displayName = profile.name || params.accountId.split(".")[0];
+      const tags = profileData?.tags ? Object.keys(profileData.tags) : [];
+      const github = profileData?.linktree?.github;
+      const twitter = profileData?.linktree?.twitter;
+      const website = profileData?.linktree?.website;
+      const telegram = profileData?.linktree?.telegram;
+
+      // Build detailed markdown profile
+      let markdown = `### **${roleEmoji} @${params.accountId}**\n`;
+      markdown += `###### **${role}**\n\n`;
+      markdown += `![${displayName}](${avatar})\n\n`;
+
+      if (profile.description) {
+        markdown += `**Bio:** ${profile.description}\n\n`;
+      }
+
+      if (tags.length > 0) {
+        markdown += `**Interests:** ${tags.map(t => `\`${t}\``).join(", ")}\n\n`;
+      }
+
+      // Contracts held
+      if (holdings.length > 0) {
+        markdown += `**NFTs Held:**\n`;
+        for (const h of holdings) {
+          markdown += `- \`${h.contractId}\` (Qty: ${h.quantity})\n`;
+        }
+        markdown += "\n";
+      }
+
+      // Social links
+      if (github || twitter || website || telegram) {
+        markdown += `**Connect:**\n`;
+        if (github) markdown += `- [GitHub](https://github.com/${github})\n`;
+        if (twitter) markdown += `- [Twitter](https://twitter.com/${twitter})\n`;
+        if (telegram) markdown += `- [Telegram](${telegram})\n`;
+        if (website) markdown += `- [Website](${website})\n`;
+      }
+
+      return markdown;
     } catch (error) {
       console.error("[getBuilderProfile] Error:", error);
-      return JSON.stringify({ error: "Failed to fetch profile" });
+      return "Failed to fetch profile. Please try again.";
     }
   }
 
@@ -939,49 +1085,69 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
       }
 
       // Filter by role if specified
-      const filteredAccounts: Array<{ accountId: string; role: string }> = [];
+      const filteredAccounts: Array<{ accountId: string; role: string; roleEmoji: string }> = [];
 
       for (const [accountId, { contracts }] of accountMap) {
         let role = "Holder";
-        if (contracts.includes("ascendant.nearlegion.near")) role = "Ascendant";
-        else if (contracts.includes("initiate.nearlegion.near")) role = "Initiate";
+        let roleEmoji = "💎";
+        if (contracts.includes("ascendant.nearlegion.near")) {
+          role = "Ascendant";
+          roleEmoji = "🔥";
+        }
+        else if (contracts.includes("initiate.nearlegion.near")) {
+          role = "Initiate";
+          roleEmoji = "⚡";
+        }
 
         if (params.role && params.role !== "any" && role !== params.role) {
           continue;
         }
 
-        filteredAccounts.push({ accountId, role });
+        filteredAccounts.push({ accountId, role, roleEmoji });
       }
 
-      // Fetch profiles for filtered accounts
-      const members = await Promise.all(
-        filteredAccounts.slice(0, limit).map(async ({ accountId, role }) => {
+      if (filteredAccounts.length === 0) {
+        return `No Legion members found${params.role && params.role !== "any" ? ` with role "${params.role}"` : ""}.`;
+      }
+
+      // Fetch profiles for filtered accounts and build markdown
+      const memberCards = await Promise.all(
+        filteredAccounts.slice(0, limit).map(async ({ accountId, role, roleEmoji }) => {
           const profile = await this.db.query.nearSocialProfiles.findFirst({
             where: eq(schema.nearSocialProfiles.accountId, accountId),
           });
 
           const profileData = profile?.profileData ? JSON.parse(profile.profileData) : null;
+          const displayName = profile?.name || accountId.split(".")[0];
+          const tags = profileData?.tags ? Object.keys(profileData.tags) : [];
 
-          return {
-            accountId,
-            displayName: profile?.name || accountId.split(".")[0],
-            role,
-            description: profile?.description || "",
-            tags: profileData?.tags ? Object.keys(profileData.tags) : [],
-            avatar: profile?.image || profileData?.image?.url ||
-              `https://api.dicebear.com/7.x/avataaars/svg?seed=${accountId}`,
-          };
+          // Use NFT avatar if available
+          const avatar = profile?.nftAvatarUrl || profile?.image || profileData?.image?.url ||
+            (profileData?.image?.ipfs_cid
+              ? `https://ipfs.near.social/ipfs/${profileData.image.ipfs_cid}`
+              : `https://api.dicebear.com/7.x/avataaars/svg?seed=${accountId}`);
+
+          let markdown = `### **${roleEmoji} @${accountId}**\n`;
+          markdown += `###### **${role}**\n\n`;
+          markdown += `![${displayName}](${avatar})\n\n`;
+
+          if (profile?.description) {
+            markdown += `${profile.description}\n\n`;
+          }
+
+          if (tags.length > 0) {
+            markdown += `**Interests:** ${tags.map(t => `\`${t}\``).join(", ")}\n\n`;
+          }
+
+          return markdown;
         })
       );
 
-      return JSON.stringify({
-        role: params.role || "any",
-        count: members.length,
-        members,
-      }, null, 2);
+      const roleFilter = params.role && params.role !== "any" ? ` with role **${params.role}**` : "";
+      return `Found ${memberCards.length} Legion member${memberCards.length === 1 ? '' : 's'}${roleFilter}:\n\n` + memberCards.join("\n\n---\n\n");
     } catch (error) {
       console.error("[listLegionMembers] Error:", error);
-      return JSON.stringify({ error: "Failed to list members" });
+      return "Failed to list members. Please try again.";
     }
   }
 
@@ -990,38 +1156,27 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
    */
   private async getMemberRank(params: { accountId: string }): Promise<string> {
     if (!this.nearService) {
-      return JSON.stringify({ error: "NEAR service not available" });
+      return "Rank service not available";
     }
 
     try {
       const rankData = await this.nearService.getUserRank(params.accountId);
 
       if (!rankData) {
-        return JSON.stringify({
-          accountId: params.accountId,
-          hasRank: false,
-          message: "No rank skillcape found",
-        });
+        return `**@${params.accountId}** doesn't have a rank skillcape yet. Complete missions at https://app.nearlegion.com to earn ranks!`;
       }
 
-      const rankDisplay = {
-        legendary: "Legendary / Mythic",
-        epic: "Epic / Prime",
-        rare: "Rare / Vanguard",
-        common: "Common / Ascendant",
+      const rankDisplay: Record<string, string> = {
+        legendary: "🏆 Legendary / Mythic",
+        epic: "⭐ Epic / Prime",
+        rare: "💫 Rare / Vanguard",
+        common: "🌟 Common / Ascendant",
       };
 
-      return JSON.stringify({
-        accountId: params.accountId,
-        hasRank: true,
-        rank: rankData.rank,
-        display: rankDisplay[rankData.rank],
-        tokenId: rankData.tokenId,
-        lastChecked: rankData.lastChecked,
-      }, null, 2);
+      return `**@${params.accountId}** has the rank: ${rankDisplay[rankData.rank] || rankData.rank}\n\nToken ID: \`${rankData.tokenId}\``;
     } catch (error) {
       console.error("[getMemberRank] Error:", error);
-      return JSON.stringify({ error: "Failed to fetch rank" });
+      return "Failed to fetch rank. Please try again.";
     }
   }
 
