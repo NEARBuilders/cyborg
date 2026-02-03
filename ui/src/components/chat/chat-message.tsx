@@ -1,12 +1,14 @@
 /**
  * Chat Message Component
  * Displays a single chat message with markdown support
+ * Detects and renders builder cards from JSON code blocks
  */
 
 import { cn } from "../../lib/utils";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
+import { BuilderCard } from "./builder-card";
 
 interface Message {
   id: string;
@@ -54,12 +56,55 @@ export function ChatMessage({ message, isStreaming }: ChatMessageProps) {
               {message.content}
             </div>
           ) : (
-            // AI messages: render as markdown
+            // AI messages: render as markdown with builder card detection
             <div className="prose prose-sm dark:prose-invert max-w-none prose-p:leading-relaxed prose-p:my-1">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 rehypePlugins={[rehypeRaw]}
                 components={{
+                  // Custom code block renderer to detect builder-results
+                  code: ({ node, inline, className, children, ...props }) => {
+                    if (inline) {
+                      return (
+                        <code
+                          className="px-1.5 py-0.5 rounded bg-muted/50 text-foreground/90 text-xs font-mono"
+                          {...props}
+                        >
+                          {children}
+                        </code>
+                      );
+                    }
+
+                    const codeContent = String(children).replace(/\n$/, "");
+
+                    // Check if this is a builder-results code block
+                    if (className?.includes("builder-results") || codeContent.includes('"type": "builders"')) {
+                      try {
+                        const json = JSON.parse(codeContent);
+                        if (json.type === "builders" && Array.isArray(json.data)) {
+                          return (
+                            <div className="my-3 space-y-3">
+                              {json.data.map((builder: any, index: number) => (
+                                <BuilderCard key={`${builder.accountId}-${index}`} builder={builder} />
+                              ))}
+                            </div>
+                          );
+                        }
+                      } catch (e) {
+                        console.error("Failed to parse builder-results JSON:", e);
+                      }
+                    }
+
+                    // Default code block rendering
+                    return (
+                      <code
+                        className="block px-2 py-1.5 rounded bg-muted/30 text-foreground text-xs font-mono overflow-x-auto"
+                        {...props}
+                      >
+                        {children}
+                      </code>
+                    );
+                  },
                   // Links
                   a: ({ node, ...props }) => (
                     <a
@@ -69,19 +114,6 @@ export function ChatMessage({ message, isStreaming }: ChatMessageProps) {
                       rel="noopener noreferrer"
                     />
                   ),
-                  // Code blocks
-                  code: ({ node, inline, ...props }) =>
-                    inline ? (
-                      <code
-                        className="px-1.5 py-0.5 rounded bg-muted/50 text-foreground/90 text-xs font-mono"
-                        {...props}
-                      />
-                    ) : (
-                      <code
-                        className="block px-2 py-1.5 rounded bg-muted/30 text-foreground text-xs font-mono overflow-x-auto"
-                        {...props}
-                      />
-                    ),
                   // Headings
                   h1: ({ node, ...props }) => (
                     <h1 className="text-lg font-semibold mt-2 mb-1" {...props} />
