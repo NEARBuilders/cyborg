@@ -1,3 +1,8 @@
 # Cloudflare Pages configuration
 name = "near-agent"
 pages_build_output_dir = "dist"
+
+# Service binding to the Worker
+[[services]]
+binding = "API"
+service = "near-agent"

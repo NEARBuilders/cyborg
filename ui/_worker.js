@@ -1,11 +1,9 @@
 /**
- * Cloudflare Pages _worker.js (Advanced Mode)
+ * Cloudflare Pages _worker.js (advanced mode)
+ * Handles API proxying and static asset serving
  *
- * This worker proxies API requests to the near-agent Worker
- * which has the D1 database bindings.
- *
- * Static assets and page routes are served directly - only proxy
- * specific API endpoints that aren't handled by the React app.
+ * This file is placed in the UI root to be copied to dist during build
+ * It works with the service binding configured in ui/wrangler.toml
  */
 
 export default {
@@ -13,50 +11,36 @@ export default {
     const url = new URL(request.url);
     const pathname = url.pathname;
 
-    // Only proxy /api/builders/* requests to the API Worker
-    // Do NOT proxy /builders/* - those are page routes handled by React
-    if (pathname.startsWith('/api/builders/') || pathname.startsWith('/api/')) {
-      // SECURITY: Check if request is from allowed source
-      const origin = request.headers.get('Origin');
+    // Proxy API and auth requests to the Worker via service binding
+    if (pathname.startsWith('/api') || pathname.startsWith('/auth')) {
+      // Build the worker URL
+      const workerUrl = new URL(pathname + url.search, request.url);
 
-      // Get the allowed origin from the request URL
-      const allowedOrigin = `${url.protocol}//${url.host}`;
-
-      // Block requests from external origins (other websites calling your API)
-      if (origin && origin !== allowedOrigin) {
-        return new Response(JSON.stringify({
-          error: 'Forbidden',
-          message: 'This endpoint can only be accessed from near-agent.pages.dev'
-        }), {
-          status: 403,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-
-      // Build the target URL - proxy to the deployed Worker
-      const apiWorkerUrl = 'https://near-agent.kj95hgdgnn.workers.dev';
-      const targetUrl = new URL(pathname + url.search, apiWorkerUrl);
-
-      // Copy all headers
-      const headers = new Headers();
+      // Copy headers and preserve the original Host header
+      const proxyHeaders = new Headers();
       for (const [key, value] of request.headers.entries()) {
-        headers.set(key, value);
+        proxyHeaders.set(key, value);
       }
-      // Add the original host for validation
-      headers.set('X-Original-Host', url.host);
+      // Preserve original Host header for host guard validation
+      proxyHeaders.set('X-Original-Host', url.host);
 
-      // Forward the request
-      const proxyRequest = new Request(targetUrl, {
+      const proxyRequest = new Request(workerUrl, {
         method: request.method,
-        headers,
+        headers: proxyHeaders,
         body: request.method !== 'GET' && request.method !== 'HEAD' ? request.body : undefined,
         duplex: 'half',
       });
 
+      // Use service binding if available (production)
+      if (env.API) {
+        return env.API.fetch(proxyRequest);
+      }
+
+      // Fallback for local development (won't have service binding)
       return fetch(proxyRequest);
     }
 
-    // Serve static assets and let React handle page routes
+    // Serve static assets from ASSETS binding
     return env.ASSETS.fetch(request);
   },
 };
