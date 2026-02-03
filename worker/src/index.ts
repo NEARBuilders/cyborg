@@ -390,11 +390,12 @@ app.get("/api/builders/:accountId", async (c) => {
       tags = ["NEAR Builder"];
     }
 
-    // Check if custom avatar
+    // Check if custom avatar - prioritize NFT avatar
     const defaultAvatarPattern = /^https:\/\/api\.dicebear\.com\/7\.x\/avataaars\/svg/;
-    const avatarUrl = parsedProfile?.image?.ipfs_cid
-      ? `https://ipfs.near.social/ipfs/${parsedProfile.image.ipfs_cid}`
-      : parsedProfile?.image?.url ||
+    const avatarUrl = profileRecord?.nftAvatarUrl ||
+      (parsedProfile?.image?.ipfs_cid
+        ? `https://ipfs.near.social/ipfs/${parsedProfile.image.ipfs_cid}`
+        : parsedProfile?.image?.url) ||
         `https://api.dicebear.com/7.x/avataaars/svg?seed=${accountId}`;
 
     const hasCustomAvatar = avatarUrl && !defaultAvatarPattern.test(avatarUrl);
@@ -483,6 +484,7 @@ app.get("/api/builders-with-profiles", async (c) => {
         {
           name: p.name,
           image: p.image,
+          nftAvatarUrl: p.nftAvatarUrl,
           description: p.description,
           profileData: p.profileData,
         },
@@ -511,11 +513,12 @@ app.get("/api/builders-with-profiles", async (c) => {
         tags = ["NEAR Builder"];
       }
 
-      // Check if custom avatar
+      // Check if custom avatar - prioritize NFT avatar
       const defaultAvatarPattern = /^https:\/\/api\.dicebear\.com\/7\.x\/avataaars\/svg/;
-      const avatarUrl = parsedProfile?.image?.ipfs_cid
-        ? `https://ipfs.near.social/ipfs/${parsedProfile.image.ipfs_cid}`
-        : parsedProfile?.image?.url ||
+      const avatarUrl = profile?.nftAvatarUrl ||
+        (parsedProfile?.image?.ipfs_cid
+          ? `https://ipfs.near.social/ipfs/${parsedProfile.image.ipfs_cid}`
+          : parsedProfile?.image?.url) ||
           `https://api.dicebear.com/7.x/avataaars/svg?seed=${row.account_id}`;
 
       const hasCustomAvatar = avatarUrl && !defaultAvatarPattern.test(avatarUrl);
@@ -704,6 +707,7 @@ profilesRoutes.get("/search", async (c) => {
         profileData: schema.nearSocialProfiles.profileData,
         name: schema.nearSocialProfiles.name,
         image: schema.nearSocialProfiles.image,
+        nftAvatarUrl: schema.nearSocialProfiles.nftAvatarUrl,
         description: schema.nearSocialProfiles.description,
       })
       .from(schema.nearSocialProfiles)
@@ -720,12 +724,18 @@ profilesRoutes.get("/search", async (c) => {
     for (const result of results) {
       if (result.accountId && result.profileData) {
         try {
-          profiles[result.accountId] = JSON.parse(result.profileData);
+          const parsedData = JSON.parse(result.profileData);
+          // Include nftAvatarUrl in the response
+          profiles[result.accountId] = {
+            ...parsedData,
+            nftAvatarUrl: result.nftAvatarUrl
+          };
         } catch {
           // If JSON parse fails, construct minimal profile
           profiles[result.accountId] = {
             name: result.name || result.accountId,
             image: result.image,
+            nftAvatarUrl: result.nftAvatarUrl,
             description: result.description,
           };
         }

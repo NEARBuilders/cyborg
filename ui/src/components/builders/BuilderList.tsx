@@ -199,9 +199,12 @@ export function BuilderList({
           const results = Object.entries(data).map(([accountId, profile]: [string, any]) => {
             if (!profile) return null;
 
-            const avatarUrl = profile.image?.ipfs_cid
-              ? `https://ipfs.near.social/ipfs/${profile.image.ipfs_cid}`
-              : profile.image?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${accountId}`;
+            // Use NFT avatar URL if available, otherwise fall back to profile image
+            const avatarUrl = profile.nftAvatarUrl ||
+              (profile.image?.ipfs_cid
+                ? `https://ipfs.near.social/ipfs/${profile.image.ipfs_cid}`
+                : profile.image?.url) ||
+              `https://api.dicebear.com/7.x/avataaars/svg?seed=${accountId}`;
 
             const displayName = profile.name || accountId.split(".")[0];
 
