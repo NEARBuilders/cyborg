@@ -136,48 +136,58 @@ export function ChatMessage({ message, isStreaming, chatState }: ChatMessageProp
                     </code>
                   );
                 },
-                // Custom text renderer to convert @mentions to inline buttons
+                // Custom text renderer to convert @mentions and NEAR account IDs to inline buttons
                 p: ({ node, children, ...props }) => {
-                  // Convert children to string and process @mentions
+                  // Convert children to string and process account IDs
                   const content = String(children);
 
-                  // Check if this paragraph contains @mentions
-                  if (content.includes('@')) {
-                    const parts = content.split(/(@[a-z0-9._-]+)/gi);
+                  // Check if this paragraph contains @mentions or NEAR account IDs (with dots)
+                  if (content.includes('@') || content.includes('.')) {
+                    // Pattern to match @mentions OR NEAR account IDs (with dots, not at start/end)
+                    // Matches: @account.near OR account.near (but avoids matching URLs, decimals, etc.)
+                    const parts = content.split(/(@[a-z0-9._-]+|(?<![a-z0-9-])[a-z0-9]+(?:\.[a-z0-9-]+)+\.(?:near|tg)(?![a-z0-9.-]))/gi);
 
                     return (
                       <p {...props} className="prose-p:leading-relaxed prose-p:my-1">
                         {parts.map((part, index) => {
-                          // Check if this part is an @mention
-                          if (part.startsWith('@')) {
-                            const accountId = part.slice(1);
-                            // Validate it's a NEAR account
-                            if (accountId.includes('.') &&
-                                /^[a-z0-9._-]+$/i.test(accountId) &&
-                                accountId.length >= 3 &&
-                                !accountId.startsWith('.') &&
-                                !accountId.endsWith('.')) {
-                              // Render as inline button
-                              return (
-                                <button
-                                  key={index}
-                                  onPointerEnter={() => {
-                                    // Prefetch on hover (intent-based loading)
-                                    queryClient.prefetchQuery({
-                                      queryKey: ["builder-profile", accountId],
-                                      queryFn: () => prefetchProfileData(accountId),
-                                      staleTime: 5 * 60 * 1000,
-                                    });
-                                  }}
-                                  onClick={() => setSelectedAccountId(accountId)}
-                                  className="inline-flex items-center gap-1 mx-0.5 px-1.5 py-0.5 text-xs font-mono bg-primary/10 text-primary hover:bg-primary/20 rounded border border-primary/25 transition-all"
-                                >
-                                  <User className="h-3 w-3" />
-                                  {part}
-                                </button>
-                              );
-                            }
+                          let accountId = part;
+                          const isMention = part.startsWith('@');
+
+                          // Remove @ from mentions
+                          if (isMention) {
+                            accountId = part.slice(1);
                           }
+
+                          // Validate it's a NEAR account ID (must have dots, valid chars, reasonable length)
+                          const isValidAccount = accountId.includes('.') &&
+                              /^[a-z0-9._-]+$/i.test(accountId) &&
+                              accountId.length >= 3 &&
+                              !accountId.startsWith('.') &&
+                              !accountId.endsWith('.') &&
+                              (accountId.endsWith('.near') || accountId.endsWith('.tg') || accountId.split('.').length >= 2);
+
+                          if (isValidAccount) {
+                            // Render as inline button
+                            return (
+                              <button
+                                key={index}
+                                onPointerEnter={() => {
+                                  // Prefetch on hover (intent-based loading)
+                                  queryClient.prefetchQuery({
+                                    queryKey: ["builder-profile", accountId],
+                                    queryFn: () => prefetchProfileData(accountId),
+                                    staleTime: 5 * 60 * 1000,
+                                  });
+                                }}
+                                onClick={() => setSelectedAccountId(accountId)}
+                                className="inline-flex items-center gap-1 mx-0.5 px-1.5 py-0.5 text-xs font-mono bg-primary/10 text-primary hover:bg-primary/20 rounded border border-primary/25 transition-all"
+                              >
+                                <User className="h-3 w-3" />
+                                {part}
+                              </button>
+                            );
+                          }
+
                           // Regular text
                           return <span key={index}>{part}</span>;
                         })}

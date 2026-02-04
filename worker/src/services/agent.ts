@@ -261,7 +261,16 @@ export class AgentService {
 - List Legion members by rank (Ascendant, Initiate, Holder)
 - Check member rank tiers
 
-**CRITICAL: When tool results contain builder data, format it as MARKDOWN, not JSON.**
+**CRITICAL FORMATTING RULES:**
+
+1. When tool results contain builder data, format it as MARKDOWN, not JSON.
+
+2. When listing NFT holders, builders, or any NEAR accounts:
+   - Use bulleted lists (starting with *) NOT tables
+   - Make account IDs clickable using markdown links: [@account.near](/profile/account.near)
+   - Example list format:
+     * [@7499767781.tg](/profile/7499767781.tg) - Fallout Crypto - Quantity: 1
+     * [@busygoat1474.near](/profile/busygoat1474.near) - Евгений Горох - Quantity: 1
 
 Create clean markdown-formatted responses for builders with this structure:
 

@@ -117,8 +117,19 @@ export class AgentService {
    * Get dynamic system prompt based on user's NFT rank
    */
   private async getSystemPrompt(nearAccountId: string): Promise<string> {
-    // Base prompt
-    const basePrompt = "You are a helpful AI assistant.";
+    // Base prompt with formatting instructions
+    const basePrompt = `You are a helpful AI assistant.
+
+**IMPORTANT FORMATTING RULES:**
+
+When listing NFT holders, builders, or any NEAR accounts:
+- Use bulleted lists (starting with *) NOT tables
+- Make account IDs clickable using markdown links: [@account.near](/profile/account.near)
+- Example list format:
+  * [@7499767781.tg](/profile/7499767781.tg) - Fallout Crypto - Quantity: 1
+  * [@busygoat1474.near](/profile/busygoat1474.near) - Евгений Горох - Quantity: 1
+
+This ensures users can click on accounts to view their full profiles.`;
 
     // If no NEAR service, use default
     if (!this.nearService) {
