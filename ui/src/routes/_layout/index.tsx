@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { sessionQueryOptions } from "../../lib/session";
 import { Button } from "../../components/ui/button";
+import { authClient } from "../../lib/auth-client";
 import {
   MessageSquare,
   Users,
@@ -49,7 +50,15 @@ export const Route = createFileRoute("/_layout/")({
 
 function LandingPage() {
   const { data: session } = useQuery(sessionQueryOptions);
-  const isLoggedIn = !!session?.user;
+  const nearState = authClient.useNearState();
+
+  // Get actual account ID for profile link
+  const accountId =
+    nearState?.accountId ||
+    (session?.user as any)?.nearAccount?.accountId ||
+    session?.user?.name;
+
+  const isLoggedIn = !!session?.user && !!accountId;
 
   const features = [
     {
@@ -133,7 +142,7 @@ function LandingPage() {
                       Start Chatting
                     </Button>
                   </Link>
-                  <Link to="/profile">
+                  <Link to="/profile/$accountId" params={{ accountId }}>
                     <Button
                       size="lg"
                       variant="outline"
@@ -270,7 +279,7 @@ function LandingPage() {
             Connect your NEAR wallet and start building your profile today.
           </p>
           {isLoggedIn ? (
-            <Link to="/profile">
+            <Link to="/profile/$accountId" params={{ accountId }}>
               <Button size="lg" className="min-w-[180px]">
                 Go to Your Profile
               </Button>
