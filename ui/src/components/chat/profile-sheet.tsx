@@ -5,6 +5,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import {
   Sheet,
   SheetContent,
@@ -312,11 +313,12 @@ export function ProfileSheet({ isOpen, onClose, accountId }: ProfileSheetProps) 
                 variant="default"
                 className="w-full"
                 asChild
+                onClick={onClose}
               >
-                <a href={`/profile/${profile.accountId}`}>
+                <Link to="/profile/$accountId" params={{ accountId: profile.accountId }}>
                   View Full Profile
                   <ExternalLink className="ml-2 h-4 w-4" />
-                </a>
+                </Link>
               </Button>
             </div>
           </div>
