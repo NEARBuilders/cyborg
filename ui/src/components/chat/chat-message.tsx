@@ -20,9 +20,16 @@ interface Message {
   isStreaming?: boolean;
 }
 
+interface ChatState {
+  messages: Message[];
+  conversationId: string | null;
+  isStreaming: boolean;
+}
+
 interface ChatMessageProps {
   message: Message;
   isStreaming?: boolean;
+  chatState?: ChatState;
 }
 
 // Parse URL to determine route type and params
@@ -56,7 +63,7 @@ async function prefetchProfileData(accountId: string) {
   }
 }
 
-export function ChatMessage({ message, isStreaming }: ChatMessageProps) {
+export function ChatMessage({ message, isStreaming, chatState }: ChatMessageProps) {
   const isUser = message.role === "user";
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const queryClient = useQueryClient();
@@ -344,6 +351,7 @@ export function ChatMessage({ message, isStreaming }: ChatMessageProps) {
           isOpen={!!selectedAccountId}
           onClose={() => setSelectedAccountId(null)}
           accountId={selectedAccountId}
+          chatState={chatState}
         />
       )}
     </div>

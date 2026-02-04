@@ -4,6 +4,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useRouterState } from "@tanstack/react-router";
 import { toast } from "sonner";
 import {
   streamChat,
@@ -22,9 +23,26 @@ interface Message {
   isStreaming?: boolean;
 }
 
+// Chat state that can be passed via location.state
+export interface ChatState {
+  messages: Message[];
+  conversationId: string | null;
+  isStreaming: boolean;
+}
+
 export function ChatPage() {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [conversationId, setConversationId] = useState<string | null>(null);
+  const routerState = useRouterState();
+  const restoredState = routerState.location.state as unknown as ChatState | undefined;
+
+  console.log('🔵 ChatPage - Restoring state:', {
+    hasState: !!restoredState,
+    messageCount: restoredState?.messages?.length ?? 0,
+    conversationId: restoredState?.conversationId,
+    isStreaming: restoredState?.isStreaming,
+  });
+
+  const [messages, setMessages] = useState<Message[]>(() => restoredState?.messages ?? []);
+  const [conversationId, setConversationId] = useState<string | null>(() => restoredState?.conversationId ?? null);
   const [isStreaming, setIsStreaming] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -213,6 +231,7 @@ export function ChatPage() {
               key={message.id}
               message={message}
               isStreaming={message.isStreaming}
+              chatState={{ messages, conversationId, isStreaming }}
             />
           ))
         )}

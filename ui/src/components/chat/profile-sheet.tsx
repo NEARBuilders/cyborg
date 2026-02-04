@@ -3,7 +3,6 @@
  * Slide-over panel on the right showing detailed profile information
  */
 
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import {
@@ -18,11 +17,13 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ExternalLink, Github, Twitter, Globe, Send } from "lucide-react";
 import { Markdown } from "@/components/ui/markdown";
+import type { ChatState } from "./chat-page";
 
 interface ProfileSheetProps {
   isOpen: boolean;
   onClose: () => void;
   accountId: string;
+  chatState?: ChatState;
 }
 
 interface ProfileData {
@@ -80,7 +81,7 @@ async function fetchProfileData(accountId: string): Promise<ProfileData | null> 
   }
 }
 
-export function ProfileSheet({ isOpen, onClose, accountId }: ProfileSheetProps) {
+export function ProfileSheet({ isOpen, onClose, accountId, chatState }: ProfileSheetProps) {
   const { data: profile, isLoading, error } = useQuery({
     queryKey: ["builder-profile", accountId],
     queryFn: () => fetchProfileData(accountId),
@@ -313,9 +314,21 @@ export function ProfileSheet({ isOpen, onClose, accountId }: ProfileSheetProps) 
                 variant="default"
                 className="w-full"
                 asChild
-                onClick={onClose}
+                onClick={() => {
+                  console.log('🟢 ProfileSheet - Navigating to profile with state:', {
+                    messageCount: chatState?.messages?.length ?? 0,
+                    conversationId: chatState?.conversationId,
+                    hasState: !!chatState,
+                  });
+                  onClose();
+                }}
               >
-                <Link to="/profile/$accountId" params={{ accountId: profile.accountId }}>
+                <Link
+                  to="/profile/$accountId"
+                  params={{ accountId: profile.accountId }}
+                  search={{ from: 'chat' }}
+                  state={chatState as any}
+                >
                   View Full Profile
                   <ExternalLink className="ml-2 h-4 w-4" />
                 </Link>

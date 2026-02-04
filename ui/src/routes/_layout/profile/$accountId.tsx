@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useRouterState } from "@tanstack/react-router";
 import { Social } from "near-social-js";
 import { toast } from "sonner";
 import {
@@ -15,7 +15,7 @@ import { MarkdownEditor } from "../../../components/ui/markdown-editor";
 import { EditModal, ProjectEditModal } from "../../../components/ui/edit-modal";
 import { SocialLinksModal } from "../../../components/ui/social-links-modal";
 import { Skeleton } from "../../../components/ui/skeleton";
-import { Settings } from "lucide-react";
+import { Settings, ArrowLeft } from "lucide-react";
 import { useProfile, usePoke } from "../../../integrations/near-social-js";
 import { useUserRank, useHolderTypes, type RankData, type HolderTypesData } from "../../../hooks";
 import { authClient } from "../../../lib/auth-client";
@@ -34,7 +34,19 @@ interface BuilderProfileData {
   socials?: { github?: string; twitter?: string; website?: string; telegram?: string };
 }
 
+// Chat state interface (same as in chat-page.tsx)
+interface ChatState {
+  messages: Array<{ id: string; role: string; content: string; createdAt: string; isStreaming?: boolean }>;
+  conversationId: string | null;
+  isStreaming: boolean;
+}
+
 export const Route = createFileRoute("/_layout/profile/$accountId")({
+  validateSearch: (search: Record<string, unknown>) => {
+    return {
+      from: (search.from as string | undefined) ?? undefined,
+    };
+  },
   loader: async ({ params }) => {
     const social = new Social({ network: "mainnet" });
     const profile = await social.getProfile(params.accountId);
@@ -96,6 +108,7 @@ export const Route = createFileRoute("/_layout/profile/$accountId")({
 
 function ProfilePage() {
   const { profile: initialProfile, accountId } = Route.useLoaderData();
+  const search = Route.useSearch();
   const { data: profile } = useProfile(accountId, {
     initialData: initialProfile,
   });
@@ -103,6 +116,18 @@ function ProfilePage() {
   const nearState = authClient.useNearState();
   const { mutate: poke, isPending: isPoking } = usePoke(accountId);
   const queryClient = useQueryClient();
+  const routerState = useRouterState();
+  const chatState = routerState.location.state as unknown as ChatState | undefined;
+
+  const showBackToChat = search.from === 'chat';
+
+  // Log when we receive chat state
+  console.log('🟡 ProfilePage - Received state:', {
+    showBackToChat,
+    hasState: !!chatState,
+    messageCount: chatState?.messages?.length ?? 0,
+    conversationId: chatState?.conversationId,
+  });
 
   // Get current account ID from multiple sources (same as user-nav)
   const currentAccountId =
@@ -223,7 +248,32 @@ function ProfilePage() {
   const canPoke = !!currentAccountId && !isOwnProfile;
 
   return (
-    <div className="flex-1 border border-primary/30 bg-background h-full overflow-y-auto">
+    <div className="flex-1 border border-primary/30 bg-background h-full overflow-y-auto relative">
+      {/* Back to Chat button - top left (when no background) */}
+      {showBackToChat && chatState && !backgroundUrl && (
+        <div className="absolute top-3 left-3 z-10">
+          <Link
+            to="/chat"
+            state={chatState as any}
+            onClick={() => {
+              console.log('🔴 ProfilePage - Navigating back to chat with state:', {
+                messageCount: chatState?.messages?.length ?? 0,
+                conversationId: chatState?.conversationId,
+              });
+            }}
+          >
+            <Button
+              variant="ghost"
+              size="sm"
+              className="flex items-center gap-1.5 text-xs bg-background/80 backdrop-blur-sm hover:bg-background/90 text-foreground border border-border/50"
+            >
+              <ArrowLeft className="size-3.5" />
+              Back to Chat
+            </Button>
+          </Link>
+        </div>
+      )}
+
       {/* Background Image Banner */}
       {backgroundUrl && (
         <div className="relative h-32 sm:h-40 overflow-hidden">
@@ -233,6 +283,30 @@ function ProfilePage() {
             className="w-full h-full object-cover"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-background via-background/50 to-transparent" />
+          {/* Back to Chat button - top left */}
+          {showBackToChat && chatState && (
+            <div className="absolute top-3 left-3 z-10">
+              <Link
+                to="/chat"
+                state={chatState as any}
+                onClick={() => {
+                  console.log('🔴 ProfilePage - Navigating back to chat with state:', {
+                    messageCount: chatState?.messages?.length ?? 0,
+                    conversationId: chatState?.conversationId,
+                  });
+                }}
+              >
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="flex items-center gap-1.5 text-xs bg-background/80 backdrop-blur-sm hover:bg-background/90 text-foreground border border-border/50"
+                >
+                  <ArrowLeft className="size-3.5" />
+                  Back to Chat
+                </Button>
+              </Link>
+            </div>
+          )}
         </div>
       )}
 
