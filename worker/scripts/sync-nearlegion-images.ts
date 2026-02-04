@@ -111,7 +111,13 @@ async function extractImageUrl(token: NEARToken): Promise<string | null> {
           // Metadata URL: https://arweave.net/.../Metadata/{token_id}.json
           // Image URL: https://arweave.net/.../Images/{fileName}
           const metadataUrl = new URL(metadata.reference);
-          const baseUrl = `${metadataUrl.protocol}//${metadataUrl.host}${metadataUrl.pathname.split('/').slice(0, -1).join('/')}`;
+          // Remove both filename and 'Metadata' folder to get to root
+          const pathParts = metadataUrl.pathname.split('/');
+          pathParts.pop(); // Remove filename
+          if (pathParts[pathParts.length - 1] === 'Metadata') {
+            pathParts.pop(); // Remove 'Metadata' folder
+          }
+          const baseUrl = `${metadataUrl.protocol}//${metadataUrl.host}${pathParts.join('/')}`;
           return `${baseUrl}/Images/${meta.fileName}`;
         }
       }

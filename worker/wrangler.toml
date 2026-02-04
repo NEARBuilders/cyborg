@@ -21,7 +21,7 @@ directory = "../ui/dist"
 binding = "ASSETS"
 
 [vars]
-NEAR_AI_MODEL = "deepseek-ai/DeepSeek-V3.1"
+NEAR_AI_MODEL = "zai-org/GLM-4.6"
 NEAR_AI_BASE_URL = "https://cloud-api.near.ai/v1"
 NEAR_RPC_URL = "https://rpc.mainnet.near.org"
 NEAR_LEGION_CONTRACT = "ascendant.nearlegion.near"

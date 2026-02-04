@@ -6,22 +6,18 @@
 import { useQuery, useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
 
-// Get API base URL - use worker URL for Pages deployments
+// Get API base URL - use same origin to ensure cookies are sent correctly
 function getApiBaseUrl(): string {
   if (typeof window === "undefined") return "";
 
   const origin = window.location.origin;
 
-  // In development, use same origin
+  // In development, use worker port
   if (origin.includes("localhost") || origin.includes("127.0.0.1")) {
-    return origin;
+    return "http://localhost:8787";
   }
 
-  // In Pages production, use the worker URL for API calls
-  if (origin.includes("pages.dev")) {
-    return "https://near-agent.kj95hgdgnn.workers.dev";
-  }
-
+  // Production: use same origin (Pages proxies /api/* to Worker)
   return origin;
 }
 

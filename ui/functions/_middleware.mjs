@@ -1,6 +1,9 @@
 /**
  * Cloudflare Pages _middleware
  * Proxies API requests to the Worker
+ *
+ * IMPORTANT: This middleware proxies /api/* and /auth/* requests to the Worker.
+ * The cookies are automatically forwarded because this is a server-to-server request.
  */
 
 const WORKER_URL = "https://near-agent.kj95hgdgnn.workers.dev";
@@ -15,21 +18,21 @@ export async function onRequest(context) {
     // Build full worker URL
     const workerUrl = `${WORKER_URL}${pathname}${url.search}`;
 
-    // Clone headers and add forward host
-    const headers = new Headers(request.headers);
-    headers.set('X-Forwarded-Host', 'near-agent.pages.dev');
-
-    // Clone request with new URL
+    // Clone the request to the worker URL
+    // The Request constructor automatically copies all headers including cookies
     const proxyRequest = new Request(workerUrl, request);
-    // Replace headers
-    for (const [key, value] of headers.entries()) {
-      proxyRequest.headers.set(key, value);
-    }
 
-    return fetch(proxyRequest);
+    // Add forward host header so Worker knows the original origin
+    proxyRequest.headers.set('X-Forwarded-Host', url.host);
+
+    // Forward the request to the worker
+    const workerResponse = await fetch(proxyRequest);
+
+    // Return the worker's response
+    // Set-Cookie headers will be forwarded automatically
+    return workerResponse;
   }
 
   // Serve static assets
   return next();
 }
-// Updated: Sat Jan 31 20:25:13 EST 2026

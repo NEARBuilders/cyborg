@@ -723,11 +723,35 @@ async function fetchNFTTokensForAccount(
 /**
  * Extract image URL from NFT metadata
  */
-function extractImageUrl(metadata: any): string | null {
+async function extractImageUrl(token: any): Promise<string | null> {
+  const metadata = token.metadata;
   if (!metadata) return null;
 
-  // Try reference field (usually points to JSON metadata)
+  // Try reference field (usually points to JSON metadata on IPFS/Arweave)
   if (metadata.reference) {
+    // Fetch the metadata JSON to get the actual image URL
+    try {
+      const response = await fetch(metadata.reference);
+      if (response.ok) {
+        const meta = await response.json();
+        if (meta.fileName) {
+          // Construct image URL from the metadata URL pattern
+          // Metadata URL: https://arweave.net/.../Metadata/{token_id}.json
+          // Image URL: https://arweave.net/.../Images/{fileName}
+          const metadataUrl = new URL(metadata.reference);
+          // Remove both filename and 'Metadata' folder to get to root
+          const pathParts = metadataUrl.pathname.split('/');
+          pathParts.pop(); // Remove filename
+          if (pathParts[pathParts.length - 1] === 'Metadata') {
+            pathParts.pop(); // Remove 'Metadata' folder
+          }
+          const baseUrl = `${metadataUrl.protocol}//${metadataUrl.host}${pathParts.join('/')}`;
+          return `${baseUrl}/Images/${meta.fileName}`;
+        }
+      }
+    } catch {
+      // If fetch fails, return the reference URL
+    }
     return metadata.reference;
   }
 
@@ -752,6 +776,7 @@ function extractImageUrl(metadata: any): string | null {
 
 // =============================================================================
 // NFT IMAGES ENDPOINT - Get cached NFT images for Legion holders
+// Auto-fetches on-demand if not cached
 // =============================================================================
 
 app.get("/api/nfts/images/:accountId", async (c) => {
@@ -760,9 +785,48 @@ app.get("/api/nfts/images/:accountId", async (c) => {
     const db = createDatabase(c.env.DB);
 
     // Fetch NFT images from database
-    const nftImages = await db.query.legionNftImages.findMany({
+    let nftImages = await db.query.legionNftImages.findMany({
       where: (img, { eq }) => eq(img.accountId, accountId),
     });
+
+    // If no images found, fetch them on-demand from blockchain
+    if (nftImages.length === 0) {
+      console.log(`[NFT IMAGES] No cached images for ${accountId}, fetching on-demand...`);
+
+      // Fetch NFT tokens for this account
+      const tokens = await fetchNFTTokensForAccount(accountId, "nearlegion.nfts.tg");
+
+      if (tokens.length > 0) {
+        // Extract image URLs and insert into database
+        const now = Math.floor(Date.now() / 1000);
+
+        for (const token of tokens) {
+          const imageUrl = await extractImageUrl(token);
+          const tokenId = token.token_id || "";
+          const title = token.metadata?.title || null;
+
+          // Insert into database
+          await db.insert(schema.legionNftImages)
+            .values({
+              tokenId,
+              accountId,
+              contractId: "nearlegion.nfts.tg",
+              imageUrl,
+              title,
+              lastSyncedAt: now,
+              syncedAt: now,
+            })
+            .onConflictDoNothing();
+        }
+
+        // Fetch again to get the inserted records
+        nftImages = await db.query.legionNftImages.findMany({
+          where: (img, { eq }) => eq(img.accountId, accountId),
+        });
+
+        console.log(`[NFT IMAGES] Fetched and cached ${nftImages.length} NFT images for ${accountId}`);
+      }
+    }
 
     // Group by contract
     const byContract: Record<string, typeof nftImages> = {};

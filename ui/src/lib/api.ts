@@ -1,6 +1,10 @@
 /**
  * API Configuration
  * Centralized API base URL configuration for all fetch calls
+ *
+ * IMPORTANT: Use same-origin for all API calls to ensure cookies are sent correctly.
+ * Cloudflare Pages proxies /api/* requests to the Worker, so using window.location.origin
+ * ensures authentication works on mobile browsers.
  */
 
 export function getApiBaseUrl(): string {
@@ -13,9 +17,9 @@ export function getApiBaseUrl(): string {
     return "http://localhost:8787";
   }
 
-  // Production: always use the worker URL for API calls
-  // This works for both pages.dev and custom domains
-  return "https://near-agent.kj95hgdgnn.workers.dev";
+  // Production: use same origin (cookies are sent correctly)
+  // Pages proxies /api/* requests to the Worker
+  return origin;
 }
 
 /**

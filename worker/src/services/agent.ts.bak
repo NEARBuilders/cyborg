@@ -261,32 +261,29 @@ export class AgentService {
 - List Legion members by rank (Ascendant, Initiate, Holder)
 - Check member rank tiers
 
-**CRITICAL: When tool results contain builder data, format it as MARKDOWN, not JSON.**
+**CRITICAL: When tool results contain builder data, you MUST include the raw JSON exactly as returned by the tool. Do NOT reformat it as text.**
 
-Create clean markdown-formatted responses for builders with this structure:
+The tools return JSON. Copy it EXACTLY into a code block:
 
-### **[Role Emoji] @accountId** | [View Profile](/profile/accountId)
-**Role:** Role Name
+\`\`\`builder-results
+{PASTE_RAW_TOOL_RESULT_HERE}
+\`\`\`
 
-![Avatar](avatar_url)
+Then add your summary text AFTER the code block. The JSON block will be automatically rendered as builder cards.
 
-Description text here...
+**Your response must have this structure:**
+1. Brief intro sentence
+2. The JSON code block (exactly as returned by tool)
+3. Your summary text
 
-**Interests:** \`tag1\`, \`tag2\`, \`tag3\`
-
-**Connect:** [GitHub](url) • [Twitter](url) • [Website](url)
-
----
-
-When presenting multiple builders, separate them with horizontal rules (---).
+**DO NOT** convert the JSON to formatted text. Pass it through unchanged.
 
 **When presenting builders to users:**
-- Format as clean markdown (no JSON, no code blocks)
-- Include their avatar image
-- Highlight their role (Ascendant 🔥, Initiate ⚡, Holder 💎)
+- Use the JSON format above for search results
+- Include their NFT avatar image if available
+- Highlight their role (Ascendant, Initiate, Holder)
 - Show their key interests and skills
-- Mention their social links
-- Link to their profile page: [/profile/accountId](/profile/accountId)
+- Mention their social links (github, twitter)
 
 When users ask about finding people, connecting with others, or discovering builders with specific skills/interests, use the available tools to search the builder database and provide helpful recommendations.`;
 
@@ -647,6 +644,8 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
       let toolIteration = 0;
       let fullContent = "";
       const assistantMsgId = nanoid();
+      const builderDataToInject: any[] = []; // Track builder data to inject at the end
+      let builderToolsUsed = false; // Track if builder tools were used
 
       while (toolIteration < maxToolIterations) {
         console.log(`[AgentService] Tool iteration ${toolIteration + 1}/${maxToolIterations}`);
@@ -712,7 +711,14 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
           accumulatedContentLength: accumulatedContent.length,
           toolCallsCount: accumulatedToolCalls.length,
           toolCalls: accumulatedToolCalls.map(tc => ({ name: tc.function.name, hasArgs: !!tc.function.arguments })),
+          builderToolsUsed,
         });
+
+        // If builder tools were used in previous iteration, don't continue
+        if (builderToolsUsed) {
+          console.log("[AgentService] Builder tools used, finishing stream");
+          break;
+        }
 
         // Check if model wants to call tools
         if (accumulatedToolCalls.length > 0) {
@@ -741,11 +747,27 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
 
           console.log(`[AgentService] Executing ${validToolCalls.length} tools`);
 
-          yield {
-            type: "chunk",
-            id: eventId(),
-            data: { content: "\n\n🔍 Searching...\n\n" },
-          };
+          // Check if these are builder tools
+          const hasBuilderTools = validToolCalls.some(tc =>
+            tc.function.name === "search_builders" ||
+            tc.function.name === "get_builder_profile" ||
+            tc.function.name === "list_legion_members"
+          );
+
+          // For builder tools, minimal indicator (no text, just marker)
+          if (hasBuilderTools) {
+            yield {
+              type: "chunk",
+              id: eventId(),
+              data: { content: "\n\n[SEARCHING]\n\n" },
+            };
+          } else {
+            yield {
+              type: "chunk",
+              id: eventId(),
+              data: { content: "\n\n🔍 Searching builders database...\n\n" },
+            };
+          }
 
           currentMessages.push({
             role: "assistant",
@@ -765,6 +787,22 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
               });
 
               console.log(`[AgentService] Tool result length:`, result.length);
+
+              // If this is a builder tool, store the data for later injection
+              if (toolCall.function.name === "search_builders" ||
+                  toolCall.function.name === "get_builder_profile" ||
+                  toolCall.function.name === "list_legion_members") {
+                try {
+                  const resultJson = JSON.parse(result);
+                  if (resultJson.type === "builders" && Array.isArray(resultJson.data)) {
+                    builderDataToInject.push(...resultJson.data);
+                  } else if (resultJson.type === "builder" && resultJson.data) {
+                    builderDataToInject.push(resultJson.data);
+                  }
+                } catch {
+                  // Not JSON or not a builder result
+                }
+              }
 
               currentMessages.push({
                 role: "tool",
@@ -786,6 +824,24 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
                 }),
               });
             }
+          }
+
+          // Inject builder data JSON immediately after tools execute (before next AI response)
+          if (builderDataToInject.length > 0) {
+            const jsonData = JSON.stringify({ type: "builders", data: builderDataToInject });
+            // Don't stream the JSON - add a marker instead
+            const marker = `\n\n[BUILDER_RESULTS:${jsonData}]\n\n`;
+            fullContent += marker;
+            // Clear the array so we don't inject again
+            builderDataToInject.length = 0;
+            // Mark that we should skip the NEXT iteration (the follow-up)
+            builderToolsUsed = true;
+
+            // Add a system message to stop the AI from adding commentary
+            currentMessages.push({
+              role: "system",
+              content: "The builder data has been included in your previous response as a [BUILDER_RESULTS:...] block. Do NOT add any additional commentary or summary. End your response immediately after the code block.",
+            });
           }
 
           toolIteration++;
@@ -1000,7 +1056,7 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
         .limit(limit);
 
       if (results.length > 0) {
-        return await this.formatBuildersAsMarkdown(results, params.query, limit);
+        return await this.formatBuildersAsJson(results, limit);
       }
 
       if (isHolderQuery) {
@@ -1031,7 +1087,7 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
         const validProfiles = profileResults.filter((p): p is NonNullable<typeof p> => p !== null);
 
         if (validProfiles.length > 0) {
-          return await this.formatBuildersAsMarkdown(validProfiles, `NFT holders (${params.query})`, limit);
+          return await this.formatBuildersAsJson(validProfiles, limit);
         }
       }
 
@@ -1042,6 +1098,169 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
     } catch (error) {
       console.error("[searchBuilders] Error:", error);
       return JSON.stringify({ type: "error", message: "Failed to search builders. Please try again." });
+    }
+  }
+
+  /**
+   * Format builders as structured JSON for UI rendering
+   */
+  private async formatBuildersAsJson(
+    profiles: Array<{
+      accountId: string;
+      name: string | null;
+      description: string | null;
+      profileData: string;
+      image: string | null;
+      nftAvatarUrl: string | null;
+    }>,
+    limit: number
+  ): Promise<string> {
+    const builders = await Promise.all(
+      profiles.map(async (profile) => {
+        const profileData = JSON.parse(profile.profileData);
+        const holdings = await this.db.query.legionHolders.findMany({
+          where: eq(schema.legionHolders.accountId, profile.accountId),
+        });
+
+        // Determine role based on holdings (Ascendant > Initiate > Holder > Member)
+        let role = "Member";
+        let roleEmoji = "";
+        for (const h of holdings) {
+          if (h.contractId === "ascendant.nearlegion.near") {
+            role = "Ascendant";
+            roleEmoji = "🔥";
+            break;
+          }
+          else if (h.contractId === "initiate.nearlegion.near") {
+            role = "Initiate";
+            roleEmoji = "⚡";
+          }
+          else if (h.contractId === "nearlegion.nfts.tg") {
+            role = "Holder";
+            roleEmoji = "💎";
+          }
+        }
+
+        const avatar = profile.nftAvatarUrl || profile.image || profileData?.image?.url ||
+          (profileData?.image?.ipfs_cid
+            ? `https://ipfs.near.social/ipfs/${profileData.image.ipfs_cid}`
+            : `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile.accountId}`);
+
+        const displayName = profile.name || profile.accountId.split(".")[0];
+        const tags = profileData?.tags ? Object.keys(profileData.tags) : [];
+        const github = profileData?.linktree?.github;
+        const twitter = profileData?.linktree?.twitter;
+        const website = profileData?.linktree?.website;
+
+        return {
+          accountId: profile.accountId,
+          displayName,
+          avatar,
+          role,
+          roleEmoji,
+          description: profile.description || "",
+          tags,
+          socials: { github, twitter, website },
+          explorerUrl: `https://explorer.oneverse.near.org/accounts/${profile.accountId}?tab=nfts`,
+          holdings: holdings.map(h => ({
+            contractId: h.contractId,
+            quantity: h.quantity
+          }))
+        };
+      })
+    );
+
+    return JSON.stringify({
+      type: "builders",
+      data: builders.slice(0, limit)
+    });
+  }
+
+  /**
+   * Search builders by interests, skills, or description
+   * Falls back to Legion members if text search finds nothing
+   * DEPRECATED: Use JSON version above
+   */
+  private async searchBuildersDeprecated(params: {
+    query: string;
+    limit?: number;
+  }): Promise<string> {
+    const query = params.query.trim().toLowerCase();
+    const limit = Math.min(params.limit || 10, 50);
+
+    if (query.length < 2) {
+      return "Error: Query must be at least 2 characters";
+    }
+
+    try {
+      // Check if user is asking for NFT holders, Legion members, etc.
+      const isHolderQuery = /holder|nft|legion|member/i.test(query);
+
+      // Search in profiles table for matching descriptions, names, or tags
+      const results = await this.db
+        .select({
+          accountId: schema.nearSocialProfiles.accountId,
+          name: schema.nearSocialProfiles.name,
+          description: schema.nearSocialProfiles.description,
+          profileData: schema.nearSocialProfiles.profileData,
+          image: schema.nearSocialProfiles.image,
+          nftAvatarUrl: schema.nearSocialProfiles.nftAvatarUrl,
+        })
+        .from(schema.nearSocialProfiles)
+        .where(
+          or(
+            like(schema.nearSocialProfiles.description, `%${query}%`),
+            like(schema.nearSocialProfiles.name, `%${query}%`),
+            like(schema.nearSocialProfiles.accountId, `%${query}%`)
+          )
+        )
+        .limit(limit);
+
+      // If text search found results, use them
+      if (results.length > 0) {
+        return await this.formatBuildersAsMarkdown(results, params.query, limit);
+      }
+
+      // Fallback: If asking for holders/members, show Legion members from the holders table
+      if (isHolderQuery) {
+        // Get Legion holders directly from legion_holders table
+        const holders = await this.db.query.legionHolders.findMany({
+          limit,
+          offset: 0,
+        });
+
+        // Group by account and get unique accounts
+        const accountSet = new Set<string>();
+        const holderList: Array<{ accountId: string; contractId: string }> = [];
+
+        for (const holder of holders) {
+          if (!accountSet.has(holder.accountId)) {
+            accountSet.add(holder.accountId);
+            holderList.push(holder);
+          }
+          if (holderList.length >= limit) break;
+        }
+
+        // Now fetch profiles for these holders
+        const profileResults = await Promise.all(
+          holderList.map(async (holder) => {
+            return await this.db.query.nearSocialProfiles.findFirst({
+              where: eq(schema.nearSocialProfiles.accountId, holder.accountId),
+            });
+          })
+        );
+
+        const validProfiles = profileResults.filter((p): p is NonNullable<typeof p> => p !== null);
+
+        if (validProfiles.length > 0) {
+          return await this.formatBuildersAsMarkdown(validProfiles, `NFT holders (${params.query})`, limit);
+        }
+      }
+
+      return `No builders found matching "${params.query}". Try different keywords like specific technologies (react, rust, defi), account names, or ask for "NFT holders", "Legion members", "Ascendant members".`;
+    } catch (error) {
+      console.error("[searchBuilders] Error:", error);
+      return "Failed to search builders. Please try again.";
     }
   }
 
@@ -1112,7 +1331,11 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
 
         // Add clickable NFT link if holder
         if (role !== "Member" && holderData) {
-          markdown += `**🔗 View NFTs on [NEAR Explorer](${explorerLink})**\n\n`;
+          markdown += `**🔗 View NFTs on [NEAR Explorer](${explorerLink})**`;
+          if (profile.nftAvatarTokenId) {
+            markdown += ` • [Avatar Token #${profile.nftAvatarTokenId}](https://explorer.oneverse.near.org/contracts/${holderData.contractId}/${profile.nftAvatarTokenId})`;
+          }
+          markdown += `\n\n`;
         }
 
         if (tags.length > 0) {
@@ -1137,7 +1360,7 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
   }
 
   /**
-   * Get detailed builder profile - Returns markdown
+   * Get detailed builder profile - Returns structured JSON for UI rendering
    */
   private async getBuilderProfile(params: { accountId: string }): Promise<string> {
     try {
@@ -1146,7 +1369,10 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
       });
 
       if (!profile) {
-        return `No profile found for ${params.accountId}`;
+        return JSON.stringify({
+          type: "error",
+          message: `No profile found for ${params.accountId}`
+        });
       }
 
       const profileData = JSON.parse(profile.profileData);
@@ -1191,43 +1417,35 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
       const twitter = profileData?.linktree?.twitter;
       const website = profileData?.linktree?.website;
       const telegram = profileData?.linktree?.telegram;
-      const explorerUrl = `https://explorer.oneverse.near.org/accounts/${params.accountId}?tab=nfts`;
 
-      let markdown = `### **${roleEmoji} ${displayName}** | [View Profile](/profile/${params.accountId})\n`;
-      markdown += `**@${params.accountId}**\n\n`;
-      if (role !== "Member") {
-        markdown += `**Role:** ${role}\n\n`;
-      }
-      markdown += `![${displayName}](${avatar})\n\n`;
+      const result = {
+        type: "builder",
+        data: {
+          accountId: params.accountId,
+          displayName,
+          avatar,
+          role,
+          roleEmoji,
+          description: profile.description || "",
+          tags,
+          socials: { github, twitter, website, telegram },
+          explorerUrl: `https://explorer.oneverse.near.org/accounts/${params.accountId}?tab=nfts`,
+          holdings: holdings.map(h => ({
+            contractId: h.contractId,
+            quantity: h.quantity
+          }))
+        }
+      };
 
-      if (profile.description) {
-        markdown += `${profile.description}\n\n`;
-      }
-
-      if (tags.length > 0) {
-        markdown += `**Interests:** ${tags.map(t => `\`${t}\``).join(", ")}\n\n`;
-      }
-
-      const socialLinks = [];
-      if (github) socialLinks.push(`[GitHub](https://github.com/${github})`);
-      if (twitter) socialLinks.push(`[Twitter](https://twitter.com/${twitter})`);
-      if (website) socialLinks.push(`[Website](${website})`);
-      if (telegram) socialLinks.push(`[Telegram](https://t.me/${telegram})`);
-      if (socialLinks.length > 0) {
-        markdown += `**Connect:** ${socialLinks.join(" • ")}\n\n`;
-      }
-
-      markdown += `**[View NFTs on NEAR Explorer](${explorerUrl})**\n`;
-
-      return markdown;
+      return JSON.stringify(result);
     } catch (error) {
       console.error("[getBuilderProfile] Error:", error);
-      return "Failed to fetch profile. Please try again.";
+      return JSON.stringify({ type: "error", message: "Failed to fetch profile. Please try again." });
     }
   }
 
   /**
-   * List Legion members with optional role filter - Returns markdown
+   * List Legion members with optional role filter - Returns structured JSON for UI rendering
    */
   private async listLegionMembers(params: {
     role?: string;
@@ -1278,14 +1496,21 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
       }
 
       if (filteredAccounts.length === 0) {
-        return `No Legion members found${params.role && params.role !== "any" ? ` with role "${params.role}"` : ""}.`;
+        return JSON.stringify({
+          type: "error",
+          message: `No Legion members found${params.role && params.role !== "any" ? ` with role "${params.role}"` : ""}.`
+        });
       }
 
-      // Fetch profiles for filtered accounts and build markdown
+      // Fetch profiles for filtered accounts and build JSON
       const builders = await Promise.all(
         filteredAccounts.slice(0, limit).map(async ({ accountId, role, roleEmoji }) => {
           const profile = await this.db.query.nearSocialProfiles.findFirst({
             where: eq(schema.nearSocialProfiles.accountId, accountId),
+          });
+
+          const holdings = await this.db.query.legionHolders.findMany({
+            where: eq(schema.legionHolders.accountId, accountId),
           });
 
           const profileData = profile?.profileData ? JSON.parse(profile.profileData) : null;
@@ -1310,93 +1535,22 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
             description: profile?.description || "",
             tags,
             socials: { github, twitter, website },
-          };
-        })
-      );
-
-      let markdown = `## Legion Members (${builders.length})\n\n`;
-
-      for (const builder of builders) {
-        markdown += `### **${builder.roleEmoji} ${builder.displayName}** | [View Profile](/profile/${builder.accountId})\n`;
-        markdown += `**@${builder.accountId}** • **${builder.role}**\n\n`;
-        markdown += `![${builder.displayName}](${builder.avatar})\n\n`;
-
-        if (builder.description) {
-          markdown += `${builder.description}\n\n`;
-        }
-
-        if (builder.tags.length > 0) {
-          markdown += `**Interests:** ${builder.tags.map(t => `\`${t}\``).join(", ")}\n\n`;
-        }
-
-        const socialLinks = [];
-        if (builder.socials.github) socialLinks.push(`[GitHub](https://github.com/${builder.socials.github})`);
-        if (builder.socials.twitter) socialLinks.push(`[Twitter](https://twitter.com/${builder.socials.twitter})`);
-        if (builder.socials.website) socialLinks.push(`[Website](${builder.socials.website})`);
-        if (socialLinks.length > 0) {
-          markdown += `**Connect:** ${socialLinks.join(" • ")}\n\n`;
-        }
-
-        markdown += `---\n\n`;
-      }
-
-      return markdown.trim();
-    } catch (error) {
-      console.error("[listLegionMembers] Error:", error);
-      return "Failed to list members. Please try again.";
-    }
-  }
-
-  /**
-   * Get holders of a specific NFT contract
-   */
-  private async getNftHolders(params: { contractId: string; limit?: number }): Promise<string> {
-    const limit = Math.min(params.limit || 20, 100);
-
-    try {
-      const holders = await this.db.query.legionHolders.findMany({
-        where: (holders, { eq }) => eq(holders.contractId, params.contractId),
-        limit,
-      });
-
-      if (holders.length === 0) {
-        return JSON.stringify({
-          type: "error",
-          message: `No holders found for contract ${params.contractId}`
-        });
-      }
-
-      // Fetch profile data for each holder
-      const holdersWithProfiles = await Promise.all(
-        holders.map(async (holder) => {
-          const profile = await this.db.query.nearSocialProfiles.findFirst({
-            where: eq(schema.nearSocialProfiles.accountId, holder.accountId),
-          });
-
-          const profileData = profile?.profileData ? JSON.parse(profile.profileData) : null;
-          const displayName = profile?.name || holder.accountId.split(".")[0];
-          const tags = profileData?.tags ? Object.keys(profileData.tags) : [];
-
-          return {
-            accountId: holder.accountId,
-            displayName,
-            contractId: holder.contractId,
-            quantity: holder.quantity,
-            description: profile?.description || "",
-            tags,
+            explorerUrl: `https://explorer.oneverse.near.org/accounts/${accountId}?tab=nfts`,
+            holdings: holdings.map(h => ({
+              contractId: h.contractId,
+              quantity: h.quantity
+            }))
           };
         })
       );
 
       return JSON.stringify({
-        type: "holders",
-        contractId: params.contractId,
-        count: holdersWithProfiles.length,
-        data: holdersWithProfiles,
+        type: "builders",
+        data: builders
       });
     } catch (error) {
-      console.error("[getNftHolders] Error:", error);
-      return JSON.stringify({ type: "error", message: "Failed to fetch NFT holders. Please try again." });
+      console.error("[listLegionMembers] Error:", error);
+      return JSON.stringify({ type: "error", message: "Failed to list members. Please try again." });
     }
   }
 

@@ -197,9 +197,21 @@ class WorkerApiClient {
 // =============================================================================
 
 function getWorkerUrl(): string {
-  // Always use the worker URL for API calls
-  // The worker is deployed separately from Pages
-  return 'https://near-agent.kj95hgdgnn.workers.dev';
+  // Use same origin for API calls to ensure cookies are sent correctly.
+  // Cloudflare Pages proxies /api/* requests to the Worker.
+  if (typeof window === 'undefined') {
+    return 'http://localhost:8787';
+  }
+
+  const origin = window.location.origin;
+
+  // Local development: use worker port
+  if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+    return 'http://localhost:8787';
+  }
+
+  // Production: use same origin
+  return origin;
 }
 
 export const apiClient = new WorkerApiClient(getWorkerUrl());

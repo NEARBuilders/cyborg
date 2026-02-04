@@ -2,12 +2,11 @@
  * SSE streaming utilities for consuming chat stream
  */
 
-// Use worker URL for API calls, Pages for static assets
+// Use same origin for API calls to ensure cookies are sent correctly
+// This works because Cloudflare Pages proxies /api/* requests to the Worker
 const API_BASE_URL = typeof window !== "undefined"
-  ? (window.location.hostname.includes('pages.dev')
-      ? 'https://near-agent.kj95hgdgnn.workers.dev'
-      : window.location.origin)
-  : 'https://near-agent.kj95hgdgnn.workers.dev';
+  ? window.location.origin
+  : 'http://localhost:8787';
 
 export interface StreamEvent {
   id: string;
