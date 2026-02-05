@@ -14,6 +14,10 @@ import {
   NearService,
   NearContext,
   NearLive,
+  EmailService,
+  EmailContext,
+  EmailLive,
+  EmailMock,
 } from "./services";
 import type { Database as DrizzleDatabase } from "./db";
 import { handleBuildersRequest } from "./builders";
@@ -22,6 +26,7 @@ type PluginDeps = {
   db: DrizzleDatabase;
   agentService: AgentService | null;
   nearService: NearService | null;
+  emailService: EmailService | null;
 };
 export default createPlugin({
   variables: z.object({
@@ -36,6 +41,7 @@ export default createPlugin({
     API_DATABASE_URL: z.string().default("file:./api.db"),
     API_DATABASE_AUTH_TOKEN: z.string().optional(),
     NEAR_AI_API_KEY: z.string().optional(),
+    NEAR_EMAIL_PAYMENT_KEY: z.string().optional(),
   }),
 
   context: z.object({
@@ -49,6 +55,7 @@ export default createPlugin({
     console.log("[API] Initialize called with config:", {
       dbUrl: config.secrets.API_DATABASE_URL,
       hasApiKey: !!config.secrets.NEAR_AI_API_KEY,
+      hasEmailKey: !!config.secrets.NEAR_EMAIL_PAYMENT_KEY,
       model: config.variables.NEAR_AI_MODEL,
     });
 
@@ -85,12 +92,21 @@ export default createPlugin({
       const agentService = yield* Effect.provide(AgentContext, agentLayer);
       console.log("[API] Agent service initialized");
 
+      // Initialize email service
+      console.log("[API] Creating email service...");
+      const emailLayer = config.secrets.NEAR_EMAIL_PAYMENT_KEY
+        ? EmailLive({ paymentKey: config.secrets.NEAR_EMAIL_PAYMENT_KEY })
+        : EmailMock;
+      const emailService = yield* Effect.provide(EmailContext, emailLayer);
+      console.log("[API] Email service initialized");
+
       console.log("[API] Plugin initialized successfully");
 
       return {
         db,
         agentService,
         nearService,
+        emailService,
       };
     }).pipe(
       Effect.tapError((error: unknown) =>
@@ -113,7 +129,7 @@ export default createPlugin({
     }),
 
   createRouter: (context, builder) => {
-    const { agentService, db, nearService } = context;
+    const { agentService, db, nearService, emailService } = context;
     const isDev = process.env.NODE_ENV !== "production";
 
     const requireAuth = builder.middleware(async ({ context, next }) => {
@@ -484,6 +500,34 @@ export default createPlugin({
           });
         }
       }),
+
+      // ===========================================================================
+      // EMAIL
+      // ===========================================================================
+
+      sendEmail: builder.sendEmail
+        .use(requireAuth)
+        .handler(async ({ input }) => {
+          if (!emailService) {
+            throw new ORPCError("SERVICE_UNAVAILABLE", {
+              message: "Email service not available",
+            });
+          }
+
+          return await Effect.runPromise(
+            emailService.sendEmail(input.to, input.subject, input.body)
+          );
+        }),
+
+      getMessages: builder.getMessages
+        .use(requireAuth)
+        .handler(async ({ input, context }) => {
+          // For now, return empty array
+          // TODO: Implement actual message fetching from near.email
+          return {
+            messages: [],
+          };
+        }),
     };
   },
 });

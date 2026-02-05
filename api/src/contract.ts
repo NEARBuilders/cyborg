@@ -268,6 +268,53 @@ export const contract = oc.router({
       }),
     )
     .errors(CommonPluginErrors),
+
+  // ===========================================================================
+  // EMAIL (near.email integration)
+  // ===========================================================================
+
+  sendEmail: oc
+    .route({ method: "POST", path: "/email/send" })
+    .input(
+      z.object({
+        to: z.string().min(1).max(100), // NEAR account ID
+        subject: z.string().min(1).max(200),
+        body: z.string().min(1).max(5000),
+      }),
+    )
+    .output(
+      z.object({
+        success: z.boolean(),
+        messageId: z.string().optional(),
+        txHash: z.string().optional(),
+      }),
+    )
+    .errors(CommonPluginErrors),
+
+  getMessages: oc
+    .route({ method: "GET", path: "/email/messages/{accountId}" })
+    .input(
+      z.object({
+        accountId: z.string().min(1),
+        limit: z.number().int().min(1).max(100).default(50),
+      }),
+    )
+    .output(
+      z.object({
+        messages: z.array(
+          z.object({
+            id: z.string(),
+            from: z.string(),
+            to: z.string(),
+            subject: z.string(),
+            body: z.string(),
+            timestamp: z.string(),
+            isIncoming: z.boolean(),
+          })
+        ),
+      }),
+    )
+    .errors(CommonPluginErrors),
 });
 
 export type ContractType = typeof contract;

@@ -5,8 +5,8 @@
 
 import { useState, useEffect } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Markdown } from "@/components/ui/markdown";
+import { NearEmailChat, isValidNearAddress } from "@/components/email";
 import type { Builder } from "@/types/builders";
 
 interface BuilderDetailsProps {
@@ -31,6 +31,9 @@ export function BuilderDetails({ builder }: BuilderDetailsProps) {
       <div className={`p-4 sm:p-6 space-y-6 ${builder.backgroundImage ? "-mt-16 sm:-mt-20 relative" : ""}`}>
         {/* Header */}
         <BuilderHeader builder={builder} />
+
+        {/* Contact via Email */}
+        <BuilderContact builder={builder} />
 
         {/* Skills */}
         <BuilderSkills tags={builder.tags} />
@@ -68,6 +71,26 @@ function BuilderHeader({ builder }: { builder: Builder }) {
         <span className="inline-block text-xs bg-primary/25 text-primary px-3 py-1.5 font-mono font-medium">
           {builder.role}
         </span>
+      </div>
+    </div>
+  );
+}
+
+function BuilderContact({ builder }: { builder: Builder }) {
+  return (
+    <div className="space-y-3">
+      <h3 className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
+        Contact
+      </h3>
+      <div className="flex flex-wrap gap-3">
+        {isValidNearAddress(builder.accountId) && (
+          <NearEmailChat
+            recipientAccountId={builder.accountId}
+            recipientName={builder.displayName}
+            recipientAvatar={builder.avatar || undefined}
+            variant="default"
+          />
+        )}
       </div>
     </div>
   );

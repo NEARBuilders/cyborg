@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ExternalLink, Github, Twitter, Globe, Send } from "lucide-react";
 import { Markdown } from "@/components/ui/markdown";
+import { NearEmailChat, isValidNearAddress } from "@/components/email";
 import type { ChatState } from "./chat-page";
 import { useEffect, useState } from "react";
 
@@ -338,29 +339,45 @@ export function ProfileSheet({ isOpen, onClose, accountId, chatState }: ProfileS
           )}
 
           {/* View Full Profile Button */}
-          <div className="pt-4 border-t border-border/50">
-            <Button
-              variant="default"
-              className="w-full"
-              asChild
-              onClick={() => {
-                console.log('🟢 ProfileSheet - Navigating to profile with state:', {
-                  messageCount: chatState?.messages?.length ?? 0,
-                  conversationId: chatState?.conversationId,
-                  hasState: !!chatState,
-                });
-                onClose();
-              }}
-            >
-              <Link
-                to="/profile/$accountId"
-                params={{ accountId: profile.accountId }}
-                search={{ from: 'chat' }}
-                state={chatState as any}
+          <div className="pt-4 border-t border-border/50 space-y-3">
+            {/* Quick Actions */}
+            <div className="flex gap-3">
+              {isValidNearAddress(profile.accountId) && (
+                <NearEmailChat
+                  recipientAccountId={profile.accountId}
+                  recipientName={profile.displayName}
+                  recipientAvatar={profile.nftAvatarUrl || profile.avatar || undefined}
+                  trigger={
+                    <Button variant="default" className="flex-1">
+                      <Send className="mr-2 h-4 w-4" />
+                      Message
+                    </Button>
+                  }
+                />
+              )}
+              <Button
+                variant="outline"
+                className="flex-1"
+                asChild
+                onClick={() => {
+                  console.log('🟢 ProfileSheet - Navigating to profile with state:', {
+                    messageCount: chatState?.messages?.length ?? 0,
+                    conversationId: chatState?.conversationId,
+                    hasState: !!chatState,
+                  });
+                  onClose();
+                }}
               >
-                View Full Profile
-              </Link>
-            </Button>
+                <Link
+                  to="/profile/$accountId"
+                  params={{ accountId: profile.accountId }}
+                  search={{ from: 'chat' }}
+                  state={chatState as any}
+                >
+                  Full Profile
+                </Link>
+              </Button>
+            </div>
           </div>
         </div>
       ) : (
