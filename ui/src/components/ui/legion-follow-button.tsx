@@ -5,19 +5,16 @@ import { useLegionIsFollowing, useLegionFollowUnfollow } from "@/hooks/useLegion
 interface LegionFollowButtonProps {
   accountId: string;
   currentUserId: string | undefined;
-  variant?: "default" | "outline" | "legion";
   showIcon?: boolean;
   size?: "default" | "sm" | "lg";
 }
 
 /**
- * Follow button for Legion-exclusive graph
- * Only works if both accounts hold Legion NFTs
+ * Follow button for the social graph
  */
 export function LegionFollowButton({
   accountId,
   currentUserId,
-  variant = "legion",
   showIcon = true,
   size = "default",
 }: LegionFollowButtonProps) {
@@ -33,22 +30,15 @@ export function LegionFollowButton({
   const isFollowing = isFollowingData?.isFollowing || false;
   const isLoading = isChecking || isPending;
 
-  // Legion-specific styling
-  const buttonVariant = variant === "legion" ? (isFollowing ? "outline" : "default") : variant;
-  const buttonClass = variant === "legion" && !isFollowing
-    ? "bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white border-amber-500"
-    : "";
-
   return (
     <Button
-      variant={buttonVariant}
+      variant={isFollowing ? "outline" : "default"}
       size={size}
       onClick={() => (isFollowing ? unfollow(accountId) : follow(accountId))}
       disabled={isLoading}
-      className={buttonClass}
     >
       {showIcon && (isFollowing ? <ShieldCheck className="size-4" /> : <Shield className="size-4" />)}
-      {isLoading ? "Loading..." : isFollowing ? "Following" : "Follow Legion"}
+      {isLoading ? "Loading..." : isFollowing ? "Following" : "Follow"}
     </Button>
   );
 }

@@ -5,15 +5,13 @@
 
 import { useState, useEffect } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Markdown } from "@/components/ui/markdown";
 import { NearEmailChat, isValidNearAddress } from "@/components/email";
-import { FollowButton } from "@/components/ui/follow-button";
-import { SocialStats } from "@/components/ui/social-stats";
 import { LegionFollowButton } from "@/components/ui/legion-follow-button";
 import { LegionStats } from "@/components/ui/legion-stats";
 import type { Builder } from "@/types/builders";
-import { useFollowers, useFollowing } from "@/hooks/useSocialGraph";
-import { useLegionFollowers, useLegionFollowing } from "@/hooks/useLegionGraph";
+import { useLegionFollowers, useLegionFollowing, useLegionStats } from "@/hooks/useLegionGraph";
 import { authClient } from "@/lib/auth-client";
 
 interface BuilderDetailsProps {
@@ -21,15 +19,17 @@ interface BuilderDetailsProps {
 }
 
 export function BuilderDetails({ builder }: BuilderDetailsProps) {
-  // Get current user
   const nearState = authClient.useNearState();
   const currentAccountId = nearState?.accountId;
 
-  // Social tab state (followers/following - social media style)
-  const [socialTab, setSocialTab] = useState<"none" | "followers" | "following">("none");
+  // Tab state (followers/following)
+  const [tab, setTab] = useState<"none" | "followers" | "following">("none");
 
-  // Legion tab state (legion-only followers/following)
-  const [legionTab, setLegionTab] = useState<"none" | "followers" | "following">("none");
+  // Fetch stats for tab counts
+  const { data: stats } = useLegionStats(builder.accountId);
+
+  const followersCount = stats?.followers ?? 0;
+  const followingCount = stats?.following ?? 0;
 
   return (
     <div className="flex-1 min-h-0 border border-primary/30 bg-background overflow-y-auto">
@@ -47,13 +47,18 @@ export function BuilderDetails({ builder }: BuilderDetailsProps) {
 
       <div className={`p-4 sm:p-6 space-y-6 ${builder.backgroundImage ? "-mt-16 sm:-mt-20 relative" : ""}`}>
         {/* Header */}
-        <BuilderHeader builder={builder} currentAccountId={currentAccountId} />
+        <BuilderHeader builder={builder} />
 
-        {/* Social Stats & Follow Button */}
+        {/* Stats & Follow Button */}
         <div className="flex items-center justify-between gap-4">
-          <SocialStats accountId={builder.accountId} />
+          <LegionStats
+            accountId={builder.accountId}
+            variant="compact"
+            onFollowersClick={() => setTab(tab === "followers" ? "none" : "followers")}
+            onFollowingClick={() => setTab(tab === "following" ? "none" : "following")}
+          />
           {currentAccountId && currentAccountId !== builder.accountId && (
-            <FollowButton
+            <LegionFollowButton
               accountId={builder.accountId}
               currentUserId={currentAccountId}
               size="sm"
@@ -61,101 +66,64 @@ export function BuilderDetails({ builder }: BuilderDetailsProps) {
           )}
         </div>
 
-        {/* Legion Stats & Follow Button (only if builder has Legion NFTs) */}
-        {(builder.holdings && builder.holdings.length > 0 && builder.holdings.some(h => h.contractId.includes("legion"))) && (
-          <div className="flex items-center justify-between gap-4 p-3 bg-amber-500/5 border border-amber-500/20 rounded-lg">
-            <LegionStats accountId={builder.accountId} variant="compact" />
-            {currentAccountId && currentAccountId !== builder.accountId && (
-              <LegionFollowButton
-                accountId={builder.accountId}
-                currentUserId={currentAccountId}
-                size="sm"
-              />
-            )}
-          </div>
-        )}
-
-        {/* Social Media Style: Followers/Following Tabs */}
-        {socialTab !== "none" && (
-          <div className="space-y-4">
+        {/* Followers/Following Tabs */}
+        {tab !== "none" && (
+          <div className="space-y-4 p-3 bg-muted/20 border border-border/50 rounded-lg animate-in fade-in slide-in-from-top-2 duration-200">
             <div className="flex items-center gap-4 border-b border-border/50">
               <button
-                onClick={() => setSocialTab("followers")}
-                className={`px-4 py-2 text-sm font-medium transition-colors relative ${
-                  socialTab === "followers"
+                onClick={() => setTab("followers")}
+                className={`px-3 py-2 text-sm font-medium transition-all relative ${
+                  tab === "followers"
                     ? "text-foreground"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                Followers
-                {socialTab === "followers" && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                <span className="flex items-center gap-1.5">
+                  Followers
+                  <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                    tab === "followers"
+                      ? "bg-primary/20 text-primary"
+                      : "bg-muted text-muted-foreground"
+                  }`}>
+                    {followersCount}
+                  </span>
+                </span>
+                {tab === "followers" && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary animate-in slide-in-from-left-2 duration-200" />
                 )}
               </button>
               <button
-                onClick={() => setSocialTab("following")}
-                className={`px-4 py-2 text-sm font-medium transition-colors relative ${
-                  socialTab === "following"
+                onClick={() => setTab("following")}
+                className={`px-3 py-2 text-sm font-medium transition-all relative ${
+                  tab === "following"
                     ? "text-foreground"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                Following
-                {socialTab === "following" && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                <span className="flex items-center gap-1.5">
+                  Following
+                  <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                    tab === "following"
+                      ? "bg-primary/20 text-primary"
+                      : "bg-muted text-muted-foreground"
+                  }`}>
+                    {followingCount}
+                  </span>
+                </span>
+                {tab === "following" && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary animate-in slide-in-from-left-2 duration-200" />
                 )}
               </button>
               <button
-                onClick={() => setSocialTab("none")}
-                className="ml-auto text-sm text-muted-foreground hover:text-foreground"
+                onClick={() => setTab("none")}
+                className="ml-auto p-2 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-muted/50"
+                aria-label="Close tabs"
               >
                 ✕
               </button>
             </div>
 
-            <SocialList accountId={builder.accountId} type={socialTab} />
-          </div>
-        )}
-
-        {/* Legion Media Style: Followers/Following Tabs (only for Legion holders) */}
-        {legionTab !== "none" && (
-          <div className="space-y-4 p-3 bg-amber-500/5 border border-amber-500/20 rounded-lg">
-            <div className="flex items-center gap-4 border-b border-amber-500/20">
-              <button
-                onClick={() => setLegionTab("followers")}
-                className={`px-4 py-2 text-sm font-medium transition-colors relative ${
-                  legionTab === "followers"
-                    ? "text-amber-500"
-                    : "text-muted-foreground hover:text-amber-500"
-                }`}
-              >
-                Legion Followers
-                {legionTab === "followers" && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-500" />
-                )}
-              </button>
-              <button
-                onClick={() => setLegionTab("following")}
-                className={`px-4 py-2 text-sm font-medium transition-colors relative ${
-                  legionTab === "following"
-                    ? "text-amber-500"
-                    : "text-muted-foreground hover:text-amber-500"
-                }`}
-              >
-                Legion Following
-                {legionTab === "following" && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-500" />
-                )}
-              </button>
-              <button
-                onClick={() => setLegionTab("none")}
-                className="ml-auto text-sm text-muted-foreground hover:text-foreground"
-              >
-                ✕
-              </button>
-            </div>
-
-            <LegionSocialList accountId={builder.accountId} type={legionTab} />
+            <LegionSocialList accountId={builder.accountId} type={tab} />
           </div>
         )}
 
@@ -176,51 +144,12 @@ export function BuilderDetails({ builder }: BuilderDetailsProps) {
 
         {/* Socials */}
         {builder.socials && <BuilderSocials socials={builder.socials} />}
-
-        {/* View Followers/Following Buttons */}
-        {currentAccountId && currentAccountId !== builder.accountId && (
-          <div className="flex flex-wrap gap-2 pt-4 border-t border-border/50">
-            <button
-              onClick={() => setSocialTab("followers")}
-              className="px-4 py-2 text-sm bg-muted/20 hover:bg-muted/30 text-foreground border border-border/50 rounded-lg transition-colors"
-            >
-              View Followers
-            </button>
-            <button
-              onClick={() => setSocialTab("following")}
-              className="px-4 py-2 text-sm bg-muted/20 hover:bg-muted/30 text-foreground border border-border/50 rounded-lg transition-colors"
-            >
-              View Following
-            </button>
-          </div>
-        )}
-
-        {/* Legion View Followers/Following Buttons (only for Legion holders) */}
-        {currentAccountId && currentAccountId !== builder.accountId &&
-         (builder.holdings && builder.holdings.length > 0 && builder.holdings.some(h => h.contractId.includes("legion"))) && (
-          <div className="flex flex-wrap gap-2 pt-2">
-            <button
-              onClick={() => setLegionTab("followers")}
-              className="px-4 py-2 text-sm bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border border-amber-500/30 rounded-lg transition-colors"
-            >
-              View Legion Followers
-            </button>
-            <button
-              onClick={() => setLegionTab("following")}
-              className="px-4 py-2 text-sm bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border border-amber-500/30 rounded-lg transition-colors"
-            >
-              View Legion Following
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );
 }
 
-function BuilderHeader({ builder, currentAccountId }: { builder: Builder; currentAccountId?: string }) {
-  const isOwnProfile = currentAccountId === builder.accountId;
-
+function BuilderHeader({ builder }: { builder: Builder }) {
   return (
     <div className="flex items-start gap-4">
       <Avatar className="size-16 sm:size-14 border-2 border-primary/60">
@@ -534,28 +463,34 @@ function NFTGrid({ holdings, accountId }: { holdings: Array<{ contractId: string
 }
 
 // =============================================================================
-// SOCIAL LIST COMPONENT (Inline, Social Media Style)
+// LEGION SOCIAL LIST COMPONENT
 // =============================================================================
 
-interface SocialListProps {
+interface LegionSocialListProps {
   accountId: string;
   type: "followers" | "following";
 }
 
-function SocialList({ accountId, type }: SocialListProps) {
-  const { data, isLoading, isError } =
-    type === "followers"
-      ? useFollowers(accountId, 50, 0)
-      : useFollowing(accountId, 50, 0);
+function LegionSocialList({ accountId, type }: LegionSocialListProps) {
+  // Call both hooks unconditionally (React hooks rule)
+  const followersData = useLegionFollowers(accountId, 50, 0);
+  const followingData = useLegionFollowing(accountId, 50, 0);
 
+  const { data, isLoading, isError } =
+    type === "followers" ? followersData : followingData;
   const items = type === "followers" ? data?.followers : data?.following;
-  const total = data?.total || 0;
 
   if (isLoading) {
     return (
-      <div className="p-4 space-y-3">
-        {Array.from({ length: 10 }).map((_, i) => (
-          <div key={i} className="h-16 bg-muted/20 animate-pulse rounded" />
+      <div className="p-3 space-y-2">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3 px-3 py-2">
+            <Skeleton className="size-10 rounded-full bg-muted/30" />
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-4 w-24 bg-muted/30" />
+              <Skeleton className="h-3 w-32 bg-muted/30" />
+            </div>
+          </div>
         ))}
       </div>
     );
@@ -563,8 +498,14 @@ function SocialList({ accountId, type }: SocialListProps) {
 
   if (isError) {
     return (
-      <div className="p-8 text-center text-muted-foreground">
-        Failed to load {type}. Please try again.
+      <div className="p-6 text-center">
+        <p className="text-sm text-muted-foreground mb-2">Failed to load {type}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="text-xs text-primary hover:underline"
+        >
+          Try again
+        </button>
       </div>
     );
   }
@@ -572,18 +513,19 @@ function SocialList({ accountId, type }: SocialListProps) {
   if (!items || items.length === 0) {
     return (
       <div className="p-8 text-center text-muted-foreground">
-        No {type} yet
+        <p className="text-sm">No {type} yet</p>
       </div>
     );
   }
 
   return (
     <div className="divide-y divide-border/50">
-      {items.map((item) => (
+      {items.map((item, index) => (
         <a
           key={item.accountId}
           href={`/builders/${item.accountId}`}
-          className="flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors block"
+          className="flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors block animate-in fade-in slide-in-from-left-2 duration-200"
+          style={{ animationDelay: `${Math.min(index * 30, 200)}ms` }}
         >
           <Avatar className="size-10">
             <AvatarFallback className="bg-primary/20 text-primary text-sm font-mono font-bold">
@@ -598,78 +540,6 @@ function SocialList({ accountId, type }: SocialListProps) {
               {item.accountId}
             </p>
           </div>
-        </a>
-      ))}
-    </div>
-  );
-}
-
-// =============================================================================
-// LEGION SOCIAL LIST COMPONENT (Inline, Legion-Only Graph)
-// =============================================================================
-
-interface LegionSocialListProps {
-  accountId: string;
-  type: "followers" | "following";
-}
-
-function LegionSocialList({ accountId, type }: LegionSocialListProps) {
-  const { data, isLoading, isError } =
-    type === "followers"
-      ? useLegionFollowers(accountId, 50, 0)
-      : useLegionFollowing(accountId, 50, 0);
-
-  const items = type === "followers" ? data?.followers : data?.following;
-  const total = data?.total || 0;
-
-  if (isLoading) {
-    return (
-      <div className="p-4 space-y-3">
-        {Array.from({ length: 10 }).map((_, i) => (
-          <div key={i} className="h-16 bg-amber-500/10 animate-pulse rounded" />
-        ))}
-      </div>
-    );
-  }
-
-  if (isError) {
-    return (
-      <div className="p-8 text-center text-muted-foreground">
-        Failed to load legion {type}. Please try again.
-      </div>
-    );
-  }
-
-  if (!items || items.length === 0) {
-    return (
-      <div className="p-8 text-center text-muted-foreground">
-        No legion {type} yet
-      </div>
-    );
-  }
-
-  return (
-    <div className="divide-y divide-amber-500/10">
-      {items.map((item) => (
-        <a
-          key={item.accountId}
-          href={`/builders/${item.accountId}`}
-          className="flex items-center gap-3 px-4 py-3 hover:bg-amber-500/10 transition-colors block"
-        >
-          <Avatar className="size-10">
-            <AvatarFallback className="bg-amber-500/20 text-amber-500 text-sm font-mono font-bold">
-              {item.accountId.slice(0, 2).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0">
-            <p className="font-medium text-foreground truncate">
-              {item.accountId.split(".")[0]}
-            </p>
-            <p className="text-sm text-muted-foreground truncate font-mono">
-              {item.accountId}
-            </p>
-          </div>
-          <span className="text-xs text-amber-500 font-mono">🛡️ Legion</span>
         </a>
       ))}
     </div>

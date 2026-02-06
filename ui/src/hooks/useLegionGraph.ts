@@ -62,7 +62,7 @@ async function fetchApi(endpoint: string, options?: RequestInit) {
 // =============================================================================
 
 /**
- * Get Legion followers list for an account
+ * Get followers list for an account
  */
 export function useLegionFollowers(accountId: string | undefined, limit = 50, offset = 0) {
   return useQuery({
@@ -80,7 +80,7 @@ export function useLegionFollowers(accountId: string | undefined, limit = 50, of
 }
 
 /**
- * Get Legion following list for an account
+ * Get following list for an account
  */
 export function useLegionFollowing(accountId: string | undefined, limit = 50, offset = 0) {
   return useQuery({
@@ -98,7 +98,7 @@ export function useLegionFollowing(accountId: string | undefined, limit = 50, of
 }
 
 /**
- * Check if current user is following target account in Legion graph
+ * Check if current user is following target account in the social graph
  */
 export function useLegionIsFollowing(accountId: string | undefined, targetAccountId: string | undefined) {
   return useQuery({
@@ -116,7 +116,7 @@ export function useLegionIsFollowing(accountId: string | undefined, targetAccoun
 }
 
 /**
- * Get Legion stats (followers/following counts)
+ * Get stats (followers/following counts)
  */
 export function useLegionStats(accountId: string | undefined) {
   return useQuery({
@@ -134,11 +134,15 @@ export function useLegionStats(accountId: string | undefined) {
 }
 
 /**
- * Legion Follow/Unfollow mutation
- * Requires both accounts to hold Legion NFTs
+ * Follow/Unfollow mutation with optimistic updates
  */
 export function useLegionFollowUnfollow() {
   const queryClient = useQueryClient();
+  const nearAuth = authClient.near;
+
+  const getCurrentAccountId = () => {
+    return nearAuth?.getAccountId();
+  };
 
   const followMutation = useMutation({
     mutationFn: async (targetAccountId: string) => {
@@ -153,7 +157,6 @@ export function useLegionFollowUnfollow() {
       }
 
       // Sign transaction with wallet (client-side)
-      const nearAuth = authClient.near;
       if (!nearAuth) {
         throw new Error("NEAR wallet not connected");
       }
@@ -180,23 +183,100 @@ export function useLegionFollowUnfollow() {
 
       return { targetAccountId, txHash: tx.transaction.hash };
     },
-    onSuccess: async (data) => {
-      toast.success("Followed in Legion graph!");
+    onMutate: async (targetAccountId) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: legionKeys.all });
 
-      // Invalidate related queries
+      // Snapshot previous values
+      const currentAccountId = getCurrentAccountId();
+      if (!currentAccountId) return { previousIsFollowing: undefined, previousFollowing: undefined, previousStats: undefined, currentAccountId: undefined, targetAccountId };
+
+      // Snapshot and optimistically update isFollowing query
+      const isFollowingQueryKey = legionKeys.isFollowing(currentAccountId, targetAccountId);
+      const previousIsFollowing = queryClient.getQueryData(isFollowingQueryKey);
+      queryClient.setQueryData(isFollowingQueryKey, { isFollowing: true });
+
+      // Optimistically update following list
+      const followingQueryKey = legionKeys.following(currentAccountId).concat(50, 0);
+      const previousFollowing = queryClient.getQueryData(followingQueryKey);
+      queryClient.setQueryData(followingQueryKey, (old: LegionSocialListResponse | undefined) => ({
+        total: (old?.total || 0) + 1,
+        followers: old?.followers,
+        following: [...(old?.following || []), { accountId: targetAccountId }],
+        pagination: old?.pagination || { limit: 50, offset: 0, hasMore: false },
+      }));
+
+      // Optimistically update stats
+      const statsQueryKey = legionKeys.stats(currentAccountId);
+      const previousStats = queryClient.getQueryData(statsQueryKey);
+      queryClient.setQueryData(statsQueryKey, (old: { followers: number; following: number } | undefined) => ({
+        followers: old?.followers || 0,
+        following: (old?.following || 0) + 1,
+      }));
+
+      return { previousIsFollowing, previousFollowing, previousStats, currentAccountId, targetAccountId };
+    },
+    onError: (error, variables, context) => {
+      console.error("[Follow] Error:", error);
+      toast.error(
+        error instanceof Error ? error.message : "Failed to follow"
+      );
+
+      // Rollback all optimistic updates
+      if (context) {
+        const { previousIsFollowing, previousFollowing, previousStats, currentAccountId, targetAccountId } = context;
+
+        // Rollback isFollowing query
+        if (previousIsFollowing !== undefined && currentAccountId && targetAccountId) {
+          queryClient.setQueryData(
+            legionKeys.isFollowing(currentAccountId, targetAccountId),
+            previousIsFollowing
+          );
+        }
+
+        // Rollback following list
+        if (previousFollowing !== undefined && currentAccountId) {
+          queryClient.setQueryData(
+            legionKeys.following(currentAccountId).concat(50, 0),
+            previousFollowing
+          );
+        }
+
+        // Rollback stats
+        if (previousStats !== undefined && currentAccountId) {
+          queryClient.setQueryData(
+            legionKeys.stats(currentAccountId),
+            previousStats
+          );
+        }
+      }
+    },
+    onSuccess: async (data) => {
+      toast.success("Followed!");
+
+      // Invalidate cache on backend for both accounts
+      try {
+        if (data?.targetAccountId) {
+          await fetch("/api/legion/invalidate-cache", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              accountIds: [data.targetAccountId],
+            }),
+          });
+        }
+      } catch (error) {
+        console.error("[Cache] Failed to invalidate:", error);
+        // Non-critical, so don't show error to user
+      }
+    },
+    onSettled: async (data, error, targetAccountId) => {
+      // Refetch to ensure consistency
       await queryClient.invalidateQueries({
-        queryKey: legionKeys.following(data.targetAccountId),
-      });
-      queryClient.invalidateQueries({
         queryKey: legionKeys.all,
         refetchType: "none",
       });
-    },
-    onError: (error) => {
-      console.error("[Legion] Follow error:", error);
-      toast.error(
-        error instanceof Error ? error.message : "Failed to follow in Legion graph"
-      );
     },
   });
 
@@ -211,7 +291,6 @@ export function useLegionFollowUnfollow() {
         throw new Error(result.error || "Failed to prepare unfollow transaction");
       }
 
-      const nearAuth = authClient.near;
       if (!nearAuth) {
         throw new Error("NEAR wallet not connected");
       }
@@ -238,23 +317,100 @@ export function useLegionFollowUnfollow() {
 
       return { targetAccountId, txHash: tx.transaction.hash };
     },
-    onSuccess: async (data) => {
-      toast.success("Unfollowed in Legion graph!");
+    onMutate: async (targetAccountId) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: legionKeys.all });
 
-      // Invalidate related queries
+      // Snapshot previous values
+      const currentAccountId = getCurrentAccountId();
+      if (!currentAccountId) return { previousIsFollowing: undefined, previousFollowing: undefined, previousStats: undefined, currentAccountId: undefined, targetAccountId };
+
+      // Snapshot and optimistically update isFollowing query
+      const isFollowingQueryKey = legionKeys.isFollowing(currentAccountId, targetAccountId);
+      const previousIsFollowing = queryClient.getQueryData(isFollowingQueryKey);
+      queryClient.setQueryData(isFollowingQueryKey, { isFollowing: false });
+
+      // Optimistically update following list
+      const followingQueryKey = legionKeys.following(currentAccountId).concat(50, 0);
+      const previousFollowing = queryClient.getQueryData(followingQueryKey);
+      queryClient.setQueryData(followingQueryKey, (old: LegionSocialListResponse | undefined) => ({
+        total: Math.max((old?.total || 0) - 1, 0),
+        followers: old?.followers,
+        following: (old?.following || []).filter((f) => f.accountId !== targetAccountId),
+        pagination: old?.pagination || { limit: 50, offset: 0, hasMore: false },
+      }));
+
+      // Optimistically update stats
+      const statsQueryKey = legionKeys.stats(currentAccountId);
+      const previousStats = queryClient.getQueryData(statsQueryKey);
+      queryClient.setQueryData(statsQueryKey, (old: { followers: number; following: number } | undefined) => ({
+        followers: old?.followers || 0,
+        following: Math.max((old?.following || 0) - 1, 0),
+      }));
+
+      return { previousIsFollowing, previousFollowing, previousStats, currentAccountId, targetAccountId };
+    },
+    onError: (error, variables, context) => {
+      console.error("[Unfollow] Error:", error);
+      toast.error(
+        error instanceof Error ? error.message : "Failed to unfollow"
+      );
+
+      // Rollback all optimistic updates
+      if (context) {
+        const { previousIsFollowing, previousFollowing, previousStats, currentAccountId, targetAccountId } = context;
+
+        // Rollback isFollowing query
+        if (previousIsFollowing !== undefined && currentAccountId && targetAccountId) {
+          queryClient.setQueryData(
+            legionKeys.isFollowing(currentAccountId, targetAccountId),
+            previousIsFollowing
+          );
+        }
+
+        // Rollback following list
+        if (previousFollowing !== undefined && currentAccountId) {
+          queryClient.setQueryData(
+            legionKeys.following(currentAccountId).concat(50, 0),
+            previousFollowing
+          );
+        }
+
+        // Rollback stats
+        if (previousStats !== undefined && currentAccountId) {
+          queryClient.setQueryData(
+            legionKeys.stats(currentAccountId),
+            previousStats
+          );
+        }
+      }
+    },
+    onSuccess: async (data) => {
+      toast.success("Unfollowed!");
+
+      // Invalidate cache on backend for both accounts
+      try {
+        if (data?.targetAccountId) {
+          await fetch("/api/legion/invalidate-cache", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              accountIds: [data.targetAccountId],
+            }),
+          });
+        }
+      } catch (error) {
+        console.error("[Cache] Failed to invalidate:", error);
+        // Non-critical, so don't show error to user
+      }
+    },
+    onSettled: async () => {
+      // Refetch to ensure consistency
       await queryClient.invalidateQueries({
-        queryKey: legionKeys.following(data.targetAccountId),
-      });
-      queryClient.invalidateQueries({
         queryKey: legionKeys.all,
         refetchType: "none",
       });
-    },
-    onError: (error) => {
-      console.error("[Legion] Unfollow error:", error);
-      toast.error(
-        error instanceof Error ? error.message : "Failed to unfollow in Legion graph"
-      );
     },
   });
 

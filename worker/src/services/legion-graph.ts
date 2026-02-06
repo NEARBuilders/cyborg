@@ -42,7 +42,7 @@ const LEGION_CONTRACTS = [
 // CONSTANTS
 // =============================================================================
 
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes for legion graph
+const CACHE_TTL_MS = 1 * 60 * 1000; // 1 minute for legion graph (more fresh data)
 
 // =============================================================================
 // SERVICE
@@ -88,25 +88,20 @@ export class LegionGraphService {
         originalTo: targetAccountId,
       });
 
-      // Store data + index for discoverability
+      // Store follow data with index for discoverability
       const args = {
         data: {
           [fromAccount]: {
-            // Data storage (for reading)
+            // Legion-specific data (for our custom tracking)
             legion: {
               follow: {
                 [toAccount]: "1",
               },
             },
-            // Index (for discovering who follows this account via legion)
-            index: {
-              graph: {
-                legion: {
-                  [toAccount]: {
-                    key: fromAccount, // Store who is following
-                    type: "legion",
-                  },
-                },
+            // Standard graph index (for social.near's built-in indexing)
+            graph: {
+              follow: {
+                [toAccount]: "",
               },
             },
           },
@@ -167,6 +162,12 @@ export class LegionGraphService {
                 [toAccount]: null, // null = delete
               },
             },
+            // Also remove from graph index
+            graph: {
+              follow: {
+                [toAccount]: null, // null = delete
+              },
+            },
           },
         },
       };
@@ -183,7 +184,7 @@ export class LegionGraphService {
           methodName: "set",
           args,
           gas: "300000000000000",
-          deposit: "0",
+          deposit: "0 NEAR",
         },
       };
     } catch (error) {
@@ -199,8 +200,8 @@ export class LegionGraphService {
   }
 
   /**
-   * Get Legion followers using graph.index()
-   * Reads index: index/graph/legion/{accountId}
+   * Get Legion followers using social.near's graph index
+   * Uses graph.index to find all accounts that follow this account
    */
   async getFollowers(
     accountId: string,
@@ -222,30 +223,17 @@ export class LegionGraphService {
         cleanAccountId,
       );
 
-      // Use graph.index to discover who follows this account via legion
-      const result = await this.graph.index({
+      // Use graph.index to get all accounts that follow this account
+      // This reads from the index created when users follow via graph/follow/{targetAccountId}
+      const followersResult = await this.graph.index({
         action: "graph",
-        key: `legion/${cleanAccountId}`,
-        limit: limit + offset, // Fetch enough to handle offset
+        key: cleanAccountId,
+        limit: 1000, // Fetch up to 1000 for accurate counting
       });
 
-      console.log("[LegionGraphService] Graph.index() followers returned:", {
-        accountId: cleanAccountId,
-        result,
-      });
-
-      // Extract follower IDs from index result
-      const followers: FollowerInfo[] = result
-        .map((item: any) => {
-          // Index stores: {key: followerAccountId, type: "legion"}
-          if (item.key) {
-            return {
-              accountId: item.key,
-            };
-          }
-          return null;
-        })
-        .filter((item): item is FollowerInfo => item !== null);
+      const followers: FollowerInfo[] = followersResult.map((accountId) => ({
+        accountId,
+      }));
 
       console.log(
         "[LegionGraphService] Found legion followers:",
@@ -394,14 +382,17 @@ export class LegionGraphService {
         followingCount,
       );
 
-      // Get followers count using index
-      const followersResult = await this.graph.index({
-        action: "graph",
-        key: `legion/${cleanAccountId}`,
-        limit: 1000, // Fetch up to 1000 for accurate count
+      // Get followers count using social.near's built-in followers index
+      // This reads from: {accountId}/graph/followers/*
+      const followersData = await this.graph.get({
+        keys: [`${cleanAccountId}/graph/followers/**`],
+        options: {
+          limit: 1000, // Fetch up to 1000 for accurate count
+        },
       });
 
-      const followersCount = followersResult.length;
+      const followersList = followersData?.[cleanAccountId]?.graph?.followers || {};
+      const followersCount = Object.keys(followersList).length;
 
       console.log(
         "[LegionGraphService] Stats for",
@@ -508,6 +499,31 @@ export class LegionGraphService {
         });
     } catch (error) {
       console.error("[LegionGraphService] D1 cache write error:", error);
+    }
+  }
+
+  /**
+   * Invalidate cached data for specific accounts
+   * Call this after a successful follow/unfollow to refresh the data
+   */
+  async invalidateCache(accountIds: string[]): Promise<void> {
+    try {
+      const keysToDelete = [
+        // Invalidate followers cache
+        ...accountIds.map((id) => `legion:followers:${id}`),
+        // Invalidate following cache
+        ...accountIds.map((id) => `legion:following:${id}`),
+        // Invalidate stats cache
+        ...accountIds.map((id) => `legion:stats:${id}`),
+      ];
+
+      for (const key of keysToDelete) {
+        await this.db.delete(schema.kvStore).where(eq(schema.kvStore.key, key));
+      }
+
+      console.log("[LegionGraphService] Invalidated cache for:", accountIds);
+    } catch (error) {
+      console.error("[LegionGraphService] Cache invalidation error:", error);
     }
   }
 }

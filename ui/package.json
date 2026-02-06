@@ -12,6 +12,8 @@
     "preview": "rsbuild preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
+    "lint": "eslint . --ext .ts,.tsx",
+    "lint:fix": "eslint . --ext .ts,.tsx --fix",
     "build:types": "tsc --declaration --emitDeclarationOnly --outDir dist/types",
     "deploy": "bun run build:pages && cp .assetsignore dist/.assetsignore && cp _worker.js dist/_worker.js && npx wrangler pages deploy dist --project-name=near-agent --branch main",
     "deploy:demo": "bun run build:pages && cp .assetsignore dist/.assetsignore && npx wrangler pages deploy dist --project-name=near-agent --branch demo",
@@ -69,7 +71,7 @@
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
-    "every-plugin": "catalog:",
+    "@eslint/js": "^9.39.2",
     "@module-federation/enhanced": "^0.23.0",
     "@module-federation/node": "^2.7.26",
     "@module-federation/rsbuild-plugin": "^0.23.0",
@@ -82,9 +84,15 @@
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
+    "eslint": "^9.39.2",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.5.0",
+    "every-plugin": "catalog:",
     "jsdom": "^27.2.0",
     "tailwindcss": "^4.1.17",
     "typescript": "catalog:",
+    "typescript-eslint": "^8.54.0",
     "vitest": "catalog:"
   }
 }

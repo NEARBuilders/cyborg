@@ -17,14 +17,23 @@ import { SocialLinksModal } from "../../../components/ui/social-links-modal";
 import { Skeleton } from "../../../components/ui/skeleton";
 import { Settings, ArrowLeft } from "lucide-react";
 import { useProfile, usePoke } from "../../../integrations/near-social-js";
-import { useUserRank, useHolderTypes, type RankData, type HolderTypesData } from "../../../hooks";
+import {
+  useUserRank,
+  useHolderTypes,
+  type RankData,
+  type HolderTypesData,
+} from "../../../hooks";
 import { authClient } from "../../../lib/auth-client";
 import { sessionQueryOptions } from "../../../lib/session";
 import { apiClient } from "../../../utils/orpc";
 import { Near } from "near-kit";
 import { FollowButton } from "../../../components/ui/follow-button";
 import { SocialStats } from "../../../components/ui/social-stats";
-import { useFollowers, useFollowing, socialKeys } from "../../../hooks/useSocialGraph";
+import {
+  useFollowers,
+  useFollowing,
+  socialKeys,
+} from "../../../hooks/useSocialGraph";
 
 const PROFILE_KEY = "builder-profile";
 
@@ -34,12 +43,23 @@ interface BuilderProfileData {
   role?: string;
   tags?: string[];
   projects?: { name: string; description: string; status: string }[];
-  socials?: { github?: string; twitter?: string; website?: string; telegram?: string };
+  socials?: {
+    github?: string;
+    twitter?: string;
+    website?: string;
+    telegram?: string;
+  };
 }
 
 // Chat state interface (same as in chat-page.tsx)
 interface ChatState {
-  messages: Array<{ id: string; role: string; content: string; createdAt: string; isStreaming?: boolean }>;
+  messages: Array<{
+    id: string;
+    role: string;
+    content: string;
+    createdAt: string;
+    isStreaming?: boolean;
+  }>;
   conversationId: string | null;
   isStreaming: boolean;
 }
@@ -68,7 +88,10 @@ export const Route = createFileRoute("/_layout/profile/$accountId")({
           { property: "og:image:height", content: "630" },
           { property: "og:type", content: "profile" },
           { name: "twitter:card", content: "summary_large_image" },
-          { name: "twitter:image", content: `${window.location.origin}/og.jpg` },
+          {
+            name: "twitter:image",
+            content: `${window.location.origin}/og.jpg`,
+          },
         ],
       };
     }
@@ -120,12 +143,14 @@ function ProfilePage() {
   const { mutate: poke, isPending: isPoking } = usePoke(accountId);
   const queryClient = useQueryClient();
   const routerState = useRouterState();
-  const chatState = routerState.location.state as unknown as ChatState | undefined;
+  const chatState = routerState.location.state as unknown as
+    | ChatState
+    | undefined;
 
-  const showBackToChat = search.from === 'chat';
+  const showBackToChat = search.from === "chat";
 
   // Log when we receive chat state
-  console.log('🟡 ProfilePage - Received state:', {
+  console.log("🟡 ProfilePage - Received state:", {
     showBackToChat,
     hasState: !!chatState,
     messageCount: chatState?.messages?.length ?? 0,
@@ -145,28 +170,34 @@ function ProfilePage() {
   // - jemartel.near vs Jean (if that's the profile name)
   const normalizeAccountId = (id: string) => {
     // Remove .near suffix if present
-    return id.replace(/\.near$/, '').toLowerCase();
+    return id.replace(/\.near$/, "").toLowerCase();
   };
 
-  const isOwnProfile = !!currentAccountId && (
-    currentAccountId === accountId ||
-    normalizeAccountId(currentAccountId) === normalizeAccountId(accountId)
-  );
+  const isOwnProfile =
+    !!currentAccountId &&
+    (currentAccountId === accountId ||
+      normalizeAccountId(currentAccountId) === normalizeAccountId(accountId));
 
   const [isEditing, setIsEditing] = useState(false);
 
   // Local state for edits (overrides KV data)
-  const [localProfile, setLocalProfile] = useState<BuilderProfileData | null>(null);
+  const [localProfile, setLocalProfile] = useState<BuilderProfileData | null>(
+    null,
+  );
 
   // Modal states
   const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
   const [isSocialLinksModalOpen, setIsSocialLinksModalOpen] = useState(false);
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
-  const [editingProjectIndex, setEditingProjectIndex] = useState<number | null>(null);
+  const [editingProjectIndex, setEditingProjectIndex] = useState<number | null>(
+    null,
+  );
   const [isSavingSocialLinks, setIsSavingSocialLinks] = useState(false);
 
   // Social tab state (followers/following - social media style)
-  const [socialTab, setSocialTab] = useState<"none" | "followers" | "following">("none");
+  const [socialTab, setSocialTab] = useState<
+    "none" | "followers" | "following"
+  >("none");
   const [editFormData, setEditFormData] = useState<BuilderProfileData>({
     displayName: "",
     description: "",
@@ -185,7 +216,8 @@ function ProfilePage() {
   const { data: rankData, isLoading: isLoadingRank } = useUserRank(accountId);
 
   // Load holder types (NEW - shows all NFT contracts held)
-  const { data: holderTypes, isLoading: isLoadingHolderTypes } = useHolderTypes(accountId);
+  const { data: holderTypes, isLoading: isLoadingHolderTypes } =
+    useHolderTypes(accountId);
 
   // Load builder profile from KV store
   const { data: storedProfile } = useQuery({
@@ -208,7 +240,7 @@ function ProfilePage() {
   const displayName =
     sourceProfile?.displayName || profile?.name || accountId.split(".")[0];
   const description =
-    (sourceProfile?.description?.trim()) ||
+    sourceProfile?.description?.trim() ||
     profile?.description ||
     "A passionate builder in the NEAR ecosystem.";
   const role = sourceProfile?.role || "Builder";
@@ -262,10 +294,13 @@ function ProfilePage() {
             to="/chat"
             state={chatState as any}
             onClick={() => {
-              console.log('🔴 ProfilePage - Navigating back to chat with state:', {
-                messageCount: chatState?.messages?.length ?? 0,
-                conversationId: chatState?.conversationId,
-              });
+              console.log(
+                "🔴 ProfilePage - Navigating back to chat with state:",
+                {
+                  messageCount: chatState?.messages?.length ?? 0,
+                  conversationId: chatState?.conversationId,
+                },
+              );
             }}
           >
             <Button
@@ -296,10 +331,13 @@ function ProfilePage() {
                 to="/chat"
                 state={chatState as any}
                 onClick={() => {
-                  console.log('🔴 ProfilePage - Navigating back to chat with state:', {
-                    messageCount: chatState?.messages?.length ?? 0,
-                    conversationId: chatState?.conversationId,
-                  });
+                  console.log(
+                    "🔴 ProfilePage - Navigating back to chat with state:",
+                    {
+                      messageCount: chatState?.messages?.length ?? 0,
+                      conversationId: chatState?.conversationId,
+                    },
+                  );
                 }}
               >
                 <Button
@@ -316,7 +354,9 @@ function ProfilePage() {
         </div>
       )}
 
-      <div className={`p-4 sm:p-6 space-y-6 ${backgroundUrl ? "-mt-12 relative" : ""}`}>
+      <div
+        className={`p-4 sm:p-6 space-y-6 ${backgroundUrl ? "-mt-12 relative" : ""}`}
+      >
         {/* Header */}
         <ProfileHeader
           accountId={accountId}
@@ -328,7 +368,14 @@ function ProfilePage() {
           {isOwnProfile && (
             <button
               onClick={() => {
-                setEditFormData({ displayName, description, role, tags, projects, socials });
+                setEditFormData({
+                  displayName,
+                  description,
+                  role,
+                  tags,
+                  projects,
+                  socials,
+                });
                 setIsEditProfileModalOpen(true);
               }}
               className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2.5 py-1.5 rounded-lg hover:bg-muted/50 font-medium"
@@ -440,7 +487,11 @@ function ProfilePage() {
             />
 
             {/* Socials */}
-            <ProfileSocials socials={socials} isOwnProfile={isOwnProfile} onEdit={() => setIsSocialLinksModalOpen(true)} />
+            <ProfileSocials
+              socials={socials}
+              isOwnProfile={isOwnProfile}
+              onEdit={() => setIsSocialLinksModalOpen(true)}
+            />
 
             {/* Actions */}
             <div className="pt-4 border-t border-border/50">
@@ -473,7 +524,10 @@ function ProfilePage() {
                   </>
                 )}
                 {!currentAccountId && (
-                  <Link to="/login" search={{ redirect: `/profile/${accountId}` }}>
+                  <Link
+                    to="/login"
+                    search={{ redirect: `/profile/${accountId}` }}
+                  >
                     <Button variant="outline">Sign in to interact</Button>
                   </Link>
                 )}
@@ -536,16 +590,21 @@ function ProfilePage() {
             const near = nearAuth.getNearClient();
             await near
               .transaction(walletAccountId)
-              .functionCall("social.near", "set", {
-                data: {
-                  [accountId]: {
-                    profile: profileData,
+              .functionCall(
+                "social.near",
+                "set",
+                {
+                  data: {
+                    [accountId]: {
+                      profile: profileData,
+                    },
                   },
                 },
-              }, {
-                gas: "300 Tgas",
-                attachedDeposit: "0 NEAR",
-              })
+                {
+                  gas: "300 Tgas",
+                  attachedDeposit: "0 NEAR",
+                },
+              )
               .send();
 
             console.log("Profile updated successfully");
@@ -567,7 +626,9 @@ function ProfilePage() {
             toast.success("Profile updated on NEAR Social!");
           } catch (error) {
             console.error("Save error:", error);
-            toast.error(error instanceof Error ? error.message : "Failed to save profile");
+            toast.error(
+              error instanceof Error ? error.message : "Failed to save profile",
+            );
           } finally {
             setIsSavingProfile(false);
           }
@@ -577,11 +638,14 @@ function ProfilePage() {
           {/* Image URLs */}
           <div className="space-y-4 pb-6 border-b border-border/50">
             <p className="text-sm text-foreground">
-              Add image URLs to your profile. Images will be saved to NEAR Social blockchain.
+              Add image URLs to your profile. Images will be saved to NEAR
+              Social blockchain.
             </p>
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">Profile Picture URL</label>
+                <label className="text-sm font-medium text-foreground">
+                  Profile Picture URL
+                </label>
                 <Input
                   value={pendingAvatarUrl}
                   onChange={(e) => setPendingAvatarUrl(e.target.value)}
@@ -590,7 +654,9 @@ function ProfilePage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">Background Image URL</label>
+                <label className="text-sm font-medium text-foreground">
+                  Background Image URL
+                </label>
                 <Input
                   value={pendingBackgroundUrl}
                   onChange={(e) => setPendingBackgroundUrl(e.target.value)}
@@ -629,7 +695,11 @@ function ProfilePage() {
           // Update local state with the edited/added project
           const updatedProjects =
             editingProjectIndex !== null
-              ? [...projects.slice(0, editingProjectIndex), project, ...projects.slice(editingProjectIndex + 1)]
+              ? [
+                  ...projects.slice(0, editingProjectIndex),
+                  project,
+                  ...projects.slice(editingProjectIndex + 1),
+                ]
               : [...projects, project];
 
           setLocalProfile({
@@ -642,7 +712,11 @@ function ProfilePage() {
           });
 
           setIsProjectModalOpen(false);
-          toast.success(editingProjectIndex !== null ? "Project updated!" : "Project added!");
+          toast.success(
+            editingProjectIndex !== null
+              ? "Project updated!"
+              : "Project added!",
+          );
         }}
       />
 
@@ -680,18 +754,23 @@ function ProfilePage() {
             const near = nearAuth.getNearClient();
             await near
               .transaction(walletAccountId)
-              .functionCall("social.near", "set", {
-                data: {
-                  [accountId]: {
-                    profile: {
-                      linktree,
+              .functionCall(
+                "social.near",
+                "set",
+                {
+                  data: {
+                    [accountId]: {
+                      profile: {
+                        linktree,
+                      },
                     },
                   },
                 },
-              }, {
-                gas: "300 Tgas",
-                attachedDeposit: "0 NEAR",
-              })
+                {
+                  gas: "300 Tgas",
+                  attachedDeposit: "0 NEAR",
+                },
+              )
               .send();
 
             console.log("Social links updated successfully");
@@ -709,12 +788,18 @@ function ProfilePage() {
             setIsSocialLinksModalOpen(false);
 
             // Invalidate profile to fetch updated data
-            await queryClient.invalidateQueries({ queryKey: ["social", "profile", accountId] });
+            await queryClient.invalidateQueries({
+              queryKey: ["social", "profile", accountId],
+            });
 
             toast.success("Social links updated on NEAR Social!");
           } catch (error) {
             console.error("Save error:", error);
-            toast.error(error instanceof Error ? error.message : "Failed to save social links");
+            toast.error(
+              error instanceof Error
+                ? error.message
+                : "Failed to save social links",
+            );
           } finally {
             setIsSavingSocialLinks(false);
           }
@@ -757,11 +842,7 @@ function ProfileHeader({
               {accountId}
             </p>
           </div>
-          {children && (
-            <div className="flex-shrink-0">
-              {children}
-            </div>
-          )}
+          {children && <div className="flex-shrink-0">{children}</div>}
         </div>
         <span className="inline-block text-xs bg-primary/25 text-primary px-2.5 py-1 sm:px-3 sm:py-1.5 font-mono font-medium">
           {role}
@@ -830,9 +911,13 @@ function LegionRankSection({
           <Skeleton className="h-10 w-32" />
           <Skeleton className="h-10 w-48" />
         </div>
-      ) : (!rankData && !holderTypes) ? (
-        <p className="text-sm text-muted-foreground">Unable to load rank data</p>
-      ) : (!rankData?.hasNft && !rankData?.hasInitiate && !holderTypes?.contracts.length) ? (
+      ) : !rankData && !holderTypes ? (
+        <p className="text-sm text-muted-foreground">
+          Unable to load rank data
+        </p>
+      ) : !rankData?.hasNft &&
+        !rankData?.hasInitiate &&
+        !holderTypes?.contracts.length ? (
         <p className="text-sm text-muted-foreground">
           No NEAR Legion NFTs found.{" "}
           <a
@@ -857,7 +942,8 @@ function LegionRankSection({
                 {rankData.rank === "rare" && "⭐"}
                 {rankData.rank === "common" && "🎖️"}
               </span>
-              {rankData.rank.charAt(0).toUpperCase() + rankData.rank.slice(1)} Ascendant
+              {rankData.rank.charAt(0).toUpperCase() + rankData.rank.slice(1)}{" "}
+              Ascendant
               {rankData.tokenId && (
                 <span className="text-xs opacity-60">#{rankData.tokenId}</span>
               )}
@@ -868,7 +954,10 @@ function LegionRankSection({
           {holderTypes?.contracts && holderTypes.contracts.length > 0 && (
             <div className="flex flex-wrap items-center gap-2">
               {holderTypes.contracts.map((contract) => {
-                const badge = getContractBadge(contract.contractId, contract.quantity);
+                const badge = getContractBadge(
+                  contract.contractId,
+                  contract.quantity,
+                );
                 if (!badge) return null;
                 return (
                   <span
@@ -963,7 +1052,9 @@ function ProfileProjects({
             <div
               key={project.name}
               className="group p-4 border border-border/50 bg-muted/30 space-y-2 cursor-pointer hover:border-primary/30 transition-colors"
-              onClick={() => setExpandedProject(isExpanded ? null : project.name)}
+              onClick={() =>
+                setExpandedProject(isExpanded ? null : project.name)
+              }
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="font-mono text-foreground font-semibold text-base">
@@ -1027,11 +1118,17 @@ function ProfileSocials({
   isOwnProfile,
   onEdit,
 }: {
-  socials: { github?: string; twitter?: string; website?: string; telegram?: string };
+  socials: {
+    github?: string;
+    twitter?: string;
+    website?: string;
+    telegram?: string;
+  };
   isOwnProfile?: boolean;
   onEdit?: () => void;
 }) {
-  const hasLinks = socials.github || socials.twitter || socials.website || socials.telegram;
+  const hasLinks =
+    socials.github || socials.twitter || socials.website || socials.telegram;
 
   if (!hasLinks && !isOwnProfile) return null;
 
@@ -1055,7 +1152,11 @@ function ProfileSocials({
         <div className="flex flex-wrap gap-4">
           {socials.website && (
             <a
-              href={socials.website.startsWith("http") ? socials.website : `https://${socials.website}`}
+              href={
+                socials.website.startsWith("http")
+                  ? socials.website
+                  : `https://${socials.website}`
+              }
               target="_blank"
               rel="noopener noreferrer"
               className="text-sm text-primary hover:text-primary/80 transition-colors font-mono underline underline-offset-4"
@@ -1095,7 +1196,9 @@ function ProfileSocials({
           )}
         </div>
       ) : (
-        <p className="text-sm text-muted-foreground italic">No social links added yet</p>
+        <p className="text-sm text-muted-foreground italic">
+          No social links added yet
+        </p>
       )}
     </div>
   );
@@ -1131,7 +1234,7 @@ function ProfileEditForm({
     },
     onError: (error) => {
       toast.error(
-        `Failed to save: ${error instanceof Error ? error.message : "Unknown error"}`
+        `Failed to save: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
     },
   });
@@ -1181,11 +1284,16 @@ function ProfileEditForm({
         <h4 className="text-sm font-medium text-foreground">Basic Info</h4>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground">Display Name</label>
+            <label className="text-xs text-muted-foreground">
+              Display Name
+            </label>
             <Input
               value={formData.displayName || ""}
               onChange={(e) =>
-                setFormData((prev) => ({ ...prev, displayName: e.target.value }))
+                setFormData((prev) => ({
+                  ...prev,
+                  displayName: e.target.value,
+                }))
               }
               placeholder="Your display name"
               className="h-9"
@@ -1249,10 +1357,17 @@ function ProfileEditForm({
             value={newTag}
             onChange={(e) => setNewTag(e.target.value)}
             placeholder="Type a skill and press Enter..."
-            onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddTag())}
+            onKeyDown={(e) =>
+              e.key === "Enter" && (e.preventDefault(), handleAddTag())
+            }
             className="h-9"
           />
-          <Button type="button" variant="outline" onClick={handleAddTag} className="h-9">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleAddTag}
+            className="h-9"
+          >
             Add
           </Button>
         </div>
@@ -1298,7 +1413,9 @@ function ProfileEditForm({
             Add New Project
           </p>
           <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground">Project name</label>
+            <label className="text-xs text-muted-foreground">
+              Project name
+            </label>
             <Input
               value={newProject.name}
               onChange={(e) =>
@@ -1335,7 +1452,12 @@ function ProfileEditForm({
               <option value="Beta">Beta</option>
               <option value="Completed">Completed</option>
             </select>
-            <Button type="button" variant="outline" onClick={handleAddProject} className="h-9">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleAddProject}
+              className="h-9"
+            >
               Add Project
             </Button>
           </div>
@@ -1437,13 +1559,13 @@ interface SocialListProps {
 }
 
 function SocialList({ accountId, type }: SocialListProps) {
-  const { data, isLoading, isError } =
-    type === "followers"
-      ? useFollowers(accountId, 50, 0)
-      : useFollowing(accountId, 50, 0);
+  // Call both hooks unconditionally (React hooks rule)
+  const followersData = useFollowers(accountId, 50, 0);
+  const followingData = useFollowing(accountId, 50, 0);
 
+  const { data, isLoading, isError } =
+    type === "followers" ? followersData : followingData;
   const items = type === "followers" ? data?.followers : data?.following;
-  const total = data?.total || 0;
 
   if (isLoading) {
     return (
@@ -1465,9 +1587,7 @@ function SocialList({ accountId, type }: SocialListProps) {
 
   if (!items || items.length === 0) {
     return (
-      <div className="p-8 text-center text-muted-foreground">
-        No {type} yet
-      </div>
+      <div className="p-8 text-center text-muted-foreground">No {type} yet</div>
     );
   }
 

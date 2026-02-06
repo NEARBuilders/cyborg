@@ -49,7 +49,9 @@
     "deploy:cf": "bun deploy:worker && bun deploy:pages",
     "clean:wrangler": "rm -rf .wrangler worker/.wrangler",
     "deploy:force": "bun run clean:wrangler && bun run deploy:all",
-    "typecheck": "bun run --cwd ui tsc --noEmit && bun run --cwd api tsc --noEmit && bun run --cwd worker tsc --noEmit",
+    "typecheck": "bun run --cwd ui lint && bun run --cwd ui tsc --noEmit && bun run --cwd api tsc --noEmit && bun run --cwd worker tsc --noEmit",
+    "lint": "bun run --cwd ui lint",
+    "lint:fix": "bun run --cwd ui lint:fix",
     "start": "NODE_ENV=production bun run --cwd api dev",
     "db:push": "bun run --cwd api drizzle-kit push",
     "db:studio": "bun run --cwd api drizzle-kit studio",
@@ -63,7 +65,13 @@
   "module": "index.ts",
   "type": "module",
   "devDependencies": {
-    "@types/bun": "latest"
+    "@eslint/js": "^9.39.2",
+    "@types/bun": "latest",
+    "eslint": "^9.39.2",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.5.0",
+    "typescript-eslint": "^8.54.0"
   },
   "peerDependencies": {
     "typescript": "^5"

@@ -1736,6 +1736,28 @@ app.get("/api/legion/stats/:accountId", async (c) => {
   }
 });
 
+// Invalidate cache for specific accounts (call after successful follow/unfollow)
+app.post("/api/legion/invalidate-cache", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { accountIds } = body;
+
+    if (!Array.isArray(accountIds) || accountIds.length === 0) {
+      return c.json({ error: "accountIds must be a non-empty array" }, 400);
+    }
+
+    const db = createDatabase(c.env.DB);
+    const legionService = new LegionGraphService(db, "mainnet");
+
+    await legionService.invalidateCache(accountIds);
+
+    return c.json({ success: true, invalidated: accountIds.length });
+  } catch (error) {
+    console.error("[API] Cache invalidation error:", error);
+    return c.json({ error: "Failed to invalidate cache" }, 500);
+  }
+});
+
 // =============================================================================
 // STATIC ASSETS (serve UI from same domain as auth)
 // =============================================================================
