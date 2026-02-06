@@ -12,6 +12,7 @@ import type { Database } from "../db";
 import * as schema from "../db/schema";
 import type { AgentService } from "../services/agent";
 import type { NearService } from "../services/near";
+import type { SocialService } from "../services/social";
 
 // =============================================================================
 // VALIDATION SCHEMAS
@@ -41,6 +42,7 @@ interface ApiContext {
   db: Database;
   agentService: AgentService | null;
   nearService: NearService | null;
+  socialService: SocialService | null;
   nearAccountId?: string;
   role?: string;
 }
@@ -466,6 +468,181 @@ export function createApiRoutes(getContext: () => ApiContext) {
   // NOTE: /builders and /profiles endpoints are now public with host guard
   // See worker/src/index.ts - they are no longer authenticated routes
   // ===========================================================================
+
+  // ===========================================================================
+  // SOCIAL GRAPH (Follow/Follower System)
+  // ===========================================================================
+
+  // Follow user (prepare transaction for client-side signing)
+  api.post("/social/follow", async (c) => {
+    const ctx = getContext();
+    if (!ctx.nearAccountId) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+    if (!ctx.socialService) {
+      return c.json({ error: "Social service not available" }, 503);
+    }
+
+    try {
+      const body = await c.req.json();
+      const { targetAccountId } = body;
+
+      if (!targetAccountId || typeof targetAccountId !== "string") {
+        return c.json({ error: "targetAccountId is required" }, 400);
+      }
+
+      const result = await ctx.socialService.prepareFollowTransaction(
+        ctx.nearAccountId,
+        targetAccountId
+      );
+
+      if (!result.success) {
+        return c.json({ error: result.error || "Failed to prepare transaction" }, 500);
+      }
+
+      return c.json({
+        success: true,
+        transaction: result.transaction,
+      });
+    } catch (error) {
+      console.error("[API] Follow error:", error);
+      return c.json({ error: "Failed to prepare follow transaction" }, 500);
+    }
+  });
+
+  // Unfollow user (prepare transaction for client-side signing)
+  api.post("/social/unfollow", async (c) => {
+    const ctx = getContext();
+    if (!ctx.nearAccountId) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+    if (!ctx.socialService) {
+      return c.json({ error: "Social service not available" }, 503);
+    }
+
+    try {
+      const body = await c.req.json();
+      const { targetAccountId } = body;
+
+      if (!targetAccountId || typeof targetAccountId !== "string") {
+        return c.json({ error: "targetAccountId is required" }, 400);
+      }
+
+      const result = await ctx.socialService.prepareUnfollowTransaction(
+        ctx.nearAccountId,
+        targetAccountId
+      );
+
+      if (!result.success) {
+        return c.json({ error: result.error || "Failed to prepare transaction" }, 500);
+      }
+
+      return c.json({
+        success: true,
+        transaction: result.transaction,
+      });
+    } catch (error) {
+      console.error("[API] Unfollow error:", error);
+      return c.json({ error: "Failed to prepare unfollow transaction" }, 500);
+    }
+  });
+
+  // Get followers list
+  api.get("/social/followers/:accountId", async (c) => {
+    const ctx = getContext();
+    if (!ctx.socialService) {
+      return c.json({
+        followers: [],
+        total: 0,
+        pagination: { limit: 50, offset: 0, hasMore: false },
+      });
+    }
+
+    const accountId = c.req.param("accountId");
+    if (!accountId) {
+      return c.json({ error: "accountId is required" }, 400);
+    }
+
+    const limit = Math.min(Number(c.req.query("limit") || "50"), 100);
+    const offset = Number(c.req.query("offset") || "0");
+
+    try {
+      const result = await ctx.socialService.getFollowers(accountId, limit, offset);
+
+      return c.json({
+        followers: result.items,
+        total: result.total,
+        pagination: {
+          limit,
+          offset,
+          hasMore: result.hasMore,
+        },
+      });
+    } catch (error) {
+      console.error("[API] Get followers error:", error);
+      return c.json({ error: "Failed to fetch followers" }, 500);
+    }
+  });
+
+  // Get following list
+  api.get("/social/following/:accountId", async (c) => {
+    const ctx = getContext();
+    if (!ctx.socialService) {
+      return c.json({
+        following: [],
+        total: 0,
+        pagination: { limit: 50, offset: 0, hasMore: false },
+      });
+    }
+
+    const accountId = c.req.param("accountId");
+    if (!accountId) {
+      return c.json({ error: "accountId is required" }, 400);
+    }
+
+    const limit = Math.min(Number(c.req.query("limit") || "50"), 100);
+    const offset = Number(c.req.query("offset") || "0");
+
+    try {
+      const result = await ctx.socialService.getFollowing(accountId, limit, offset);
+
+      return c.json({
+        following: result.items,
+        total: result.total,
+        pagination: {
+          limit,
+          offset,
+          hasMore: result.hasMore,
+        },
+      });
+    } catch (error) {
+      console.error("[API] Get following error:", error);
+      return c.json({ error: "Failed to fetch following" }, 500);
+    }
+  });
+
+  // Check if following
+  api.get("/social/following/:accountId/check/:targetAccountId", async (c) => {
+    const ctx = getContext();
+    if (!ctx.socialService) {
+      return c.json({ isFollowing: false });
+    }
+
+    const accountId = c.req.param("accountId");
+    const targetAccountId = c.req.param("targetAccountId");
+
+    if (!accountId || !targetAccountId) {
+      return c.json({ error: "accountId and targetAccountId are required" }, 400);
+    }
+
+    try {
+      const isFollowing = await ctx.socialService.isFollowing(accountId, targetAccountId);
+      return c.json({ isFollowing });
+    } catch (error) {
+      console.error("[API] Check following error:", error);
+      return c.json({ error: "Failed to check follow status" }, 500);
+    }
+  });
 
   return api;
 }

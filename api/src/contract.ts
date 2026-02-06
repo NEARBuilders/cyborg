@@ -315,6 +315,107 @@ export const contract = oc.router({
       }),
     )
     .errors(CommonPluginErrors),
+
+  // ===========================================================================
+  // SOCIAL GRAPH (Follow/Follower System)
+  // ===========================================================================
+
+  followUser: oc
+    .route({ method: "POST", path: "/social/follow" })
+    .input(
+      z.object({
+        targetAccountId: z.string().min(1).max(256),
+      })
+    )
+    .output(
+      z.object({
+        success: z.boolean(),
+        transaction: z.any().optional(),
+      })
+    )
+    .errors(CommonPluginErrors),
+
+  unfollowUser: oc
+    .route({ method: "POST", path: "/social/unfollow" })
+    .input(
+      z.object({
+        targetAccountId: z.string().min(1).max(256),
+      })
+    )
+    .output(
+      z.object({
+        success: z.boolean(),
+        transaction: z.any().optional(),
+      })
+    )
+    .errors(CommonPluginErrors),
+
+  getFollowers: oc
+    .route({ method: "GET", path: "/social/followers/{accountId}" })
+    .input(
+      z.object({
+        accountId: z.string().min(1),
+        limit: z.number().int().min(1).max(100).default(50),
+        offset: z.number().int().min(0).default(0),
+      })
+    )
+    .output(
+      z.object({
+        followers: z.array(
+          z.object({
+            accountId: z.string(),
+          })
+        ),
+        total: z.number(),
+        pagination: z.object({
+          limit: z.number(),
+          offset: z.number(),
+          hasMore: z.boolean(),
+        }),
+      })
+    )
+    .errors(CommonPluginErrors),
+
+  getFollowing: oc
+    .route({ method: "GET", path: "/social/following/{accountId}" })
+    .input(
+      z.object({
+        accountId: z.string().min(1),
+        limit: z.number().int().min(1).max(100).default(50),
+        offset: z.number().int().min(0).default(0),
+      })
+    )
+    .output(
+      z.object({
+        following: z.array(
+          z.object({
+            accountId: z.string(),
+          })
+        ),
+        total: z.number(),
+        pagination: z.object({
+          limit: z.number(),
+          offset: z.number(),
+          hasMore: z.boolean(),
+        }),
+      })
+    )
+    .errors(CommonPluginErrors),
+
+  isFollowing: oc
+    .route({ method: "GET", path: "/social/following/{accountId}/check/{targetAccountId}" })
+    .input(
+      z.object({
+        accountId: z.string().min(1),
+        targetAccountId: z.string().min(1),
+      })
+    )
+    .output(
+      z.object({
+        isFollowing: z.boolean(),
+      })
+    )
+    .errors(CommonPluginErrors),
 });
 
 export type ContractType = typeof contract;

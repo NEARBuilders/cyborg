@@ -17,6 +17,8 @@ import { createAuth, getSessionFromRequest } from "./auth";
 import { createDatabase } from "./db";
 import * as schema from "./db/schema";
 import { NearService, createAgentService } from "./services";
+import { SocialService } from "./services/social";
+import { LegionGraphService } from "./services/legion-graph";
 import { createApiRoutes } from "./routes/api";
 import { CacheService } from "./services/cache";
 import { handleBuildersRequest } from "./services/builders";
@@ -1198,16 +1200,16 @@ app.route("/api/profiles/upsert", profileUpsertRoutes);
 app.post("/api/chat", async (c) => {
   const env = c.env;
 
-  // Initialize auth and get session
+  // Initialize database first
+  const db = createDatabase(env.DB);
+
+  // Initialize auth and get session (pass db to query account table)
   const auth = createAuth(env);
-  const sessionContext = await getSessionFromRequest(auth, c.req.raw);
+  const sessionContext = await getSessionFromRequest(auth, c.req.raw, db);
 
   if (!sessionContext?.nearAccountId) {
     return c.json({ error: "Authentication required" }, 401);
   }
-
-  // Initialize database
-  const db = createDatabase(env.DB);
 
   // Initialize services
   const nearService = new NearService(db, {
@@ -1243,16 +1245,16 @@ app.post("/api/chat", async (c) => {
 app.post("/api/chat/stream", async (c) => {
   const env = c.env;
 
-  // Initialize auth and get session
+  // Initialize database first
+  const db = createDatabase(env.DB);
+
+  // Initialize auth and get session (pass db to query account table)
   const auth = createAuth(env);
-  const sessionContext = await getSessionFromRequest(auth, c.req.raw);
+  const sessionContext = await getSessionFromRequest(auth, c.req.raw, db);
 
   if (!sessionContext?.nearAccountId) {
     return c.json({ error: "Authentication required" }, 401);
   }
-
-  // Initialize database
-  const db = createDatabase(env.DB);
 
   // Initialize services
   const nearService = new NearService(db, {
@@ -1310,6 +1312,428 @@ app.post("/api/chat/stream", async (c) => {
       Connection: "keep-alive",
     },
   });
+});
+
+// =============================================================================
+// SOCIAL GRAPH (Follow/Follower System)
+// =============================================================================
+
+// Helper function to initialize services for social routes
+async function getSocialContext(c: any, env: Env) {
+  // Initialize database first
+  const db = createDatabase(env.DB);
+
+  // Initialize auth and get session (pass db to query account table)
+  const auth = createAuth(env);
+  const sessionContext = await getSessionFromRequest(auth, c.req.raw, db);
+
+  // Initialize social service
+  const socialService = new SocialService(db, "mainnet");
+
+  return {
+    db,
+    socialService,
+    nearAccountId: sessionContext?.nearAccountId,
+    role: sessionContext?.role,
+  };
+}
+
+// Follow user
+app.post("/api/social/follow", async (c) => {
+  const ctx = await getSocialContext(c, c.env);
+
+  if (!ctx.nearAccountId) {
+    return c.json({ error: "Authentication required" }, 401);
+  }
+
+  try {
+    const body = await c.req.json();
+    const { targetAccountId } = body;
+
+    if (!targetAccountId || typeof targetAccountId !== "string") {
+      return c.json({ error: "targetAccountId is required" }, 400);
+    }
+
+    const result = await ctx.socialService.prepareFollowTransaction(
+      ctx.nearAccountId,
+      targetAccountId
+    );
+
+    if (!result.success) {
+      return c.json({ error: result.error || "Failed to prepare transaction" }, 500);
+    }
+
+    return c.json({
+      success: true,
+      transaction: result.transaction,
+    });
+  } catch (error) {
+    console.error("[API] Follow error:", error);
+    return c.json({ error: "Failed to prepare follow transaction" }, 500);
+  }
+});
+
+// Unfollow user
+app.post("/api/social/unfollow", async (c) => {
+  const ctx = await getSocialContext(c, c.env);
+
+  if (!ctx.nearAccountId) {
+    return c.json({ error: "Authentication required" }, 401);
+  }
+
+  try {
+    const body = await c.req.json();
+    const { targetAccountId } = body;
+
+    if (!targetAccountId || typeof targetAccountId !== "string") {
+      return c.json({ error: "targetAccountId is required" }, 400);
+    }
+
+    const result = await ctx.socialService.prepareUnfollowTransaction(
+      ctx.nearAccountId,
+      targetAccountId
+    );
+
+    if (!result.success) {
+      return c.json({ error: result.error || "Failed to prepare transaction" }, 500);
+    }
+
+    return c.json({
+      success: true,
+      transaction: result.transaction,
+    });
+  } catch (error) {
+    console.error("[API] Unfollow error:", error);
+    return c.json({ error: "Failed to prepare unfollow transaction" }, 500);
+  }
+});
+
+// Get followers list
+app.get("/api/social/followers/:accountId", async (c) => {
+  const accountId = c.req.param("accountId");
+  if (!accountId) {
+    return c.json({ error: "accountId is required" }, 400);
+  }
+
+  const limit = Math.min(Number(c.req.query("limit") || "50"), 100);
+  const offset = Number(c.req.query("offset") || "0");
+
+  const ctx = await getSocialContext(c, c.env);
+
+  try {
+    const result = await ctx.socialService.getFollowers(accountId, limit, offset);
+
+    return c.json({
+      followers: result.items,
+      total: result.total,
+      pagination: {
+        limit,
+        offset,
+        hasMore: result.hasMore,
+      },
+    });
+  } catch (error) {
+    console.error("[API] Get followers error:", error);
+    return c.json({ error: "Failed to fetch followers" }, 500);
+  }
+});
+
+// Get following list
+app.get("/api/social/following/:accountId", async (c) => {
+  const accountId = c.req.param("accountId");
+  if (!accountId) {
+    return c.json({ error: "accountId is required" }, 400);
+  }
+
+  const limit = Math.min(Number(c.req.query("limit") || "50"), 100);
+  const offset = Number(c.req.query("offset") || "0");
+
+  const ctx = await getSocialContext(c, c.env);
+
+  try {
+    const result = await ctx.socialService.getFollowing(accountId, limit, offset);
+
+    return c.json({
+      following: result.items,
+      total: result.total,
+      pagination: {
+        limit,
+        offset,
+        hasMore: result.hasMore,
+      },
+    });
+  } catch (error) {
+    console.error("[API] Get following error:", error);
+    return c.json({ error: "Failed to fetch following" }, 500);
+  }
+});
+
+// Check if following
+app.get("/api/social/following/:accountId/check/:targetAccountId", async (c) => {
+  const accountId = c.req.param("accountId");
+  const targetAccountId = c.req.param("targetAccountId");
+
+  if (!accountId || !targetAccountId) {
+    return c.json({ error: "accountId and targetAccountId are required" }, 400);
+  }
+
+  const ctx = await getSocialContext(c, c.env);
+
+  try {
+    const isFollowing = await ctx.socialService.isFollowing(accountId, targetAccountId);
+    return c.json({ isFollowing });
+  } catch (error) {
+    console.error("[API] Check following error:", error);
+    return c.json({ error: "Failed to check follow status" }, 500);
+  }
+});
+
+// =============================================================================
+// DEBUG: View raw social graph data from social.near
+// =============================================================================
+
+app.get("/api/debug/social-graph/:accountId", async (c) => {
+  const accountId = c.req.param("accountId");
+
+  if (!accountId) {
+    return c.json({ error: "accountId is required" }, 400);
+  }
+
+  try {
+    const { Social } = await import("near-social-js");
+    const social = new Social({ network: "mainnet" });
+
+    // Get all graph data for this account
+    const data = await social.get({
+      keys: [
+        `${accountId}/graph/follow/**`,  // who they follow
+      ],
+    });
+
+    const followList = data?.[accountId]?.graph?.follow || {};
+
+    return c.json({
+      accountId,
+      following: Object.keys(followList),
+      followingDetails: followList,
+      count: Object.keys(followList).length,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("[Debug] Error fetching social graph:", error);
+    return c.json({ error: "Failed to fetch social graph" }, 500);
+  }
+});
+
+// =============================================================================
+// LEGION GRAPH (Follow/Follower System exclusive to Legion NFT holders)
+// =============================================================================
+
+// Helper function to initialize services for legion routes
+async function getLegionContext(c: any, env: Env) {
+  // Initialize database first
+  const db = createDatabase(env.DB);
+
+  // Initialize auth and get session (pass db to query account table)
+  const auth = createAuth(env);
+  const sessionContext = await getSessionFromRequest(auth, c.req.raw, db);
+
+  // Initialize legion graph service
+  const legionService = new LegionGraphService(db, "mainnet");
+
+  return {
+    db,
+    legionService,
+    nearAccountId: sessionContext?.nearAccountId,
+    role: sessionContext?.role,
+  };
+}
+
+// Follow in Legion graph
+app.post("/api/legion/follow", async (c) => {
+  const ctx = await getLegionContext(c, c.env);
+
+  if (!ctx.nearAccountId) {
+    return c.json({ error: "Authentication required" }, 401);
+  }
+
+  try {
+    const body = await c.req.json();
+    const { targetAccountId } = body;
+
+    if (!targetAccountId || typeof targetAccountId !== "string") {
+      return c.json({ error: "targetAccountId is required" }, 400);
+    }
+
+    // Validate account IDs (must contain "." to be valid NEAR address)
+    if (!ctx.nearAccountId.includes(".")) {
+      console.error("[API] Invalid nearAccountId from session:", ctx.nearAccountId);
+      return c.json({ error: "Invalid account ID from session" }, 400);
+    }
+
+    if (!targetAccountId.includes(".")) {
+      console.error("[API] Invalid targetAccountId:", targetAccountId);
+      return c.json({ error: "Invalid target account ID" }, 400);
+    }
+
+    console.log("[API] Legion follow request:", {
+      from: ctx.nearAccountId,
+      to: targetAccountId,
+    });
+
+    const result = await ctx.legionService.prepareFollowTransaction(
+      ctx.nearAccountId,
+      targetAccountId
+    );
+
+    if (!result.success) {
+      return c.json({ error: result.error || "Failed to prepare transaction" }, 400);
+    }
+
+    return c.json({
+      success: true,
+      transaction: result.transaction,
+    });
+  } catch (error) {
+    console.error("[API] Legion follow error:", error);
+    return c.json({ error: "Failed to prepare follow transaction" }, 500);
+  }
+});
+
+// Unfollow in Legion graph
+app.post("/api/legion/unfollow", async (c) => {
+  const ctx = await getLegionContext(c, c.env);
+
+  if (!ctx.nearAccountId) {
+    return c.json({ error: "Authentication required" }, 401);
+  }
+
+  try {
+    const body = await c.req.json();
+    const { targetAccountId } = body;
+
+    if (!targetAccountId || typeof targetAccountId !== "string") {
+      return c.json({ error: "targetAccountId is required" }, 400);
+    }
+
+    const result = await ctx.legionService.prepareUnfollowTransaction(
+      ctx.nearAccountId,
+      targetAccountId
+    );
+
+    if (!result.success) {
+      return c.json({ error: result.error || "Failed to prepare transaction" }, 500);
+    }
+
+    return c.json({
+      success: true,
+      transaction: result.transaction,
+    });
+  } catch (error) {
+    console.error("[API] Legion unfollow error:", error);
+    return c.json({ error: "Failed to prepare unfollow transaction" }, 500);
+  }
+});
+
+// Get Legion followers
+app.get("/api/legion/followers/:accountId", async (c) => {
+  const accountId = c.req.param("accountId");
+
+  if (!accountId) {
+    return c.json({ error: "accountId is required" }, 400);
+  }
+
+  const limit = Math.min(Number(c.req.query("limit") || "50"), 100);
+  const offset = Number(c.req.query("offset") || "0");
+
+  const ctx = await getLegionContext(c, c.env);
+
+  try {
+    const result = await ctx.legionService.getFollowers(accountId, limit, offset);
+
+    return c.json({
+      followers: result.items,
+      total: result.total,
+      pagination: {
+        limit,
+        offset,
+        hasMore: result.hasMore,
+      },
+    });
+  } catch (error) {
+    console.error("[API] Get legion followers error:", error);
+    return c.json({ error: "Failed to fetch followers" }, 500);
+  }
+});
+
+// Get Legion following
+app.get("/api/legion/following/:accountId", async (c) => {
+  const accountId = c.req.param("accountId");
+
+  if (!accountId) {
+    return c.json({ error: "accountId is required" }, 400);
+  }
+
+  const limit = Math.min(Number(c.req.query("limit") || "50"), 100);
+  const offset = Number(c.req.query("offset") || "0");
+
+  const ctx = await getLegionContext(c, c.env);
+
+  try {
+    const result = await ctx.legionService.getFollowing(accountId, limit, offset);
+
+    return c.json({
+      following: result.items,
+      total: result.total,
+      pagination: {
+        limit,
+        offset,
+        hasMore: result.hasMore,
+      },
+    });
+  } catch (error) {
+    console.error("[API] Get legion following error:", error);
+    return c.json({ error: "Failed to fetch following" }, 500);
+  }
+});
+
+// Check if following in Legion graph
+app.get("/api/legion/following/:accountId/check/:targetAccountId", async (c) => {
+  const accountId = c.req.param("accountId");
+  const targetAccountId = c.req.param("targetAccountId");
+
+  if (!accountId || !targetAccountId) {
+    return c.json({ error: "accountId and targetAccountId are required" }, 400);
+  }
+
+  const ctx = await getLegionContext(c, c.env);
+
+  try {
+    const isFollowing = await ctx.legionService.isFollowing(accountId, targetAccountId);
+    return c.json({ isFollowing });
+  } catch (error) {
+    console.error("[API] Check legion following error:", error);
+    return c.json({ error: "Failed to check follow status" }, 500);
+  }
+});
+
+// Get Legion stats
+app.get("/api/legion/stats/:accountId", async (c) => {
+  const accountId = c.req.param("accountId");
+
+  if (!accountId) {
+    return c.json({ error: "accountId is required" }, 400);
+  }
+
+  const ctx = await getLegionContext(c, c.env);
+
+  try {
+    const stats = await ctx.legionService.getStats(accountId);
+    return c.json(stats);
+  } catch (error) {
+    console.error("[API] Get legion stats error:", error);
+    return c.json({ error: "Failed to fetch legion stats" }, 500);
+  }
 });
 
 // =============================================================================

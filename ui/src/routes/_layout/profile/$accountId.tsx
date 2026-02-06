@@ -22,6 +22,9 @@ import { authClient } from "../../../lib/auth-client";
 import { sessionQueryOptions } from "../../../lib/session";
 import { apiClient } from "../../../utils/orpc";
 import { Near } from "near-kit";
+import { FollowButton } from "../../../components/ui/follow-button";
+import { SocialStats } from "../../../components/ui/social-stats";
+import { useFollowers, useFollowing, socialKeys } from "../../../hooks/useSocialGraph";
 
 const PROFILE_KEY = "builder-profile";
 
@@ -161,6 +164,9 @@ function ProfilePage() {
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [editingProjectIndex, setEditingProjectIndex] = useState<number | null>(null);
   const [isSavingSocialLinks, setIsSavingSocialLinks] = useState(false);
+
+  // Social tab state (followers/following - social media style)
+  const [socialTab, setSocialTab] = useState<"none" | "followers" | "following">("none");
   const [editFormData, setEditFormData] = useState<BuilderProfileData>({
     displayName: "",
     description: "",
@@ -333,6 +339,59 @@ function ProfilePage() {
           )}
         </ProfileHeader>
 
+        {/* Social Stats & Follow Button */}
+        <div className="flex items-center justify-between gap-4">
+          <SocialStats accountId={accountId} />
+          {!isOwnProfile && (
+            <FollowButton
+              accountId={accountId}
+              currentUserId={currentAccountId}
+            />
+          )}
+        </div>
+
+        {/* Social Media Style: Followers/Following Tabs */}
+        {socialTab !== "none" && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-4 border-b border-border/50">
+              <button
+                onClick={() => setSocialTab("followers")}
+                className={`px-4 py-2 text-sm font-medium transition-colors relative ${
+                  socialTab === "followers"
+                    ? "text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Followers
+                {socialTab === "followers" && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                )}
+              </button>
+              <button
+                onClick={() => setSocialTab("following")}
+                className={`px-4 py-2 text-sm font-medium transition-colors relative ${
+                  socialTab === "following"
+                    ? "text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Following
+                {socialTab === "following" && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                )}
+              </button>
+              <button
+                onClick={() => setSocialTab("none")}
+                className="ml-auto text-sm text-muted-foreground hover:text-foreground"
+              >
+                ✕
+              </button>
+            </div>
+
+            <SocialList accountId={accountId} type={socialTab} />
+          </div>
+        )}
+
         {isEditing && isOwnProfile ? (
           <ProfileEditForm
             initialData={{
@@ -385,19 +444,40 @@ function ProfilePage() {
 
             {/* Actions */}
             <div className="pt-4 border-t border-border/50">
-              {canPoke ? (
-                <Button
-                  onClick={handlePoke}
-                  disabled={isPoking}
-                  variant="outline"
-                >
-                  {isPoking ? "Poking..." : "Poke"}
-                </Button>
-              ) : !currentAccountId ? (
-                <Link to="/login" search={{ redirect: `/profile/${accountId}` }}>
-                  <Button variant="outline">Sign in to interact</Button>
-                </Link>
-              ) : null}
+              <div className="flex flex-wrap gap-2">
+                {canPoke ? (
+                  <Button
+                    onClick={handlePoke}
+                    disabled={isPoking}
+                    variant="outline"
+                  >
+                    {isPoking ? "Poking..." : "Poke"}
+                  </Button>
+                ) : null}
+                {currentAccountId && !isOwnProfile && (
+                  <>
+                    <Button
+                      onClick={() => setSocialTab("followers")}
+                      variant="outline"
+                      size="sm"
+                    >
+                      View Followers
+                    </Button>
+                    <Button
+                      onClick={() => setSocialTab("following")}
+                      variant="outline"
+                      size="sm"
+                    >
+                      View Following
+                    </Button>
+                  </>
+                )}
+                {!currentAccountId && (
+                  <Link to="/login" search={{ redirect: `/profile/${accountId}` }}>
+                    <Button variant="outline">Sign in to interact</Button>
+                  </Link>
+                )}
+              </div>
             </div>
           </>
         )}
@@ -1343,6 +1423,77 @@ function ProfileEditForm({
           Cancel
         </Button>
       </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// SOCIAL LIST COMPONENT (Inline, Social Media Style)
+// =============================================================================
+
+interface SocialListProps {
+  accountId: string;
+  type: "followers" | "following";
+}
+
+function SocialList({ accountId, type }: SocialListProps) {
+  const { data, isLoading, isError } =
+    type === "followers"
+      ? useFollowers(accountId, 50, 0)
+      : useFollowing(accountId, 50, 0);
+
+  const items = type === "followers" ? data?.followers : data?.following;
+  const total = data?.total || 0;
+
+  if (isLoading) {
+    return (
+      <div className="p-4 space-y-3">
+        {Array.from({ length: 10 }).map((_, i) => (
+          <Skeleton key={i} className="h-16 w-full" />
+        ))}
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="p-8 text-center text-muted-foreground">
+        Failed to load {type}. Please try again.
+      </div>
+    );
+  }
+
+  if (!items || items.length === 0) {
+    return (
+      <div className="p-8 text-center text-muted-foreground">
+        No {type} yet
+      </div>
+    );
+  }
+
+  return (
+    <div className="divide-y divide-border/50">
+      {items.map((item) => (
+        <Link
+          key={item.accountId}
+          to={`/profile/${item.accountId}`}
+          className="flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors block"
+        >
+          <Avatar className="size-10">
+            <AvatarFallback className="bg-primary/20 text-primary text-sm font-mono font-bold">
+              {item.accountId.slice(0, 2).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex-1 min-w-0">
+            <p className="font-medium text-foreground truncate">
+              {item.accountId.split(".")[0]}
+            </p>
+            <p className="text-sm text-muted-foreground truncate font-mono">
+              {item.accountId}
+            </p>
+          </div>
+        </Link>
+      ))}
     </div>
   );
 }

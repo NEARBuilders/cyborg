@@ -18,6 +18,9 @@ import {
   EmailContext,
   EmailLive,
   EmailMock,
+  SocialService,
+  SocialContext,
+  SocialLive,
 } from "./services";
 import type { Database as DrizzleDatabase } from "./db";
 import { handleBuildersRequest } from "./builders";
@@ -27,6 +30,7 @@ type PluginDeps = {
   agentService: AgentService | null;
   nearService: NearService | null;
   emailService: EmailService | null;
+  socialService: SocialService | null;
 };
 export default createPlugin({
   variables: z.object({
@@ -100,6 +104,14 @@ export default createPlugin({
       const emailService = yield* Effect.provide(EmailContext, emailLayer);
       console.log("[API] Email service initialized");
 
+      // Initialize social service
+      console.log("[API] Creating social service...");
+      const socialLayer = SocialLive(db, {
+        network: "mainnet",
+      });
+      const socialService = yield* Effect.provide(SocialContext, socialLayer);
+      console.log("[API] Social service initialized");
+
       console.log("[API] Plugin initialized successfully");
 
       return {
@@ -107,6 +119,7 @@ export default createPlugin({
         agentService,
         nearService,
         emailService,
+        socialService,
       };
     }).pipe(
       Effect.tapError((error: unknown) =>
@@ -129,7 +142,7 @@ export default createPlugin({
     }),
 
   createRouter: (context, builder) => {
-    const { agentService, db, nearService, emailService } = context;
+    const { agentService, db, nearService, emailService, socialService } = context;
     const isDev = process.env.NODE_ENV !== "production";
 
     const requireAuth = builder.middleware(async ({ context, next }) => {
@@ -528,6 +541,135 @@ export default createPlugin({
             messages: [],
           };
         }),
+
+      // ===========================================================================
+      // SOCIAL GRAPH
+      // ===========================================================================
+
+      followUser: builder.followUser
+        .use(requireAuth)
+        .handler(async ({ input, context }) => {
+          if (!socialService) {
+            throw new ORPCError("SERVICE_UNAVAILABLE", {
+              message: "Social service not available",
+            });
+          }
+
+          const result = await socialService.prepareFollowTransaction(
+            context.nearAccountId,
+            input.targetAccountId
+          );
+
+          if (!result.success) {
+            throw new ORPCError("INTERNAL_SERVER_ERROR", {
+              message: result.error || "Failed to prepare follow transaction",
+            });
+          }
+
+          return {
+            success: true,
+            transaction: result.transaction,
+          };
+        }),
+
+      unfollowUser: builder.unfollowUser
+        .use(requireAuth)
+        .handler(async ({ input, context }) => {
+          if (!socialService) {
+            throw new ORPCError("SERVICE_UNAVAILABLE", {
+              message: "Social service not available",
+            });
+          }
+
+          const result = await socialService.prepareUnfollowTransaction(
+            context.nearAccountId,
+            input.targetAccountId
+          );
+
+          if (!result.success) {
+            throw new ORPCError("INTERNAL_SERVER_ERROR", {
+              message: result.error || "Failed to prepare unfollow transaction",
+            });
+          }
+
+          return {
+            success: true,
+            transaction: result.transaction,
+          };
+        }),
+
+      getFollowers: builder.getFollowers.handler(async ({ input }) => {
+        if (!socialService) {
+          return {
+            followers: [],
+            total: 0,
+            pagination: {
+              limit: input.limit,
+              offset: input.offset,
+              hasMore: false,
+            },
+          };
+        }
+
+        const result = await socialService.getFollowers(
+          input.accountId,
+          input.limit,
+          input.offset
+        );
+
+        return {
+          followers: result.items,
+          total: result.total,
+          pagination: {
+            limit: input.limit,
+            offset: input.offset,
+            hasMore: result.hasMore,
+          },
+        };
+      }),
+
+      getFollowing: builder.getFollowing.handler(async ({ input }) => {
+        if (!socialService) {
+          return {
+            following: [],
+            total: 0,
+            pagination: {
+              limit: input.limit,
+              offset: input.offset,
+              hasMore: false,
+            },
+          };
+        }
+
+        const result = await socialService.getFollowing(
+          input.accountId,
+          input.limit,
+          input.offset
+        );
+
+        return {
+          following: result.items,
+          total: result.total,
+          pagination: {
+            limit: input.limit,
+            offset: input.offset,
+            hasMore: result.hasMore,
+          },
+        };
+      }),
+
+      isFollowing: builder.isFollowing.handler(async ({ input }) => {
+        if (!socialService) {
+          return { isFollowing: false };
+        }
+
+        const isFollowing = await socialService.isFollowing(
+          input.accountId,
+          input.targetAccountId
+        );
+
+        return { isFollowing };
+      }),
     };
   },
 });
