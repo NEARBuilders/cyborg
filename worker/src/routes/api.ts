@@ -547,92 +547,135 @@ export function createApiRoutes(getContext: () => ApiContext) {
     }
   });
 
-  // Get followers list
-  api.get("/social/followers/:accountId", async (c) => {
+  // Get followers list (FastData API spec: GET /social/followers?account_id=xxx)
+  api.get("/social/followers", async (c) => {
     const ctx = getContext();
     if (!ctx.socialService) {
       return c.json({
-        followers: [],
-        total: 0,
-        pagination: { limit: 50, offset: 0, hasMore: false },
+        accounts: [],
+        count: 0,
+        meta: { has_more: false },
       });
     }
 
-    const accountId = c.req.param("accountId");
+    const accountId = c.req.query("account_id");
     if (!accountId) {
-      return c.json({ error: "accountId is required" }, 400);
+      return c.json({ error: "account_id is required" }, 400);
     }
 
     const limit = Math.min(Number(c.req.query("limit") || "50"), 100);
     const offset = Number(c.req.query("offset") || "0");
+    const afterAccount = c.req.query("after_account"); // cursor for pagination
+
+    console.log(`[API] GET /social/followers - account_id: ${accountId}, limit: ${limit}, offset: ${offset}, after_account: ${afterAccount || 'none'}`);
+
+    // Can't use after_account with offset > 0
+    if (afterAccount && offset > 0) {
+      return c.json({ error: "after_account cannot be combined with offset > 0" }, 400);
+    }
 
     try {
-      const result = await ctx.socialService.getFollowers(accountId, limit, offset);
+      const result = await ctx.socialService.getFollowers(
+        accountId,
+        limit,
+        offset,
+        afterAccount || undefined
+      );
 
-      return c.json({
-        followers: result.items,
-        total: result.total,
-        pagination: {
-          limit,
-          offset,
-          hasMore: result.hasMore,
+      // Extract just account IDs to match FastData spec
+      const accounts = result.items.map((item) => item.accountId);
+
+      const response = {
+        accounts,
+        count: result.total,
+        meta: {
+          has_more: result.hasMore,
+          ...(result.nextCursor ? { next_cursor: result.nextCursor } : {}),
         },
-      });
+      };
+
+      console.log(`[API] GET /social/followers - Response:`, JSON.stringify(response, null, 2));
+
+      return c.json(response);
     } catch (error) {
       console.error("[API] Get followers error:", error);
       return c.json({ error: "Failed to fetch followers" }, 500);
     }
   });
 
-  // Get following list
-  api.get("/social/following/:accountId", async (c) => {
+  // Get following list (FastData API spec: GET /social/following?account_id=xxx)
+  api.get("/social/following", async (c) => {
     const ctx = getContext();
     if (!ctx.socialService) {
       return c.json({
-        following: [],
-        total: 0,
-        pagination: { limit: 50, offset: 0, hasMore: false },
+        accounts: [],
+        count: 0,
+        meta: { has_more: false },
       });
     }
 
-    const accountId = c.req.param("accountId");
+    const accountId = c.req.query("account_id");
     if (!accountId) {
-      return c.json({ error: "accountId is required" }, 400);
+      return c.json({ error: "account_id is required" }, 400);
     }
 
     const limit = Math.min(Number(c.req.query("limit") || "50"), 100);
     const offset = Number(c.req.query("offset") || "0");
+    const afterAccount = c.req.query("after_account"); // cursor for pagination
+
+    console.log(`[API] GET /social/following - account_id: ${accountId}, limit: ${limit}, offset: ${offset}, after_account: ${afterAccount || 'none'}`);
+
+    // Can't use after_account with offset > 0
+    if (afterAccount && offset > 0) {
+      return c.json({ error: "after_account cannot be combined with offset > 0" }, 400);
+    }
 
     try {
-      const result = await ctx.socialService.getFollowing(accountId, limit, offset);
+      const result = await ctx.socialService.getFollowing(
+        accountId,
+        limit,
+        offset,
+        afterAccount || undefined
+      );
 
-      return c.json({
-        following: result.items,
-        total: result.total,
-        pagination: {
-          limit,
-          offset,
-          hasMore: result.hasMore,
+      // Extract just account IDs to match FastData spec
+      const accounts = result.items.map((item) => item.accountId);
+
+      const response = {
+        accounts,
+        count: result.total,
+        meta: {
+          has_more: result.hasMore,
+          ...(result.nextCursor ? { next_cursor: result.nextCursor } : {}),
         },
-      });
+      };
+
+      console.log(`[API] GET /social/following - Response:`, JSON.stringify(response, null, 2));
+
+      return c.json(response);
+    } catch (error) {
+      console.error("[API] Get following error:", error);
+      return c.json({ error: "Failed to fetch following" }, 500);
+    }
+  });
     } catch (error) {
       console.error("[API] Get following error:", error);
       return c.json({ error: "Failed to fetch following" }, 500);
     }
   });
 
-  // Check if following
-  api.get("/social/following/:accountId/check/:targetAccountId", async (c) => {
+  // Check if following (convenience endpoint, not in FastData spec)
+  api.get("/social/is-following", async (c) => {
     const ctx = getContext();
     if (!ctx.socialService) {
       return c.json({ isFollowing: false });
     }
 
-    const accountId = c.req.param("accountId");
-    const targetAccountId = c.req.param("targetAccountId");
+    const accountId = c.req.query("account_id");
+    const targetAccountId = c.req.query("target_account_id");
 
     if (!accountId || !targetAccountId) {
-      return c.json({ error: "accountId and targetAccountId are required" }, 400);
+      return c.json({ error: "account_id and target_account_id are required" }, 400);
     }
 
     try {

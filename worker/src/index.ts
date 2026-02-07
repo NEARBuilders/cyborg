@@ -1508,7 +1508,7 @@ app.get("/api/debug/social-graph/:accountId", async (c) => {
       keys: [
         `${accountId}/graph/follow/**`,  // who they follow
       ],
-    });
+    }) as Record<string, any> | undefined;
 
     const followList = data?.[accountId]?.graph?.follow || {};
 
@@ -1635,75 +1635,103 @@ app.post("/api/legion/unfollow", async (c) => {
   }
 });
 
-// Get Legion followers
-app.get("/api/legion/followers/:accountId", async (c) => {
-  const accountId = c.req.param("accountId");
+// Get Legion followers (FastData API spec: GET /legion/followers?account_id=xxx)
+app.get("/api/legion/followers", async (c) => {
+  const accountId = c.req.query("account_id");
 
   if (!accountId) {
-    return c.json({ error: "accountId is required" }, 400);
+    return c.json({ error: "account_id is required" }, 400);
   }
 
   const limit = Math.min(Number(c.req.query("limit") || "50"), 100);
   const offset = Number(c.req.query("offset") || "0");
+  const bypass = c.req.query("bypass") === "1";
+  const afterAccount = c.req.query("after_account"); // cursor for pagination
+
+  // Can't use after_account with offset > 0
+  if (afterAccount && offset > 0) {
+    return c.json({ error: "after_account cannot be combined with offset > 0" }, 400);
+  }
 
   const ctx = await getLegionContext(c, c.env);
 
   try {
-    const result = await ctx.legionService.getFollowers(accountId, limit, offset);
+    const result = await ctx.legionService.getFollowers(accountId, limit, offset, bypass, afterAccount || undefined);
 
-    return c.json({
-      followers: result.items,
-      total: result.total,
-      pagination: {
-        limit,
-        offset,
-        hasMore: result.hasMore,
+    // Extract just account IDs to match FastData spec
+    const accounts = result.items.map((item) => item.accountId);
+
+    const response = {
+      accounts,
+      count: result.total,
+      meta: {
+        has_more: result.hasMore,
+        ...(result.nextCursor ? { next_cursor: result.nextCursor } : {}),
       },
-    });
+    };
+
+    console.log(`[API] GET /legion/followers - Response:`, JSON.stringify(response, null, 2));
+
+    return c.json(response);
   } catch (error) {
     console.error("[API] Get legion followers error:", error);
     return c.json({ error: "Failed to fetch followers" }, 500);
   }
 });
 
-// Get Legion following
-app.get("/api/legion/following/:accountId", async (c) => {
-  const accountId = c.req.param("accountId");
+// Get Legion following (FastData API spec: GET /legion/following?account_id=xxx)
+app.get("/api/legion/following", async (c) => {
+  const accountId = c.req.query("account_id");
 
   if (!accountId) {
-    return c.json({ error: "accountId is required" }, 400);
+    return c.json({ error: "account_id is required" }, 400);
   }
 
   const limit = Math.min(Number(c.req.query("limit") || "50"), 100);
   const offset = Number(c.req.query("offset") || "0");
+  const bypass = c.req.query("bypass") === "1";
+  const afterAccount = c.req.query("after_account"); // cursor for pagination
+
+  console.log(`[API] GET /legion/following - account_id: ${accountId}, limit: ${limit}, offset: ${offset}, bypass: ${bypass}, after_account: ${afterAccount || 'none'}`);
+
+  // Can't use after_account with offset > 0
+  if (afterAccount && offset > 0) {
+    return c.json({ error: "after_account cannot be combined with offset > 0" }, 400);
+  }
 
   const ctx = await getLegionContext(c, c.env);
 
   try {
-    const result = await ctx.legionService.getFollowing(accountId, limit, offset);
+    const result = await ctx.legionService.getFollowing(accountId, limit, offset, bypass, afterAccount || undefined);
 
-    return c.json({
-      following: result.items,
-      total: result.total,
-      pagination: {
-        limit,
-        offset,
-        hasMore: result.hasMore,
+    // Extract just account IDs to match FastData spec
+    const accounts = result.items.map((item) => item.accountId);
+
+    const response = {
+      accounts,
+      count: result.total,
+      meta: {
+        has_more: result.hasMore,
+        ...(result.nextCursor ? { next_cursor: result.nextCursor } : {}),
       },
-    });
+    };
+
+    console.log(`[API] GET /legion/following - Response:`, JSON.stringify(response, null, 2));
+
+    return c.json(response);
   } catch (error) {
     console.error("[API] Get legion following error:", error);
     return c.json({ error: "Failed to fetch following" }, 500);
   }
 });
 
-// Check if following in Legion graph
-app.get("/api/legion/following/:accountId/check/:targetAccountId", async (c) => {
-  const accountId = c.req.param("accountId");
-  const targetAccountId = c.req.param("targetAccountId");
+// Check if following in Legion graph (convenience endpoint, not in FastData spec)
+app.get("/api/legion/is-following", async (c) => {
+  const accountId = c.req.query("account_id");
+  const targetAccountId = c.req.query("target_account_id");
 
   if (!accountId || !targetAccountId) {
-    return c.json({ error: "accountId and targetAccountId are required" }, 400);
+    return c.json({ error: "account_id and target_account_id are required" }, 400);
   }
 
   const ctx = await getLegionContext(c, c.env);

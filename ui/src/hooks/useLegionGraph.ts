@@ -12,13 +12,12 @@ export interface LegionFollowerInfo {
 }
 
 export interface LegionSocialListResponse {
-  followers?: LegionFollowerInfo[];
-  following?: LegionFollowerInfo[];
-  total: number;
-  pagination: {
-    limit: number;
-    offset: number;
-    hasMore: boolean;
+  accounts?: string[];
+  count: number;
+  meta: {
+    has_more: boolean;
+    next_cursor?: string;
+    truncated?: boolean;
   };
 }
 
@@ -31,7 +30,7 @@ export const legionKeys = {
   followers: (accountId: string) => [...legionKeys.all, "followers", accountId] as const,
   following: (accountId: string) => [...legionKeys.all, "following", accountId] as const,
   isFollowing: (accountId: string, targetAccountId: string) =>
-    [...legionKeys.all, "following", accountId, targetAccountId] as const,
+    [...legionKeys.all, "isFollowing", accountId, targetAccountId] as const,
   stats: (accountId: string) => [...legionKeys.all, "stats", accountId] as const,
 };
 
@@ -62,37 +61,49 @@ async function fetchApi(endpoint: string, options?: RequestInit) {
 // =============================================================================
 
 /**
- * Get followers list for an account (using Legion graph)
+ * Get followers list for an account (using FastData API via worker proxy)
  */
-export function useLegionFollowers(accountId: string | undefined, limit = 50, offset = 0) {
+export function useLegionFollowers(accountId: string | undefined, limit = 50, offset = 0, options?: { bypassCache?: boolean }) {
   return useQuery({
-    queryKey: legionKeys.followers(accountId || "").concat(limit, offset),
+    queryKey: legionKeys.followers(accountId || "").concat(limit, offset, options?.bypassCache ? 'bypass' : 'cached'),
     queryFn: async () => {
       if (!accountId) throw new Error("Account ID required");
-      return fetchApi(
-        `/legion/followers/${accountId}?limit=${limit}&offset=${offset}`
-      ) as Promise<LegionSocialListResponse>;
+      // Use worker API as proxy to avoid CORS - FastData API spec uses query params
+      const params = new URLSearchParams({
+        account_id: accountId,
+        limit: String(limit),
+        offset: String(offset),
+      });
+      if (options?.bypassCache) params.set('bypass', '1');
+      const url = `/legion/followers?${params}`;
+      return fetchApi(url) as Promise<LegionSocialListResponse>;
     },
     enabled: !!accountId,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: options?.bypassCache ? 0 : 2 * 60 * 1000, // Don't cache if bypassing
     gcTime: 30 * 60 * 1000,
   });
 }
 
 /**
- * Get following list for an account (using Legion graph)
+ * Get following list for an account (using FastData API via worker proxy)
  */
-export function useLegionFollowing(accountId: string | undefined, limit = 50, offset = 0) {
+export function useLegionFollowing(accountId: string | undefined, limit = 50, offset = 0, options?: { bypassCache?: boolean }) {
   return useQuery({
-    queryKey: legionKeys.following(accountId || "").concat(limit, offset),
+    queryKey: legionKeys.following(accountId || "").concat(limit, offset, options?.bypassCache ? 'bypass' : 'cached'),
     queryFn: async () => {
       if (!accountId) throw new Error("Account ID required");
-      return fetchApi(
-        `/legion/following/${accountId}?limit=${limit}&offset=${offset}`
-      ) as Promise<LegionSocialListResponse>;
+      // Use worker API as proxy to avoid CORS - FastData API spec uses query params
+      const params = new URLSearchParams({
+        account_id: accountId,
+        limit: String(limit),
+        offset: String(offset),
+      });
+      if (options?.bypassCache) params.set('bypass', '1');
+      const url = `/legion/following?${params}`;
+      return fetchApi(url) as Promise<LegionSocialListResponse>;
     },
     enabled: !!accountId,
-    staleTime: 5 * 60 * 1000,
+    staleTime: options?.bypassCache ? 0 : 2 * 60 * 1000, // Don't cache if bypassing
     gcTime: 30 * 60 * 1000,
   });
 }
@@ -105,28 +116,34 @@ export function useLegionIsFollowing(accountId: string | undefined, targetAccoun
     queryKey: legionKeys.isFollowing(accountId || "", targetAccountId || ""),
     queryFn: async () => {
       if (!accountId || !targetAccountId) throw new Error("Both account IDs required");
-      return fetchApi(
-        `/legion/following/${accountId}/check/${targetAccountId}`
-      ) as Promise<{ isFollowing: boolean }>;
+      // FastData API spec uses query params
+      const params = new URLSearchParams({
+        account_id: accountId,
+        target_account_id: targetAccountId,
+      });
+      return fetchApi(`/legion/is-following?${params}`) as Promise<{ isFollowing: boolean }>;
     },
     enabled: !!accountId && !!targetAccountId,
-    staleTime: 2 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
+    // Longer staleTime to keep optimistic updates valid and reduce refetches
+    // Data will only refetch after 30 minutes or on window focus
+    staleTime: 30 * 60 * 1000,
+    gcTime: 60 * 60 * 1000,
   });
 }
 
 /**
- * Get stats (followers/following counts) from Legion graph
+ * Get stats (followers/following counts) from FastData API via worker proxy
  */
 export function useLegionStats(accountId: string | undefined) {
   return useQuery({
     queryKey: legionKeys.stats(accountId || ""),
     queryFn: async () => {
       if (!accountId) throw new Error("Account ID required");
+      // Use worker API as proxy to avoid CORS
       return fetchApi(`/legion/stats/${accountId}`) as Promise<{ followers: number; following: number }>;
     },
     enabled: !!accountId,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 2 * 60 * 1000,
     gcTime: 30 * 60 * 1000,
   });
 }
@@ -199,10 +216,9 @@ export function useLegionFollowUnfollow() {
       const followingQueryKey = legionKeys.following(currentAccountId).concat(50, 0);
       const previousFollowing = queryClient.getQueryData(followingQueryKey);
       queryClient.setQueryData(followingQueryKey, (old: LegionSocialListResponse | undefined) => ({
-        total: (old?.total || 0) + 1,
-        followers: old?.followers,
-        following: [...(old?.following || []), { accountId: targetAccountId }],
-        pagination: old?.pagination || { limit: 50, offset: 0, hasMore: false },
+        accounts: [...(old?.accounts || []), targetAccountId],
+        count: (old?.count || 0) + 1,
+        meta: old?.meta || { has_more: false },
       }));
 
       // Optimistically update stats
@@ -252,12 +268,48 @@ export function useLegionFollowUnfollow() {
     },
     onSuccess: async (data) => {
       toast.success("Followed!");
+      // Invalidate only list queries and stats, keep isFollowing optimistic update
+      const currentAccountId = getCurrentAccountId();
+      if (!currentAccountId) return;
+
+      // Invalidate following list for current user (will trigger refetch)
+      await queryClient.invalidateQueries({
+        queryKey: legionKeys.following(currentAccountId),
+      });
+
+      // Invalidate followers list for target user
+      await queryClient.invalidateQueries({
+        queryKey: legionKeys.followers(data.targetAccountId),
+      });
+
+      // Invalidate stats for both users
+      await queryClient.invalidateQueries({
+        queryKey: legionKeys.stats(currentAccountId),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: legionKeys.stats(data.targetAccountId),
+      });
+
+      // After a short delay for the indexer to process, refetch with cache bypass
+      setTimeout(async () => {
+        // Refetch following list bypassing cache to get fresh data from indexer
+        await queryClient.fetchQuery({
+          queryKey: legionKeys.following(currentAccountId).concat(50, 0, 'bypass'),
+          queryFn: async () => {
+            const params = new URLSearchParams({
+              account_id: currentAccountId,
+              limit: '50',
+              offset: '0',
+              bypass: '1',
+            });
+            const url = `/legion/following?${params}`;
+            return fetchApi(url) as Promise<LegionSocialListResponse>;
+          },
+        });
+      }, 2000);
     },
     onSettled: async () => {
-      // Refetch to ensure consistency
-      await queryClient.invalidateQueries({
-        queryKey: legionKeys.all,
-      });
+      // No global invalidation - we handle specific queries in onSuccess
     },
   });
 
@@ -316,10 +368,9 @@ export function useLegionFollowUnfollow() {
       const followingQueryKey = legionKeys.following(currentAccountId).concat(50, 0);
       const previousFollowing = queryClient.getQueryData(followingQueryKey);
       queryClient.setQueryData(followingQueryKey, (old: LegionSocialListResponse | undefined) => ({
-        total: Math.max((old?.total || 0) - 1, 0),
-        followers: old?.followers,
-        following: (old?.following || []).filter((f) => f.accountId !== targetAccountId),
-        pagination: old?.pagination || { limit: 50, offset: 0, hasMore: false },
+        accounts: (old?.accounts || []).filter((acc) => acc !== targetAccountId),
+        count: Math.max((old?.count || 0) - 1, 0),
+        meta: old?.meta || { has_more: false },
       }));
 
       // Optimistically update stats
@@ -369,12 +420,48 @@ export function useLegionFollowUnfollow() {
     },
     onSuccess: async (data) => {
       toast.success("Unfollowed!");
+      // Invalidate only list queries and stats, keep isFollowing optimistic update
+      const currentAccountId = getCurrentAccountId();
+      if (!currentAccountId) return;
+
+      // Invalidate following list for current user
+      await queryClient.invalidateQueries({
+        queryKey: legionKeys.following(currentAccountId),
+      });
+
+      // Invalidate followers list for target user
+      await queryClient.invalidateQueries({
+        queryKey: legionKeys.followers(data.targetAccountId),
+      });
+
+      // Invalidate stats for both users
+      await queryClient.invalidateQueries({
+        queryKey: legionKeys.stats(currentAccountId),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: legionKeys.stats(data.targetAccountId),
+      });
+
+      // After a short delay for the indexer to process, refetch with cache bypass
+      setTimeout(async () => {
+        // Refetch following list bypassing cache to get fresh data from indexer
+        await queryClient.fetchQuery({
+          queryKey: legionKeys.following(currentAccountId).concat(50, 0, 'bypass'),
+          queryFn: async () => {
+            const params = new URLSearchParams({
+              account_id: currentAccountId,
+              limit: '50',
+              offset: '0',
+              bypass: '1',
+            });
+            const url = `/legion/following?${params}`;
+            return fetchApi(url) as Promise<LegionSocialListResponse>;
+          },
+        });
+      }, 2000);
     },
     onSettled: async () => {
-      // Refetch to ensure consistency
-      await queryClient.invalidateQueries({
-        queryKey: legionKeys.all,
-      });
+      // No global invalidation - we handle specific queries in onSuccess
     },
   });
 

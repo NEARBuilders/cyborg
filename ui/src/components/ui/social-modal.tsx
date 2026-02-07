@@ -36,23 +36,24 @@ export function SocialModal({
   const { data, isLoading, isError } = useQuery({
     queryKey: queryKey.concat(page, limit),
     queryFn: async () => {
+      // FastData API format: /social/followers?account_id=xxx&contract_id=contextual.near
       const endpoint = type === "followers"
-        ? `/social/followers/${accountId}?limit=${limit}&offset=${page * limit}`
-        : `/social/following/${accountId}?limit=${limit}&offset=${page * limit}`;
+        ? `/social/followers?account_id=${accountId}&contract_id=contextual.near&limit=${limit}&offset=${page * limit}`
+        : `/social/following?account_id=${accountId}&contract_id=contextual.near&limit=${limit}&offset=${page * limit}`;
 
       return fetchApi(endpoint) as Promise<{
-        followers?: Array<{ accountId: string }>;
-        following?: Array<{ accountId: string }>;
-        total: number;
-        pagination: { hasMore: boolean };
+        accounts: string[];
+        count: number;
+        meta: { has_more: boolean; next_cursor?: string };
       }>;
     },
     enabled: isOpen,
   });
 
-  const items = type === "followers" ? data?.followers : data?.following;
-  const total = data?.total || 0;
-  const hasMore = data?.pagination?.hasMore || false;
+  // FastData API returns accounts as string[] (not objects)
+  const items = data?.accounts;
+  const total = data?.count || 0;
+  const hasMore = data?.meta?.has_more || false;
 
   // Reset page when modal opens/closes
   useEffect(() => {
@@ -60,8 +61,8 @@ export function SocialModal({
   }, [isOpen, type, accountId]);
 
   // Filter items based on search
-  const filteredItems = items?.filter((item) =>
-    item.accountId.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredItems = items?.filter((accountId) =>
+    accountId.toLowerCase().includes(searchQuery.toLowerCase())
   ) || [];
 
   // Handle account click
@@ -131,23 +132,23 @@ export function SocialModal({
             </div>
           ) : (
             <div className="divide-y divide-border/50">
-              {filteredItems.map((item) => (
+              {filteredItems.map((accountId) => (
                 <div
-                  key={item.accountId}
-                  onClick={() => handleAccountClick(item.accountId)}
+                  key={accountId}
+                  onClick={() => handleAccountClick(accountId)}
                   className="flex items-center gap-3 px-6 py-4 hover:bg-muted/50 transition-colors cursor-pointer"
                 >
                   <Avatar className="size-10">
                     <AvatarFallback className="bg-primary/20 text-primary text-sm font-mono font-bold">
-                      {item.accountId.slice(0, 2).toUpperCase()}
+                      {accountId.slice(0, 2).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-foreground truncate">
-                      {item.accountId.split(".")[0]}
+                      {accountId.split(".")[0]}
                     </p>
                     <p className="text-sm text-muted-foreground truncate font-mono">
-                      {item.accountId}
+                      {accountId}
                     </p>
                   </div>
                 </div>

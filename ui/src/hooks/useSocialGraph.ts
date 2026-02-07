@@ -13,13 +13,12 @@ export interface FollowerInfo {
 }
 
 export interface SocialListResponse {
-  followers?: FollowerInfo[];
-  following?: FollowerInfo[];
-  total: number;
-  pagination: {
-    limit: number;
-    offset: number;
-    hasMore: boolean;
+  accounts?: string[];
+  count: number;
+  meta: {
+    has_more: boolean;
+    next_cursor?: string;
+    truncated?: boolean;
   };
 }
 
@@ -69,9 +68,12 @@ export function useFollowers(accountId: string | undefined, limit = 50, offset =
     queryKey: socialKeys.followers(accountId || "").concat(limit, offset),
     queryFn: async () => {
       if (!accountId) throw new Error("Account ID required");
-      return fetchApi(
-        `/social/followers/${accountId}?limit=${limit}&offset=${offset}`
-      ) as Promise<SocialListResponse>;
+      const params = new URLSearchParams({
+        account_id: accountId,
+        limit: String(limit),
+        offset: String(offset),
+      });
+      return fetchApi(`/social/followers?${params}`) as Promise<SocialListResponse>;
     },
     enabled: !!accountId,
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -87,9 +89,12 @@ export function useFollowing(accountId: string | undefined, limit = 50, offset =
     queryKey: socialKeys.following(accountId || "").concat(limit, offset),
     queryFn: async () => {
       if (!accountId) throw new Error("Account ID required");
-      return fetchApi(
-        `/social/following/${accountId}?limit=${limit}&offset=${offset}`
-      ) as Promise<SocialListResponse>;
+      const params = new URLSearchParams({
+        account_id: accountId,
+        limit: String(limit),
+        offset: String(offset),
+      });
+      return fetchApi(`/social/following?${params}`) as Promise<SocialListResponse>;
     },
     enabled: !!accountId,
     staleTime: 5 * 60 * 1000,
@@ -105,9 +110,11 @@ export function useIsFollowing(accountId: string | undefined, targetAccountId: s
     queryKey: socialKeys.isFollowing(accountId || "", targetAccountId || ""),
     queryFn: async () => {
       if (!accountId || !targetAccountId) throw new Error("Both account IDs required");
-      return fetchApi(
-        `/social/following/${accountId}/check/${targetAccountId}`
-      ) as Promise<{ isFollowing: boolean }>;
+      const params = new URLSearchParams({
+        account_id: accountId,
+        target_account_id: targetAccountId,
+      });
+      return fetchApi(`/social/is-following?${params}`) as Promise<{ isFollowing: boolean }>;
     },
     enabled: !!accountId && !!targetAccountId,
     staleTime: 2 * 60 * 1000, // 2 minutes - follow status changes more frequently
@@ -148,15 +155,14 @@ export function useFollowUnfollow() {
       const near = nearAuth.getNearClient();
 
       // Note: .functionCall handles JSON serialization automatically
+      // The FastData indexer expects KV pairs directly as args, NOT wrapped in data
       const tx = await near
         .transaction(walletAccountId)
         .functionCall(
           result.transaction.contractId,
           result.transaction.methodName,
           {
-            data: {
-              [`graph/follow/${targetAccountId}`]: "",
-            },
+            [`graph/follow/${targetAccountId}`]: "",
           },
           {
             gas: result.transaction.gas,
@@ -214,15 +220,14 @@ export function useFollowUnfollow() {
       const near = nearAuth.getNearClient();
 
       // Note: .functionCall handles JSON serialization automatically
+      // The FastData indexer expects KV pairs directly as args, NOT wrapped in data
       const tx = await near
         .transaction(walletAccountId)
         .functionCall(
           result.transaction.contractId,
           result.transaction.methodName,
           {
-            data: {
-              [`graph/follow/${targetAccountId}`]: null, // null = unfollow/delete
-            },
+            [`graph/follow/${targetAccountId}`]: null, // null = unfollow/delete
           },
           {
             gas: result.transaction.gas,

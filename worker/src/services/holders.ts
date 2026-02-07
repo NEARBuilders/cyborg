@@ -6,9 +6,9 @@
  *   bun run worker/scripts/sync-holders.ts --apply
  */
 
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import type { Database } from "../db";
-import { ascendantHolders, legionHolders, LEGION_CONTRACTS } from "../db/schema";
+import { ascendantHolders, legionHolders } from "../db/schema";
 
 interface HoldersData {
   holders: Array<{
@@ -45,8 +45,7 @@ export async function getAscendantHolders(
         lastSyncedAt: legionHolders.lastSyncedAt,
       })
       .from(legionHolders)
-      .orderBy(legionHolders.accountId)
-      .orderBy(legionHolders.contractId);
+      .orderBy(legionHolders.accountId, legionHolders.contractId);
 
     if (holders.length === 0) {
       console.warn("[HOLDERS] No holders found in database. Run: bun run worker/scripts/sync-holders.ts --apply");
@@ -62,7 +61,7 @@ export async function getAscendantHolders(
       : new Date().toISOString();
 
     const data: HoldersData = {
-      holders: holders.map((h) => ({
+      holders: holders.map((h: any) => ({
         account: h.account,
         quantity: String(h.quantity),
         contractId: h.contractId,
@@ -70,7 +69,7 @@ export async function getAscendantHolders(
       lastUpdated: lastSyncedAt,
     };
 
-    console.log(`[HOLDERS] Found ${holders.length} holder records (${new Set(holders.map(h => h.account)).size} unique accounts)`);
+    console.log(`[HOLDERS] Found ${holders.length} holder records (${new Set(holders.map((h: any) => h.account)).size} unique accounts)`);
 
     return data;
   } catch (error) {
@@ -417,10 +416,10 @@ export async function checkAndAddHolder(input: HoldersInput & {
             await db
               .delete(legionHolders)
               .where(
-                eq(legionHolders.accountId, accountId)
-              )
-              .where(
-                eq(legionHolders.contractId, existing.contractId)
+                and(
+                  eq(legionHolders.accountId, accountId),
+                  eq(legionHolders.contractId, existing.contractId)
+                )
               );
           }
         }

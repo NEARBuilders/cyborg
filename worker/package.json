@@ -38,6 +38,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241230.0",
+    "@types/node": "^25.2.1",
     "better-sqlite3": "^12.6.2",
     "drizzle-kit": "^0.31.8",
     "typescript": "^5.9.3",

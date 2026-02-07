@@ -1565,7 +1565,8 @@ function SocialList({ accountId, type }: SocialListProps) {
 
   const { data, isLoading, isError } =
     type === "followers" ? followersData : followingData;
-  const items = type === "followers" ? data?.followers : data?.following;
+  // FastData API returns accounts as string[] (not objects)
+  const items = data?.accounts;
 
   if (isLoading) {
     return (
@@ -1593,20 +1594,20 @@ function SocialList({ accountId, type }: SocialListProps) {
 
   return (
     <div className="divide-y divide-border/50">
-      {items.map((item) => (
+      {items.map((accountId) => (
         <Link
-          key={item.accountId}
-          to={`/profile/${item.accountId}`}
+          key={accountId}
+          to={`/profile/${accountId}`}
           className="flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors block"
         >
           <Avatar className="size-10">
             <AvatarFallback className="bg-primary/20 text-primary text-sm font-mono font-bold">
-              {item.accountId.slice(0, 2).toUpperCase()}
+              {accountId.slice(0, 2).toUpperCase()}
             </AvatarFallback>
           </Avatar>
           <div className="flex-1 min-w-0">
             <p className="font-medium text-foreground truncate">
-              {item.accountId.split(".")[0]}
+              {accountId.split(".")[0]}
             </p>
             <p className="text-sm text-muted-foreground truncate font-mono">
               {item.accountId}

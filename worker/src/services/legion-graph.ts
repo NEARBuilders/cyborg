@@ -1,7 +1,7 @@
 /**
  * Legion Graph Service
  *
- * Custom follow graph using social.near contract with Graph API.
+ * Custom follow graph using contextual.near contract with Graph API.
  * Stores under: {accountId}/graph/follow/{targetAccountId} = "legion"
  *
  * Separate from main social graph by using "legion" value
@@ -10,7 +10,8 @@
 import { Graph } from "near-social-js";
 import type { Database } from "../db";
 import * as schema from "../db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
+import { buildFollowArgs, buildUnfollowArgs } from "./fastdata-builders";
 
 // =============================================================================
 // TYPES
@@ -25,6 +26,7 @@ export interface PaginatedResult<T> {
   items: T[];
   total: number;
   hasMore: boolean;
+  nextCursor?: string;
 }
 
 // =============================================================================
@@ -75,7 +77,7 @@ export class LegionGraphService {
     targetAccountId: string,
   ): Promise<{ success: boolean; transaction?: any; error?: string }> {
     try {
-      // Strip network suffix for social.near contract
+      // Strip network suffix for contextual.near contract
       const fromAccount = this.stripNetworkSuffix(accountId);
       const toAccount = this.stripNetworkSuffix(targetAccountId);
 
@@ -86,16 +88,8 @@ export class LegionGraphService {
         originalTo: targetAccountId,
       });
 
-      // FastData protocol: flat KV pairs
-      // Key format: "graph/follow/{target}" = ""
-      const kvPairs: Record<string, string> = {};
-      kvPairs[`graph/follow/${toAccount}`] = "";
-
-      // Also add notification index
-      kvPairs["index/notify"] = JSON.stringify({
-        key: toAccount,
-        value: { type: "follow", accountId: fromAccount },
-      });
+      // Use FastData builder to create KV pairs
+      const kvPairs = buildFollowArgs(fromAccount, toAccount);
 
       console.log(
         "[LegionGraphService] Transaction KV pairs:",
@@ -133,7 +127,7 @@ export class LegionGraphService {
     targetAccountId: string,
   ): Promise<{ success: boolean; transaction?: any; error?: string }> {
     try {
-      // Strip network suffix for social.near contract
+      // Strip network suffix for contextual.near contract
       const fromAccount = this.stripNetworkSuffix(accountId);
       const toAccount = this.stripNetworkSuffix(targetAccountId);
 
@@ -144,10 +138,8 @@ export class LegionGraphService {
         originalTo: targetAccountId,
       });
 
-      // FastData protocol: flat KV pairs
-      // Key format: "graph/follow/{target}" = null (delete)
-      const kvPairs: Record<string, string | null> = {};
-      kvPairs[`graph/follow/${toAccount}`] = null;
+      // Use FastData builder to create KV pairs
+      const kvPairs = buildUnfollowArgs(fromAccount, toAccount);
 
       console.log(
         "[LegionGraphService] Unfollow KV pairs:",
@@ -177,50 +169,115 @@ export class LegionGraphService {
   }
 
   /**
-   * Get Legion followers using social.near's graph index
-   * Uses graph.index to find all accounts that follow this account
+   * Get Legion followers from FastData indexer API
+   * Queries the FastData API to get all accounts that follow this account
    */
   async getFollowers(
     accountId: string,
     limit = 50,
     offset = 0,
+    bypassCache = false,
+    afterAccount?: string,
   ): Promise<PaginatedResult<FollowerInfo>> {
     const cacheKey = `legion:followers:${accountId}`;
     const cleanAccountId = this.stripNetworkSuffix(accountId);
 
     try {
-      // Try D1 cache first
-      const cached = await this.getCachedFromD1<FollowerInfo[]>(cacheKey);
-      if (cached) {
-        return this.paginate(cached, limit, offset);
+      // Try D1 cache first (only if not using cursor and not bypassing)
+      if (!bypassCache && !afterAccount) {
+        const cached = await this.getCachedFromD1<FollowerInfo[]>(cacheKey);
+        if (cached) {
+          console.log("[LegionGraphService] Using cached followers data");
+          return this.paginate(cached, limit, offset);
+        }
+      } else {
+        console.log("[LegionGraphService] Bypassing cache per request");
       }
 
       console.log(
-        "[LegionGraphService] Fetching legion followers for:",
+        "[LegionGraphService] Fetching legion followers from FastData API:",
         cleanAccountId,
+        afterAccount ? `(after ${afterAccount})` : "",
       );
 
-      // Use graph.index to get all accounts that follow this account
-      // This reads from the index created when users follow via graph/follow/{targetAccountId}
-      const followersResult = await this.graph.index({
-        action: "graph",
-        key: cleanAccountId,
-        limit: 1000, // Fetch up to 1000 for accurate counting
-      });
+      // Query FastData API for followers (reads from blockchain index)
+      // Note: contextual.near is the contract where Legion graph data is stored
+      const apiUrl = "https://fastdata.up.railway.app";
+      const afterParam = afterAccount ? `&after_account=${afterAccount}` : '';
+      const url = `${apiUrl}/v1/social/followers?account_id=${cleanAccountId}&contract_id=contextual.near&limit=${limit}&offset=${offset}${afterParam}`;
 
-      const followers: FollowerInfo[] = followersResult.map((accountId) => ({
-        accountId,
+      console.log(`[LegionGraphService] FastData API URL: ${url}`);
+
+      const response = await fetch(url);
+
+      console.log(`[LegionGraphService] FastData API response status: ${response.status}`);
+
+      if (!response.ok) {
+        console.error("[LegionGraphService] FastData API response:", response.status, await response.text());
+        throw new Error(`FastData API error: ${response.status}`);
+      }
+
+      // Updated to match FastData API spec: { accounts: string[], count, meta }
+      // Note: 'count' is the number of items in THIS page, not total count
+      const data = await response.json() as { accounts?: string[]; count?: number; meta?: { has_more?: boolean; next_cursor?: string } };
+
+      console.log(`[LegionGraphService] FastData API raw response:`, JSON.stringify(data, null, 2));
+
+      const followers: FollowerInfo[] = (data.accounts || []).map((id: string) => ({
+        accountId: id,
       }));
 
+      // FastData API doesn't provide total count - use count as page size, not total
+      const hasMore = data.meta?.has_more ?? false;
+      const nextCursor = data.meta?.next_cursor;
+
       console.log(
-        "[LegionGraphService] Found legion followers:",
+        "[LegionGraphService] Processed - page size:",
         followers.length,
+        "hasMore:",
+        hasMore,
+        "nextCursor:",
+        nextCursor,
       );
 
-      // Cache to D1
-      await this.setCachedToD1(cacheKey, followers);
+      // Cache to D1 (only if not using cursor and not bypassing)
+      if (!bypassCache && !afterAccount) {
+        if (offset === 0 && hasMore) {
+          // Fetch more for cache on first page when there are more results
+          console.log(`[LegionGraphService] Fetching more for cache (has_more=${hasMore})`);
+          const allResponse = await fetch(
+            `${apiUrl}/v1/social/followers?account_id=${cleanAccountId}&contract_id=contextual.near&limit=1000`,
+          );
+          if (allResponse.ok) {
+            const allData = await allResponse.json() as { accounts?: string[] };
+            const allFollowers: FollowerInfo[] = (allData.accounts || []).map((id: string) => ({
+              accountId: id,
+            }));
+            console.log(`[LegionGraphService] Cached ${allFollowers.length} followers for ${cacheKey}`);
+            await this.setCachedToD1(cacheKey, allFollowers);
+          }
+        } else {
+          await this.setCachedToD1(cacheKey, followers);
+        }
+      }
 
-      return this.paginate(followers, limit, offset);
+      const result: PaginatedResult<FollowerInfo> = {
+        items: followers,
+        // Note: FastData doesn't provide total count, so we use page size
+        // For offset-based pagination, total is needed but not available from FastData
+        total: followers.length,
+        hasMore,
+      };
+
+      // Only add cursor if there are more results
+      if (hasMore && nextCursor) {
+        result.nextCursor = nextCursor;
+      } else if (hasMore && followers.length > 0) {
+        // Fallback: use last account ID as cursor
+        result.nextCursor = followers[followers.length - 1].accountId;
+      }
+
+      return result;
     } catch (error) {
       console.error(
         `[LegionGraphService] Error fetching legion followers for ${accountId}:`,
@@ -232,58 +289,115 @@ export class LegionGraphService {
 
   /**
    * Get Legion following (accounts this account follows in Legion graph)
-   * Reads: {accountId}/graph/follow/**
+   * Uses FastData API to get accurate data from contextual.near
    */
   async getFollowing(
     accountId: string,
     limit = 50,
     offset = 0,
+    bypassCache = false,
+    afterAccount?: string,
   ): Promise<PaginatedResult<FollowerInfo>> {
     const cacheKey = `legion:following:${accountId}`;
+    const cleanAccountId = this.stripNetworkSuffix(accountId);
 
     try {
-      // Strip network suffix for social.near query
-      const cleanAccountId = this.stripNetworkSuffix(accountId);
-
       console.log(
-        "[LegionGraphService] Fetching legion following for:",
+        "[LegionGraphService] Fetching legion following from FastData API:",
         cleanAccountId,
+        bypassCache ? "(bypassing cache)" : "",
+        afterAccount ? `(after ${afterAccount})` : "",
       );
 
-      // Try D1 cache first
-      const cached = await this.getCachedFromD1<FollowerInfo[]>(cacheKey);
-      if (cached) {
-        console.log("[LegionGraphService] Using cached following data");
-        return this.paginate(cached, limit, offset);
+      // Try D1 cache first (only if not using cursor and not bypassing)
+      if (!bypassCache && !afterAccount) {
+        const cached = await this.getCachedFromD1<FollowerInfo[]>(cacheKey);
+        if (cached) {
+          console.log("[LegionGraphService] Using cached following data");
+          return this.paginate(cached, limit, offset);
+        }
+      } else {
+        console.log("[LegionGraphService] Bypassing cache per request");
       }
 
-      // Read from graph/follow namespace (FastData format)
-      const data = await this.graph.get({
-        keys: [`${cleanAccountId}/graph/follow/**`],
-      });
+      // Query FastData API for following (reads from blockchain index)
+      // Note: contextual.near contract is indexed by FastData indexer
+      const apiUrl = "https://fastdata.up.railway.app";
+      const afterParam = afterAccount ? `&after_account=${afterAccount}` : '';
+      const url = `${apiUrl}/v1/social/following?account_id=${cleanAccountId}&contract_id=contextual.near&limit=${limit}&offset=${offset}${afterParam}`;
 
-      console.log("[LegionGraphService] Graph.get() following returned:", {
-        accountId: cleanAccountId,
-        hasData: !!data,
-        keys: data ? Object.keys(data) : [],
-      });
+      console.log(`[LegionGraphService] FastData API URL: ${url}`);
 
-      const followList = data?.[cleanAccountId]?.graph?.follow || {};
+      const response = await fetch(url);
 
-      // Convert to array of account IDs
-      const following: FollowerInfo[] = Object.keys(followList).map((id) => ({
+      console.log(`[LegionGraphService] FastData API response status: ${response.status}`);
+
+      if (!response.ok) {
+        console.error("[LegionGraphService] FastData API response:", response.status, await response.text());
+        throw new Error(`FastData API error: ${response.status}`);
+      }
+
+      // Updated to match FastData API spec: { accounts: string[], count, meta }
+      // Note: 'count' is the number of items in THIS page, not total count
+      const data = await response.json() as { accounts?: string[]; count?: number; meta?: { has_more?: boolean; next_cursor?: string } };
+
+      console.log(`[LegionGraphService] FastData API raw response:`, JSON.stringify(data, null, 2));
+
+      const following: FollowerInfo[] = (data.accounts || []).map((id: string) => ({
         accountId: id,
       }));
 
+      // FastData API doesn't provide total count - use count as page size, not total
+      const hasMore = data.meta?.has_more ?? false;
+      const nextCursor = data.meta?.next_cursor;
+
       console.log(
-        "[LegionGraphService] Found legion following:",
+        "[LegionGraphService] Processed - page size:",
         following.length,
+        "hasMore:",
+        hasMore,
+        "nextCursor:",
+        nextCursor,
       );
 
-      // Cache to D1
-      await this.setCachedToD1(cacheKey, following);
+      // Cache to D1 (only if not using cursor and not bypassing)
+      if (!bypassCache && !afterAccount) {
+        if (offset === 0 && hasMore) {
+          // Fetch more for cache on first page when there are more results
+          console.log(`[LegionGraphService] Fetching more for cache (has_more=${hasMore})`);
+          const allResponse = await fetch(
+            `${apiUrl}/v1/social/following?account_id=${cleanAccountId}&contract_id=contextual.near&limit=1000`,
+          );
+          if (allResponse.ok) {
+            const allData = await allResponse.json() as { accounts?: string[] };
+            const allFollowing: FollowerInfo[] = (allData.accounts || []).map((id: string) => ({
+              accountId: id,
+            }));
+            console.log(`[LegionGraphService] Cached ${allFollowing.length} following for ${cacheKey}`);
+            await this.setCachedToD1(cacheKey, allFollowing);
+          }
+        } else {
+          await this.setCachedToD1(cacheKey, following);
+        }
+      }
 
-      return this.paginate(following, limit, offset);
+      const result: PaginatedResult<FollowerInfo> = {
+        items: following,
+        // Note: FastData doesn't provide total count, so we use page size
+        // For offset-based pagination, total is needed but not available from FastData
+        total: following.length,
+        hasMore,
+      };
+
+      // Only add cursor if there are more results
+      if (hasMore && nextCursor) {
+        result.nextCursor = nextCursor;
+      } else if (hasMore && following.length > 0) {
+        // Fallback: use last account ID as cursor
+        result.nextCursor = following[following.length - 1].accountId;
+      }
+
+      return result;
     } catch (error) {
       console.error(
         `[LegionGraphService] Error fetching legion following for ${accountId}:`,
@@ -301,7 +415,7 @@ export class LegionGraphService {
     targetAccountId: string,
   ): Promise<boolean> {
     try {
-      // Strip network suffix for social.near query
+      // Strip network suffix for contextual.near query
       const cleanAccountId = this.stripNetworkSuffix(accountId);
       const cleanTargetAccountId = this.stripNetworkSuffix(targetAccountId);
 
@@ -312,7 +426,7 @@ export class LegionGraphService {
 
       const data = await this.graph.get({
         keys: [`${cleanAccountId}/graph/follow/${cleanTargetAccountId}`],
-      });
+      }) as Record<string, any> | undefined;
 
       const isFollowing =
         data?.[cleanAccountId]?.graph?.follow?.[cleanTargetAccountId] !==
@@ -341,41 +455,41 @@ export class LegionGraphService {
     accountId: string,
   ): Promise<{ followers: number; following: number }> {
     try {
-      // Strip network suffix for social.near query
+      // Strip network suffix for contextual.near query
       const cleanAccountId = this.stripNetworkSuffix(accountId);
 
-      // Get following count from direct data (FastData format)
-      const followingData = await this.graph.get({
-        keys: [`${cleanAccountId}/graph/follow/**`],
-      });
+      // Get both stats from FastData API in parallel
+      const apiUrl = "https://fastdata.up.railway.app";
 
-      const followList = followingData?.[cleanAccountId]?.graph?.follow || {};
-      const followingCount = Object.keys(followList).length;
+      const [followersResponse, followingResponse] = await Promise.all([
+        fetch(`${apiUrl}/v1/social/followers?account_id=${cleanAccountId}&contract_id=contextual.near&limit=1`),
+        fetch(`${apiUrl}/v1/social/following?account_id=${cleanAccountId}&contract_id=contextual.near&limit=1`),
+      ]);
 
-      console.log(
-        "[LegionGraphService] Stats for",
-        cleanAccountId,
-        "following:",
-        followingCount,
-      );
+      let followersCount = 0;
+      let followingCount = 0;
 
-      // Get followers count using social.near's built-in followers index
-      // This reads from: {accountId}/graph/followers/*
-      const followersData = await this.graph.get({
-        keys: [`${cleanAccountId}/graph/followers/**`],
-        options: {
-          limit: 1000, // Fetch up to 1000 for accurate count
-        },
-      });
+      if (followersResponse.ok) {
+        const data = await followersResponse.json() as { total?: number };
+        followersCount = data.total || 0;
+      } else {
+        console.error("[LegionGraphService] Followers API error:", followersResponse.status);
+      }
 
-      const followersList = followersData?.[cleanAccountId]?.graph?.followers || {};
-      const followersCount = Object.keys(followersList).length;
+      if (followingResponse.ok) {
+        const data = await followingResponse.json() as { total?: number };
+        followingCount = data.total || 0;
+      } else {
+        console.error("[LegionGraphService] Following API error:", followingResponse.status);
+      }
 
       console.log(
         "[LegionGraphService] Stats for",
         cleanAccountId,
         "followers:",
         followersCount,
+        "following:",
+        followingCount,
       );
 
       return { followers: followersCount, following: followingCount };
@@ -385,36 +499,94 @@ export class LegionGraphService {
     }
   }
 
+  /**
+   * Record a follow relationship in the database
+   * Call this after a successful follow transaction
+   */
+  async recordFollow(
+    followerAccountId: string,
+    followingAccountId: string,
+  ): Promise<void> {
+    try {
+      const followerAccount = this.stripNetworkSuffix(followerAccountId);
+      const followingAccount = this.stripNetworkSuffix(followingAccountId);
+
+      await this.db
+        .insert(schema.legionFollows)
+        .values({
+          followerAccountId: followerAccount,
+          followingAccountId: followingAccount,
+          createdAt: new Date(),
+        })
+        .onConflictDoNothing({
+          target: [schema.legionFollows.followerAccountId, schema.legionFollows.followingAccountId],
+        });
+
+      console.log(
+        "[LegionGraphService] Recorded follow:",
+        followerAccount,
+        "->",
+        followingAccount,
+      );
+
+      // Invalidate cache
+      await this.invalidateCache([followerAccount, followingAccount]);
+    } catch (error) {
+      console.error("[LegionGraphService] Error recording follow:", error);
+    }
+  }
+
+  /**
+   * Remove a follow relationship from the database
+   * Call this after a successful unfollow transaction
+   */
+  async recordUnfollow(
+    followerAccountId: string,
+    followingAccountId: string,
+  ): Promise<void> {
+    try {
+      const followerAccount = this.stripNetworkSuffix(followerAccountId);
+      const followingAccount = this.stripNetworkSuffix(followingAccountId);
+
+      await this.db
+        .delete(schema.legionFollows)
+        .where(
+          and(
+            eq(schema.legionFollows.followerAccountId, followerAccount),
+            eq(schema.legionFollows.followingAccountId, followingAccount),
+          ),
+        );
+
+      console.log(
+        "[LegionGraphService] Removed follow:",
+        followerAccount,
+        "->",
+        followingAccount,
+      );
+
+      // Invalidate cache
+      await this.invalidateCache([followerAccount, followingAccount]);
+    } catch (error) {
+      console.error("[LegionGraphService] Error removing follow:", error);
+    }
+  }
+
   // ===========================================================================
   // PRIVATE HELPERS
   // ===========================================================================
 
   /**
    * Check if account holds any Legion NFT
-   * Queries all known Legion contracts
+   * Queries the legionHolders table
    */
   private async hasLegionNft(accountId: string): Promise<boolean> {
     try {
       // Check holdings from our database (cached NFT data)
-      const holder = await this.db.query.nftHoldings.findFirst({
-        where: eq(schema.nftHoldings.accountId, accountId),
+      const holders = await this.db.query.legionHolders.findMany({
+        where: eq(schema.legionHolders.accountId, accountId),
       });
 
-      if (!holder) return false;
-
-      // Parse holdings JSON and check if any contract is a Legion contract
-      const holdings = holder.holdings as any;
-      if (!Array.isArray(holdings)) return false;
-
-      return holdings.some(
-        (h: any) =>
-          h.contractId &&
-          LEGION_CONTRACTS.some((contract) =>
-            h.contractId.includes(
-              contract.replace(".near", "").replace(".tg", ""),
-            ),
-          ),
-      );
+      return holders.length > 0;
     } catch (error) {
       console.error("[LegionGraphService] Error checking Legion NFT:", error);
       return false;

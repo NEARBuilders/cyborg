@@ -31,6 +31,7 @@ export interface PaginatedResult<T> {
   items: T[];
   total: number;
   hasMore: boolean;
+  nextCursor?: string;
 }
 
 // =============================================================================
@@ -96,21 +97,29 @@ export class SocialService {
     endpoint: string
   ): Promise<T | null> {
     if (!this.fastdataApiUrl) {
+      console.log(`[SocialService] No fastdataApiUrl configured, skipping fetch for ${endpoint}`);
       return null;
     }
 
     try {
-      const response = await fetch(`${this.fastdataApiUrl}${endpoint}`, {
+      const url = `${this.fastdataApiUrl}${endpoint}`;
+      console.log(`[SocialService] Fetching from FastData API: ${url}`);
+
+      const response = await fetch(url, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
       });
+
+      console.log(`[SocialService] FastData API response status: ${response.status}`);
 
       if (!response.ok) {
         console.error('[SocialService] API error:', response.status, response.statusText);
         return null;
       }
 
-      return await response.json() as T;
+      const data = await response.json() as T;
+      console.log(`[SocialService] FastData API response data:`, JSON.stringify(data, null, 2));
+      return data;
     } catch (error) {
       console.error('[SocialService] API fetch error:', error);
       return null;
@@ -202,9 +211,7 @@ export class SocialService {
           contractId: this.fastDataContract,
           methodName: FASTDATA_CONFIG.METHOD_NAME,
           args: {
-            data: {
-              [followKey]: "",
-            },
+            [followKey]: "",
           },
           gas: "300000000000000",
           deposit: "0",
@@ -236,9 +243,7 @@ export class SocialService {
           contractId: this.fastDataContract,
           methodName: FASTDATA_CONFIG.METHOD_NAME,
           args: {
-            data: {
-              [followKey]: null,
-            },
+            [followKey]: null,
           },
           gas: "300000000000000",
           deposit: "0",
@@ -260,20 +265,23 @@ export class SocialService {
   async getFollowing(
     accountId: string,
     limit = 50,
-    offset = 0
+    offset = 0,
+    afterAccount?: string
   ): Promise<PaginatedResult<FollowerInfo>> {
     const cacheKey = `social:following:${accountId}`;
 
     try {
-      // Try D1 cache first
-      const cached = await this.getCachedFromD1<FollowerInfo[]>(cacheKey);
+      // Try D1 cache first (only if not using cursor)
+      const cached = afterAccount ? null : await this.getCachedFromD1<FollowerInfo[]>(cacheKey);
       if (cached) {
         return this.paginate(cached, limit, offset);
       }
 
       // Try fastdata-social API first
-      const apiResult = await this.fetchFromFastdataAPI<{ accounts: string[] }>(
-        `/social/${accountId}/following?limit=${limit}&offset=${offset}`
+      const afterParam = afterAccount ? `&after_account=${afterAccount}` : '';
+      // FastData API format: /v1/social/following?account_id=xxx&contract_id=contextual.near
+      const apiResult = await this.fetchFromFastdataAPI<{ accounts: string[]; count: number; meta: { has_more: boolean; next_cursor?: string } }>(
+        `/v1/social/following?account_id=${accountId}&contract_id=contextual.near&limit=${limit}&offset=${offset}${afterParam}`
       );
 
       if (apiResult && apiResult.accounts) {
@@ -282,10 +290,29 @@ export class SocialService {
           followedAt: new Date().toISOString(),
         }));
 
-        // Cache to D1
-        await this.setCachedToD1(cacheKey, following);
+        // Cache to D1 (only if not using cursor)
+        if (!afterAccount) {
+          await this.setCachedToD1(cacheKey, following);
+        }
 
-        return this.paginate(following, limit, offset);
+        // FastData API doesn't provide total count, use page size
+        const hasMore = apiResult.meta?.has_more ?? false;
+        const nextCursor = apiResult.meta?.next_cursor;
+
+        const result: PaginatedResult<FollowerInfo> = {
+          items: following,
+          total: following.length, // Page size, not total count
+          hasMore,
+        };
+
+        // Only add cursor if there are more results
+        if (hasMore && nextCursor) {
+          result.nextCursor = nextCursor;
+        } else if (hasMore && following.length > 0) {
+          result.nextCursor = following[following.length - 1].accountId;
+        }
+
+        return result;
       }
 
       // Fallback: Query FastData contract state for all graph/follow/* keys (with round-robin)
@@ -293,7 +320,7 @@ export class SocialService {
       const state = await this.queryContractState(accountId, prefix);
 
       // Extract followed accounts from keys
-      const following: FollowerInfo[] = Object.keys(state)
+      let following: FollowerInfo[] = Object.keys(state)
         .filter(key => key.startsWith(`${FASTDATA_CONFIG.KEY_PREFIX}/`))
         .map(key => {
           // Extract target account ID from key
@@ -304,10 +331,28 @@ export class SocialService {
           };
         });
 
-      // Cache to D1
-      await this.setCachedToD1(cacheKey, following);
+      // Sort alphabetically for consistent pagination
+      following.sort((a, b) => a.accountId.localeCompare(b.accountId));
 
-      return this.paginate(following, limit, offset);
+      // Apply cursor if provided
+      if (afterAccount) {
+        const afterIndex = following.findIndex(f => f.accountId === afterAccount);
+        if (afterIndex >= 0) {
+          following = following.slice(afterIndex + 1);
+        }
+      }
+
+      // Cache to D1 (only if not using cursor)
+      if (!afterAccount) {
+        await this.setCachedToD1(cacheKey, following);
+      }
+
+      const result = this.paginate(following, limit, 0);
+      // Add cursor if we have more results
+      if (result.hasMore && result.items.length > 0) {
+        result.nextCursor = result.items[result.items.length - 1].accountId;
+      }
+      return result;
     } catch (error) {
       console.error(`[SocialService] Error fetching following for ${accountId}:`, error);
       return { items: [], total: 0, hasMore: false };
@@ -330,18 +375,9 @@ export class SocialService {
         return cached;
       }
 
-      // Try fastdata-social API first
-      const apiResult = await this.fetchFromFastdataAPI<{ isFollowing: boolean }>(
-        `/social/${accountId}/following/${targetAccountId}`
-      );
-
-      if (apiResult !== null) {
-        // Cache to D1
-        await this.setCachedToD1(cacheKey, apiResult.isFollowing);
-        return apiResult.isFollowing;
-      }
-
-      // Fallback: Query FastData contract state for the specific follow key (with round-robin)
+      // FastData API doesn't have a dedicated "check if following" endpoint
+      // We need to either fetch the following list or query contract state directly
+      // For efficiency, let's query contract state for the specific follow key
       const prefix = `${FASTDATA_CONFIG.KEY_PREFIX}/${targetAccountId}`;
       const state = await this.queryContractState(accountId, prefix);
 
@@ -366,20 +402,23 @@ export class SocialService {
   async getFollowers(
     accountId: string,
     limit = 50,
-    offset = 0
+    offset = 0,
+    afterAccount?: string
   ): Promise<PaginatedResult<FollowerInfo>> {
     const cacheKey = `social:followers:${accountId}`;
 
     try {
-      // Try D1 cache first
-      const cached = await this.getCachedFromD1<FollowerInfo[]>(cacheKey);
+      // Try D1 cache first (only if not using cursor)
+      const cached = afterAccount ? null : await this.getCachedFromD1<FollowerInfo[]>(cacheKey);
       if (cached) {
         return this.paginate(cached, limit, offset);
       }
 
       // Try fastdata-social API first (this supports reverse lookups via index)
-      const apiResult = await this.fetchFromFastdataAPI<{ accounts: string[] }>(
-        `/social/${accountId}/followers?limit=${limit}&offset=${offset}`
+      const afterParam = afterAccount ? `&after_account=${afterAccount}` : '';
+      // FastData API format: /v1/social/followers?account_id=xxx&contract_id=contextual.near
+      const apiResult = await this.fetchFromFastdataAPI<{ accounts: string[]; count: number; meta: { has_more: boolean; next_cursor?: string } }>(
+        `/v1/social/followers?account_id=${accountId}&contract_id=contextual.near&limit=${limit}&offset=${offset}${afterParam}`
       );
 
       if (apiResult && apiResult.accounts) {
@@ -388,10 +427,29 @@ export class SocialService {
           followedAt: new Date().toISOString(),
         }));
 
-        // Cache to D1
-        await this.setCachedToD1(cacheKey, followers);
+        // Cache to D1 (only if not using cursor)
+        if (!afterAccount) {
+          await this.setCachedToD1(cacheKey, followers);
+        }
 
-        return this.paginate(followers, limit, offset);
+        // FastData API doesn't provide total count, use page size
+        const hasMore = apiResult.meta?.has_more ?? false;
+        const nextCursor = apiResult.meta?.next_cursor;
+
+        const result: PaginatedResult<FollowerInfo> = {
+          items: followers,
+          total: followers.length, // Page size, not total count
+          hasMore,
+        };
+
+        // Only add cursor if there are more results
+        if (hasMore && nextCursor) {
+          result.nextCursor = nextCursor;
+        } else if (hasMore && followers.length > 0) {
+          result.nextCursor = followers[followers.length - 1].accountId;
+        }
+
+        return result;
       }
 
       // FastData doesn't support reverse lookups natively without an index

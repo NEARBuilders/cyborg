@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "36ff5d14-b492-497f-b5e6-cce567ca33b3",
-  "prevId": "f20bc122-8c69-4a90-b808-d078fc1da34e",
+  "id": "12bcc043-a408-4d55-917e-a9813c10bca3",
+  "prevId": "36ff5d14-b492-497f-b5e6-cce567ca33b3",
   "tables": {
     "account": {
       "name": "account",
@@ -700,6 +700,75 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "legion_follows": {
+      "name": "legion_follows",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "follower_account_id": {
+          "name": "follower_account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "following_account_id": {
+          "name": "following_account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "legion_follows_following_idx": {
+          "name": "legion_follows_following_idx",
+          "columns": [
+            "following_account_id"
+          ],
+          "isUnique": false
+        },
+        "legion_follows_follower_idx": {
+          "name": "legion_follows_follower_idx",
+          "columns": [
+            "follower_account_id"
+          ],
+          "isUnique": false
+        },
+        "legion_follows_count_idx": {
+          "name": "legion_follows_count_idx",
+          "columns": [
+            "following_account_id",
+            "follower_account_id"
+          ],
+          "isUnique": false
+        },
+        "unique_follow": {
+          "name": "unique_follow",
+          "columns": [
+            "follower_account_id",
+            "following_account_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "legion_holders": {
       "name": "legion_holders",
       "columns": {
@@ -783,6 +852,89 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "legion_nft_images": {
+      "name": "legion_nft_images",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "token_id": {
+          "name": "token_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "contract_id": {
+          "name": "contract_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'nearlegion.nfts.tg'"
+        },
+        "image_url": {
+          "name": "image_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "last_synced_at": {
+          "name": "last_synced_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "synced_at": {
+          "name": "synced_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "legion_nft_images_account_id_idx": {
+          "name": "legion_nft_images_account_id_idx",
+          "columns": [
+            "account_id"
+          ],
+          "isUnique": false
+        },
+        "unique_token_contract": {
+          "name": "unique_token_contract",
+          "columns": [
+            "token_id",
+            "contract_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "near_social_profiles": {
       "name": "near_social_profiles",
       "columns": {
@@ -821,13 +973,6 @@
           "notNull": false,
           "autoincrement": false
         },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "nft_avatar_url": {
           "name": "nft_avatar_url",
           "type": "text",
@@ -845,6 +990,13 @@
         "nft_avatar_synced_at": {
           "name": "nft_avatar_synced_at",
           "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false

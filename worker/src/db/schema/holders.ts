@@ -107,3 +107,30 @@ export const legionNftImages = sqliteTable(
 );
 
 export type LegionNftImage = typeof legionNftImages.$inferSelect;
+
+// =============================================================================
+// LEGION GRAPH FOLLOWS
+// Tracks follow relationships in the Legion graph (contextual.near)
+// =============================================================================
+
+export const legionFollows = sqliteTable(
+  "legion_follows",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    followerAccountId: text("follower_account_id").notNull(), // Who is following
+    followingAccountId: text("following_account_id").notNull(), // Who is being followed
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  },
+  (table) => ({
+    // Ensure unique follow relationships
+    uniqueFollow: unique("unique_follow").on(table.followerAccountId, table.followingAccountId),
+    // Index for getting someone's followers (who follows them)
+    followerIdx: index("legion_follows_following_idx").on(table.followingAccountId),
+    // Index for getting who someone follows (their following list)
+    followingIdx: index("legion_follows_follower_idx").on(table.followerAccountId),
+    // Compound index for counting
+    followsCountIdx: index("legion_follows_count_idx").on(table.followingAccountId, table.followerAccountId),
+  })
+);
+
+export type LegionFollow = typeof legionFollows.$inferSelect;

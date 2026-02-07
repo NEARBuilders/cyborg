@@ -351,63 +351,59 @@ export const contract = oc.router({
     .errors(CommonPluginErrors),
 
   getFollowers: oc
-    .route({ method: "GET", path: "/social/followers/{accountId}" })
+    .route({ method: "GET", path: "/social/followers" })
     .input(
       z.object({
-        accountId: z.string().min(1),
+        account_id: z.string().min(1),
+        contract_id: z.string().optional(),
         limit: z.number().int().min(1).max(100).default(50),
         offset: z.number().int().min(0).default(0),
+        after_account: z.string().optional(),
       })
     )
     .output(
       z.object({
-        followers: z.array(
-          z.object({
-            accountId: z.string(),
-          })
-        ),
-        total: z.number(),
-        pagination: z.object({
-          limit: z.number(),
-          offset: z.number(),
-          hasMore: z.boolean(),
+        accounts: z.array(z.string()),
+        count: z.number(),
+        meta: z.object({
+          has_more: z.boolean(),
+          next_cursor: z.string().optional(),
+          truncated: z.boolean().optional(),
         }),
       })
     )
     .errors(CommonPluginErrors),
 
   getFollowing: oc
-    .route({ method: "GET", path: "/social/following/{accountId}" })
+    .route({ method: "GET", path: "/social/following" })
     .input(
       z.object({
-        accountId: z.string().min(1),
+        account_id: z.string().min(1),
+        contract_id: z.string().optional(),
         limit: z.number().int().min(1).max(100).default(50),
         offset: z.number().int().min(0).default(0),
+        after_account: z.string().optional(),
       })
     )
     .output(
       z.object({
-        following: z.array(
-          z.object({
-            accountId: z.string(),
-          })
-        ),
-        total: z.number(),
-        pagination: z.object({
-          limit: z.number(),
-          offset: z.number(),
-          hasMore: z.boolean(),
+        accounts: z.array(z.string()),
+        count: z.number(),
+        meta: z.object({
+          has_more: z.boolean(),
+          next_cursor: z.string().optional(),
+          truncated: z.boolean().optional(),
         }),
       })
     )
     .errors(CommonPluginErrors),
 
   isFollowing: oc
-    .route({ method: "GET", path: "/social/following/{accountId}/check/{targetAccountId}" })
+    .route({ method: "GET", path: "/social/is-following" })
     .input(
       z.object({
-        accountId: z.string().min(1),
-        targetAccountId: z.string().min(1),
+        account_id: z.string().min(1),
+        target_account_id: z.string().min(1),
       })
     )
     .output(

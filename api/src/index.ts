@@ -606,29 +606,28 @@ export default createPlugin({
       getFollowers: builder.getFollowers.handler(async ({ input }) => {
         if (!socialService) {
           return {
-            followers: [],
-            total: 0,
-            pagination: {
-              limit: input.limit,
-              offset: input.offset,
-              hasMore: false,
-            },
+            accounts: [],
+            count: 0,
+            meta: { has_more: false },
           };
         }
 
         const result = await socialService.getFollowers(
-          input.accountId,
+          input.account_id,
           input.limit,
-          input.offset
+          input.offset,
+          input.after_account
         );
 
+        // Extract just account IDs to match FastData spec
+        const accounts = result.items.map((item) => item.accountId);
+
         return {
-          followers: result.items,
-          total: result.total,
-          pagination: {
-            limit: input.limit,
-            offset: input.offset,
-            hasMore: result.hasMore,
+          accounts,
+          count: result.total,
+          meta: {
+            has_more: result.hasMore,
+            ...(result.nextCursor ? { next_cursor: result.nextCursor } : {}),
           },
         };
       }),
@@ -636,29 +635,28 @@ export default createPlugin({
       getFollowing: builder.getFollowing.handler(async ({ input }) => {
         if (!socialService) {
           return {
-            following: [],
-            total: 0,
-            pagination: {
-              limit: input.limit,
-              offset: input.offset,
-              hasMore: false,
-            },
+            accounts: [],
+            count: 0,
+            meta: { has_more: false },
           };
         }
 
         const result = await socialService.getFollowing(
-          input.accountId,
+          input.account_id,
           input.limit,
-          input.offset
+          input.offset,
+          input.after_account
         );
 
+        // Extract just account IDs to match FastData spec
+        const accounts = result.items.map((item) => item.accountId);
+
         return {
-          following: result.items,
-          total: result.total,
-          pagination: {
-            limit: input.limit,
-            offset: input.offset,
-            hasMore: result.hasMore,
+          accounts,
+          count: result.total,
+          meta: {
+            has_more: result.hasMore,
+            ...(result.nextCursor ? { next_cursor: result.nextCursor } : {}),
           },
         };
       }),
@@ -669,8 +667,8 @@ export default createPlugin({
         }
 
         const isFollowing = await socialService.isFollowing(
-          input.accountId,
-          input.targetAccountId
+          input.account_id,
+          input.target_account_id
         );
 
         return { isFollowing };
