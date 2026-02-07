@@ -1328,7 +1328,7 @@ async function getSocialContext(c: any, env: Env) {
   const sessionContext = await getSessionFromRequest(auth, c.req.raw, db);
 
   // Initialize social service
-  const socialService = new SocialService(db, "mainnet");
+  const socialService = new SocialService(db, { network: "mainnet" });
 
   return {
     db,

@@ -39,7 +39,9 @@
         "NEAR_AI_MODEL": "deepseek-ai/DeepSeek-V3.1",
         "NEAR_RPC_URL": "https://rpc.mainnet.near.org",
         "NEAR_LEGION_CONTRACT": "ascendant.nearlegion.near",
-        "NEAR_INITIATE_CONTRACT": "initiate.nearlegion.near"
+        "NEAR_INITIATE_CONTRACT": "initiate.nearlegion.near",
+        "NEAR_FASTDATA_CONTRACT": "contextual.near",
+        "NEAR_FASTDATA_API_URL": "https://fastdata.up.railway.app"
       },
       "secrets": [
         "API_DATABASE_URL",

@@ -68,9 +68,7 @@ export class LegionGraphService {
 
   /**
    * Prepare Legion follow transaction
-   * Stores:
-   * - Data: {accountId}/legion/follow/{targetAccountId} = true
-   * - Index: {accountId}/index/graph/legion/{targetAccountId} = {key: accountId}
+   * Uses FastData protocol pattern: flat KV pairs
    */
   async prepareFollowTransaction(
     accountId: string,
@@ -88,39 +86,30 @@ export class LegionGraphService {
         originalTo: targetAccountId,
       });
 
-      // Store follow data with index for discoverability
-      const args = {
-        data: {
-          [fromAccount]: {
-            // Legion-specific data (for our custom tracking)
-            legion: {
-              follow: {
-                [toAccount]: "1",
-              },
-            },
-            // Standard graph index (for social.near's built-in indexing)
-            graph: {
-              follow: {
-                [toAccount]: "",
-              },
-            },
-          },
-        },
-      };
+      // FastData protocol: flat KV pairs
+      // Key format: "graph/follow/{target}" = ""
+      const kvPairs: Record<string, string> = {};
+      kvPairs[`graph/follow/${toAccount}`] = "";
+
+      // Also add notification index
+      kvPairs["index/notify"] = JSON.stringify({
+        key: toAccount,
+        value: { type: "follow", accountId: fromAccount },
+      });
 
       console.log(
-        "[LegionGraphService] Transaction args:",
-        JSON.stringify(args, null, 2),
+        "[LegionGraphService] Transaction KV pairs:",
+        JSON.stringify(kvPairs, null, 2),
       );
 
       return {
         success: true,
         transaction: {
-          contractId: "social.near",
-          methodName: "set",
-          args,
+          contractId: "contextual.near",
+          methodName: "__fastdata_kv",
+          args: kvPairs, // Flat KV pairs directly as args
           gas: "300000000000000",
-          deposit: "0.001 NEAR",
+          deposit: "0 NEAR",
         },
       };
     } catch (error) {
@@ -137,6 +126,7 @@ export class LegionGraphService {
 
   /**
    * Prepare Legion unfollow transaction
+   * Uses FastData protocol pattern: flat KV pairs
    */
   async prepareUnfollowTransaction(
     accountId: string,
@@ -154,35 +144,22 @@ export class LegionGraphService {
         originalTo: targetAccountId,
       });
 
-      const args = {
-        data: {
-          [fromAccount]: {
-            legion: {
-              follow: {
-                [toAccount]: null, // null = delete
-              },
-            },
-            // Also remove from graph index
-            graph: {
-              follow: {
-                [toAccount]: null, // null = delete
-              },
-            },
-          },
-        },
-      };
+      // FastData protocol: flat KV pairs
+      // Key format: "graph/follow/{target}" = null (delete)
+      const kvPairs: Record<string, string | null> = {};
+      kvPairs[`graph/follow/${toAccount}`] = null;
 
       console.log(
-        "[LegionGraphService] Unfollow args:",
-        JSON.stringify(args, null, 2),
+        "[LegionGraphService] Unfollow KV pairs:",
+        JSON.stringify(kvPairs, null, 2),
       );
 
       return {
         success: true,
         transaction: {
-          contractId: "social.near",
-          methodName: "set",
-          args,
+          contractId: "contextual.near",
+          methodName: "__fastdata_kv",
+          args: kvPairs, // Flat KV pairs directly as args
           gas: "300000000000000",
           deposit: "0 NEAR",
         },
@@ -255,7 +232,7 @@ export class LegionGraphService {
 
   /**
    * Get Legion following (accounts this account follows in Legion graph)
-   * Reads: {accountId}/legion/follow/**
+   * Reads: {accountId}/graph/follow/**
    */
   async getFollowing(
     accountId: string,
@@ -280,9 +257,9 @@ export class LegionGraphService {
         return this.paginate(cached, limit, offset);
       }
 
-      // Read from legion/follow namespace
+      // Read from graph/follow namespace (FastData format)
       const data = await this.graph.get({
-        keys: [`${cleanAccountId}/legion/follow/**`],
+        keys: [`${cleanAccountId}/graph/follow/**`],
       });
 
       console.log("[LegionGraphService] Graph.get() following returned:", {
@@ -291,7 +268,7 @@ export class LegionGraphService {
         keys: data ? Object.keys(data) : [],
       });
 
-      const followList = data?.[cleanAccountId]?.legion?.follow || {};
+      const followList = data?.[cleanAccountId]?.graph?.follow || {};
 
       // Convert to array of account IDs
       const following: FollowerInfo[] = Object.keys(followList).map((id) => ({
@@ -334,11 +311,11 @@ export class LegionGraphService {
       });
 
       const data = await this.graph.get({
-        keys: [`${cleanAccountId}/legion/follow/${cleanTargetAccountId}`],
+        keys: [`${cleanAccountId}/graph/follow/${cleanTargetAccountId}`],
       });
 
       const isFollowing =
-        data?.[cleanAccountId]?.legion?.follow?.[cleanTargetAccountId] !==
+        data?.[cleanAccountId]?.graph?.follow?.[cleanTargetAccountId] !==
         undefined;
 
       console.log("[LegionGraphService] Follow status result:", {
@@ -367,12 +344,12 @@ export class LegionGraphService {
       // Strip network suffix for social.near query
       const cleanAccountId = this.stripNetworkSuffix(accountId);
 
-      // Get following count from direct data
+      // Get following count from direct data (FastData format)
       const followingData = await this.graph.get({
-        keys: [`${cleanAccountId}/legion/follow/**`],
+        keys: [`${cleanAccountId}/graph/follow/**`],
       });
 
-      const followList = followingData?.[cleanAccountId]?.legion?.follow || {};
+      const followList = followingData?.[cleanAccountId]?.graph?.follow || {};
       const followingCount = Object.keys(followList).length;
 
       console.log(

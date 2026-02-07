@@ -155,18 +155,12 @@ export function useFollowUnfollow() {
           result.transaction.methodName,
           {
             data: {
-              [walletAccountId]: {
-                graph: {
-                  follow: {
-                    [targetAccountId]: true,
-                  },
-                },
-              },
+              [`graph/follow/${targetAccountId}`]: "",
             },
           },
           {
             gas: result.transaction.gas,
-            attachedDeposit: "0.001 NEAR",
+            attachedDeposit: "0", // No deposit for FastData
           }
         )
         .send();
@@ -227,18 +221,12 @@ export function useFollowUnfollow() {
           result.transaction.methodName,
           {
             data: {
-              [walletAccountId]: {
-                graph: {
-                  follow: {
-                    [targetAccountId]: null, // null = unfollow/delete
-                  },
-                },
-              },
+              [`graph/follow/${targetAccountId}`]: null, // null = unfollow/delete
             },
           },
           {
             gas: result.transaction.gas,
-            attachedDeposit: "0.001 NEAR",
+            attachedDeposit: "0", // No deposit for FastData
           }
         )
         .send();

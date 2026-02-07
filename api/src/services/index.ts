@@ -12,3 +12,6 @@ export type { RankData, NearConfig, RankTier } from './near';
 
 export { EmailService, EmailContext, EmailLive, EmailMock } from './email';
 export type { EmailResult, SendEmailInput } from './email';
+
+export { SocialService, SocialContext, SocialLive } from './social';
+export type { SocialConfig, FollowerInfo, PaginatedResult } from './social';

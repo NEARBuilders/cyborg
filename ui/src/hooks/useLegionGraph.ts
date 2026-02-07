@@ -62,7 +62,7 @@ async function fetchApi(endpoint: string, options?: RequestInit) {
 // =============================================================================
 
 /**
- * Get followers list for an account
+ * Get followers list for an account (using Legion graph)
  */
 export function useLegionFollowers(accountId: string | undefined, limit = 50, offset = 0) {
   return useQuery({
@@ -80,7 +80,7 @@ export function useLegionFollowers(accountId: string | undefined, limit = 50, of
 }
 
 /**
- * Get following list for an account
+ * Get following list for an account (using Legion graph)
  */
 export function useLegionFollowing(accountId: string | undefined, limit = 50, offset = 0) {
   return useQuery({
@@ -98,7 +98,7 @@ export function useLegionFollowing(accountId: string | undefined, limit = 50, of
 }
 
 /**
- * Check if current user is following target account in the social graph
+ * Check if current user is following target account in the Legion graph
  */
 export function useLegionIsFollowing(accountId: string | undefined, targetAccountId: string | undefined) {
   return useQuery({
@@ -116,16 +116,14 @@ export function useLegionIsFollowing(accountId: string | undefined, targetAccoun
 }
 
 /**
- * Get stats (followers/following counts)
+ * Get stats (followers/following counts) from Legion graph
  */
 export function useLegionStats(accountId: string | undefined) {
   return useQuery({
     queryKey: legionKeys.stats(accountId || ""),
     queryFn: async () => {
       if (!accountId) throw new Error("Account ID required");
-      return fetchApi(
-        `/legion/stats/${accountId}`
-      ) as Promise<{ followers: number; following: number }>;
+      return fetchApi(`/legion/stats/${accountId}`) as Promise<{ followers: number; following: number }>;
     },
     enabled: !!accountId,
     staleTime: 5 * 60 * 1000,
@@ -134,7 +132,7 @@ export function useLegionStats(accountId: string | undefined) {
 }
 
 /**
- * Follow/Unfollow mutation with optimistic updates
+ * Follow/Unfollow mutation with FastData Protocol and optimistic updates
  */
 export function useLegionFollowUnfollow() {
   const queryClient = useQueryClient();
@@ -168,6 +166,7 @@ export function useLegionFollowUnfollow() {
 
       const near = nearAuth.getNearClient();
 
+      // Use the transaction args from API response (includes legion and graph data)
       const tx = await near
         .transaction(walletAccountId)
         .functionCall(
@@ -253,29 +252,11 @@ export function useLegionFollowUnfollow() {
     },
     onSuccess: async (data) => {
       toast.success("Followed!");
-
-      // Invalidate cache on backend for both accounts
-      try {
-        if (data?.targetAccountId) {
-          await fetch("/api/legion/invalidate-cache", {
-            method: "POST",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              accountIds: [data.targetAccountId],
-            }),
-          });
-        }
-      } catch (error) {
-        console.error("[Cache] Failed to invalidate:", error);
-        // Non-critical, so don't show error to user
-      }
     },
-    onSettled: async (data, error, targetAccountId) => {
+    onSettled: async () => {
       // Refetch to ensure consistency
       await queryClient.invalidateQueries({
         queryKey: legionKeys.all,
-        refetchType: "none",
       });
     },
   });
@@ -302,6 +283,7 @@ export function useLegionFollowUnfollow() {
 
       const near = nearAuth.getNearClient();
 
+      // Use the transaction args from API response (includes legion and graph data)
       const tx = await near
         .transaction(walletAccountId)
         .functionCall(
@@ -387,29 +369,11 @@ export function useLegionFollowUnfollow() {
     },
     onSuccess: async (data) => {
       toast.success("Unfollowed!");
-
-      // Invalidate cache on backend for both accounts
-      try {
-        if (data?.targetAccountId) {
-          await fetch("/api/legion/invalidate-cache", {
-            method: "POST",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              accountIds: [data.targetAccountId],
-            }),
-          });
-        }
-      } catch (error) {
-        console.error("[Cache] Failed to invalidate:", error);
-        // Non-critical, so don't show error to user
-      }
     },
     onSettled: async () => {
       // Refetch to ensure consistency
       await queryClient.invalidateQueries({
         queryKey: legionKeys.all,
-        refetchType: "none",
       });
     },
   });

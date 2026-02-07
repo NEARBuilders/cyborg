@@ -39,6 +39,8 @@ export default createPlugin({
     NEAR_RPC_URL: z.string().default("https://rpc.mainnet.near.org"),
     NEAR_LEGION_CONTRACT: z.string().default("ascendant.nearlegion.near"),
     NEAR_INITIATE_CONTRACT: z.string().default("initiate.nearlegion.near"),
+    NEAR_FASTDATA_CONTRACT: z.string().default("contextual.near"),
+    NEAR_FASTDATA_API_URL: z.string().optional(),
   }),
 
   secrets: z.object({
@@ -108,6 +110,9 @@ export default createPlugin({
       console.log("[API] Creating social service...");
       const socialLayer = SocialLive(db, {
         network: "mainnet",
+        rpcUrl: config.variables.NEAR_RPC_URL,
+        fastDataContract: config.variables.NEAR_FASTDATA_CONTRACT || "contextual.near",
+        fastdataApiUrl: config.variables.NEAR_FASTDATA_API_URL,
       });
       const socialService = yield* Effect.provide(SocialContext, socialLayer);
       console.log("[API] Social service initialized");

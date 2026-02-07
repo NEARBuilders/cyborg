@@ -28,12 +28,12 @@ import { sessionQueryOptions } from "../../../lib/session";
 import { apiClient } from "../../../utils/orpc";
 import { Near } from "near-kit";
 import { FollowButton } from "../../../components/ui/follow-button";
+import { LegionFollowButton } from "../../../components/ui/legion-follow-button";
 import { SocialStats } from "../../../components/ui/social-stats";
 import {
-  useFollowers,
-  useFollowing,
-  socialKeys,
-} from "../../../hooks/useSocialGraph";
+  useLegionFollowers,
+  useLegionFollowing,
+} from "../../../hooks/useLegionGraph";
 
 const PROFILE_KEY = "builder-profile";
 
@@ -390,7 +390,7 @@ function ProfilePage() {
         <div className="flex items-center justify-between gap-4">
           <SocialStats accountId={accountId} />
           {!isOwnProfile && (
-            <FollowButton
+            <LegionFollowButton
               accountId={accountId}
               currentUserId={currentAccountId}
             />
@@ -1560,8 +1560,8 @@ interface SocialListProps {
 
 function SocialList({ accountId, type }: SocialListProps) {
   // Call both hooks unconditionally (React hooks rule)
-  const followersData = useFollowers(accountId, 50, 0);
-  const followingData = useFollowing(accountId, 50, 0);
+  const followersData = useLegionFollowers(accountId, 50, 0);
+  const followingData = useLegionFollowing(accountId, 50, 0);
 
   const { data, isLoading, isError } =
     type === "followers" ? followersData : followingData;

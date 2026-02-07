@@ -1,6 +1,6 @@
 import { Skeleton } from "./skeleton";
 import { Users, UserCheck } from "lucide-react";
-import { useFollowers, useFollowing } from "@/hooks/useSocialGraph";
+import { useLegionStats } from "@/hooks/useLegionGraph";
 import { Link } from "@tanstack/react-router";
 
 interface SocialStatsProps {
@@ -9,12 +9,10 @@ interface SocialStatsProps {
 }
 
 export function SocialStats({ accountId, className = "" }: SocialStatsProps) {
-  const { data: followersData, isLoading: isLoadingFollowers } = useFollowers(accountId, 1, 0);
-  const { data: followingData, isLoading: isLoadingFollowing } = useFollowing(accountId, 1, 0);
+  const { data: stats, isLoading } = useLegionStats(accountId);
 
-  const followersCount = followersData?.total || 0;
-  const followingCount = followingData?.total || 0;
-  const isLoading = isLoadingFollowers || isLoadingFollowing;
+  const followersCount = stats?.followers || 0;
+  const followingCount = stats?.following || 0;
 
   if (isLoading) {
     return (
