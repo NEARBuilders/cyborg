@@ -354,12 +354,22 @@ When presenting multiple builders, separate them with horizontal rules (---).
 
 When users ask about finding people, connecting with others, or discovering builders with specific skills/interests, use the available tools to search the builder database and provide helpful recommendations.
 
+**CRITICAL RULE FOR SOCIAL LINKS:**
+When you receive tool results, NEVER include the raw socials object or linktree data in your response. The tool results are already formatted as markdown with proper links. Just present the formatted results to the user. Do NOT try to extract or mention the socials/linktree directly as this will cause [object Object] errors.
+
 **Advanced Search Examples:**
 - "Find people with Twitter" → Use search_by_social with platform="twitter"
 - "Find Telegram users" → Use search_by_social with platform="telegram"
 - "Find React developers" → Use search_by_tags with tags=["react"]
 - "Find people who know defi and smart contracts" → Use search_by_tags with tags=["defi", "smart contracts"] and matchAll=true
-- "Find rust or python developers" → Use search_by_tags with tags=["rust", "python"] and matchAll=false`;
+- "Find rust or python developers" → Use search_by_tags with tags=["rust", "python"] and matchAll=false
+
+**When summarizing search results:**
+- Count the number of results found
+- Mention the search criteria used
+- Highlight key skills or platforms found
+- DO NOT list social platforms in your summary unless explicitly present in the formatted results
+- NEVER reference raw data structures from tool results`;
 
     if (!this.nearService) {
       return basePrompt;
@@ -1304,9 +1314,42 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
 
         const displayName = profile.name || profile.accountId.split(".")[0];
         const tags = profileData?.tags ? Object.keys(profileData.tags) : [];
-        const github = profileData?.linktree?.github;
-        const twitter = profileData?.linktree?.twitter;
-        const website = profileData?.linktree?.website;
+
+        // Safely extract social links from linktree
+        const linktree = profileData?.linktree || {};
+        const socialLinks: string[] = [];
+
+        // Build social links only if they're non-empty strings
+        if (linktree.github && typeof linktree.github === 'string' && linktree.github.trim()) {
+          socialLinks.push(`[GitHub](https://github.com/${linktree.github})`);
+        }
+        if (linktree.twitter && typeof linktree.twitter === 'string' && linktree.twitter.trim()) {
+          socialLinks.push(`[Twitter](https://twitter.com/${linktree.twitter})`);
+        }
+        if (linktree.website && typeof linktree.website === 'string' && linktree.website.trim()) {
+          const url = linktree.website.startsWith('http') ? linktree.website : `https://${linktree.website}`;
+          socialLinks.push(`[Website](${url})`);
+        }
+        if (linktree.telegram && typeof linktree.telegram === 'string' && linktree.telegram.trim()) {
+          socialLinks.push(`[Telegram](https://t.me/${linktree.telegram})`);
+        }
+
+        // Add any other social platforms
+        Object.entries(linktree).forEach(([platform, url]) => {
+          if (
+            platform !== 'github' &&
+            platform !== 'twitter' &&
+            platform !== 'website' &&
+            platform !== 'telegram' &&
+            url &&
+            typeof url === 'string' &&
+            url.trim()
+          ) {
+            const platformName = platform.charAt(0).toUpperCase() + platform.slice(1);
+            const finalUrl = url.startsWith('http') ? url : `https://${url}`;
+            socialLinks.push(`[${platformName}](${finalUrl})`);
+          }
+        });
 
         // Build markdown card for this builder
         let markdown = `### **${roleEmoji} @${profile.accountId}**\n`;
@@ -1331,14 +1374,8 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
           markdown += `**Interests:** ${tags.map(t => `\`${t}\``).join(", ")}\n\n`;
         }
 
-        if (github || twitter || website) {
-          markdown += `**Connect:** `;
-          const links = [];
-          if (github) links.push(`[GitHub](https://github.com/${github})`);
-          if (twitter) links.push(`[Twitter](https://twitter.com/${twitter})`);
-          if (website) links.push(`[Website](${website})`);
-          markdown += links.join(" • ");
-          markdown += "\n";
+        if (socialLinks.length > 0) {
+          markdown += `**Connect:** ${socialLinks.join(" • ")}\n\n`;
         }
 
         return markdown;
@@ -1399,10 +1436,7 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
 
       const displayName = profile.name || params.accountId.split(".")[0];
       const tags = profileData?.tags ? Object.keys(profileData.tags) : [];
-      const github = profileData?.linktree?.github;
-      const twitter = profileData?.linktree?.twitter;
-      const website = profileData?.linktree?.website;
-      const telegram = profileData?.linktree?.telegram;
+      const linktree = profileData?.linktree || {};
       const explorerUrl = `https://explorer.oneverse.near.org/accounts/${params.accountId}?tab=nfts`;
 
       let markdown = `### **${roleEmoji} ${displayName}** | [View Profile](/profile/${params.accountId})\n`;
@@ -1420,11 +1454,39 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
         markdown += `**Interests:** ${tags.map(t => `\`${t}\``).join(", ")}\n\n`;
       }
 
-      const socialLinks = [];
-      if (github) socialLinks.push(`[GitHub](https://github.com/${github})`);
-      if (twitter) socialLinks.push(`[Twitter](https://twitter.com/${twitter})`);
-      if (website) socialLinks.push(`[Website](${website})`);
-      if (telegram) socialLinks.push(`[Telegram](https://t.me/${telegram})`);
+      // Safely build social links
+      const socialLinks: string[] = [];
+      if (linktree.github && typeof linktree.github === 'string' && linktree.github.trim()) {
+        socialLinks.push(`[GitHub](https://github.com/${linktree.github})`);
+      }
+      if (linktree.twitter && typeof linktree.twitter === 'string' && linktree.twitter.trim()) {
+        socialLinks.push(`[Twitter](https://twitter.com/${linktree.twitter})`);
+      }
+      if (linktree.website && typeof linktree.website === 'string' && linktree.website.trim()) {
+        const url = linktree.website.startsWith('http') ? linktree.website : `https://${linktree.website}`;
+        socialLinks.push(`[Website](${url})`);
+      }
+      if (linktree.telegram && typeof linktree.telegram === 'string' && linktree.telegram.trim()) {
+        socialLinks.push(`[Telegram](https://t.me/${linktree.telegram})`);
+      }
+
+      // Add any other social platforms
+      Object.entries(linktree).forEach(([platform, url]) => {
+        if (
+          platform !== 'github' &&
+          platform !== 'twitter' &&
+          platform !== 'website' &&
+          platform !== 'telegram' &&
+          url &&
+          typeof url === 'string' &&
+          url.trim()
+        ) {
+          const platformName = platform.charAt(0).toUpperCase() + platform.slice(1);
+          const finalUrl = url.startsWith('http') ? url : `https://${url}`;
+          socialLinks.push(`[${platformName}](${finalUrl})`);
+        }
+      });
+
       if (socialLinks.length > 0) {
         markdown += `**Connect:** ${socialLinks.join(" • ")}\n\n`;
       }
@@ -1503,9 +1565,7 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
           const profileData = profile?.profileData ? JSON.parse(profile.profileData) : null;
           const displayName = profile?.name || accountId.split(".")[0];
           const tags = profileData?.tags ? Object.keys(profileData.tags) : [];
-          const github = profileData?.linktree?.github;
-          const twitter = profileData?.linktree?.twitter;
-          const website = profileData?.linktree?.website;
+          const linktree = profileData?.linktree || {};
 
           // Use NFT avatar if available
           const avatar = profile?.nftAvatarUrl || profile?.image || profileData?.image?.url ||
@@ -1521,7 +1581,7 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
             roleEmoji,
             description: profile?.description || "",
             tags,
-            socials: { github, twitter, website },
+            socials: linktree,
           };
         })
       );
@@ -1541,10 +1601,39 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
           markdown += `**Interests:** ${builder.tags.map(t => `\`${t}\``).join(", ")}\n\n`;
         }
 
-        const socialLinks = [];
-        if (builder.socials.github) socialLinks.push(`[GitHub](https://github.com/${builder.socials.github})`);
-        if (builder.socials.twitter) socialLinks.push(`[Twitter](https://twitter.com/${builder.socials.twitter})`);
-        if (builder.socials.website) socialLinks.push(`[Website](${builder.socials.website})`);
+        // Safely build social links
+        const socialLinks: string[] = [];
+        if (builder.socials.github && typeof builder.socials.github === 'string' && builder.socials.github.trim()) {
+          socialLinks.push(`[GitHub](https://github.com/${builder.socials.github})`);
+        }
+        if (builder.socials.twitter && typeof builder.socials.twitter === 'string' && builder.socials.twitter.trim()) {
+          socialLinks.push(`[Twitter](https://twitter.com/${builder.socials.twitter})`);
+        }
+        if (builder.socials.website && typeof builder.socials.website === 'string' && builder.socials.website.trim()) {
+          const url = builder.socials.website.startsWith('http') ? builder.socials.website : `https://${builder.socials.website}`;
+          socialLinks.push(`[Website](${url})`);
+        }
+        if (builder.socials.telegram && typeof builder.socials.telegram === 'string' && builder.socials.telegram.trim()) {
+          socialLinks.push(`[Telegram](https://t.me/${builder.socials.telegram})`);
+        }
+
+        // Add any other social platforms
+        Object.entries(builder.socials).forEach(([platform, url]) => {
+          if (
+            platform !== 'github' &&
+            platform !== 'twitter' &&
+            platform !== 'website' &&
+            platform !== 'telegram' &&
+            url &&
+            typeof url === 'string' &&
+            url.trim()
+          ) {
+            const platformName = platform.charAt(0).toUpperCase() + platform.slice(1);
+            const finalUrl = url.startsWith('http') ? url : `https://${url}`;
+            socialLinks.push(`[${platformName}](${finalUrl})`);
+          }
+        });
+
         if (socialLinks.length > 0) {
           markdown += `**Connect:** ${socialLinks.join(" • ")}\n\n`;
         }
