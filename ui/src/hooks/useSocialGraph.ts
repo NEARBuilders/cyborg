@@ -119,6 +119,8 @@ export function useIsFollowing(accountId: string | undefined, targetAccountId: s
     enabled: !!accountId && !!targetAccountId,
     staleTime: 2 * 60 * 1000, // 2 minutes - follow status changes more frequently
     gcTime: 10 * 60 * 1000,
+    // Refetch on window focus to ensure button state is accurate when navigating to profiles
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -175,16 +177,32 @@ export function useFollowUnfollow() {
     },
     onSuccess: async (data) => {
       toast.success("Followed successfully!");
+      const currentAccountId = authClient.near?.getAccountId();
+      if (!currentAccountId) return;
 
-      // Invalidate related queries
+      // Invalidate following list
       await queryClient.invalidateQueries({
-        queryKey: socialKeys.following(data.targetAccountId),
+        queryKey: socialKeys.following(currentAccountId),
       });
-      // Also invalidate isFollowing queries for this target
-      queryClient.invalidateQueries({
-        queryKey: socialKeys.all,
-        refetchType: "none",
+
+      // IMPORTANT: Invalidate isFollowing query to verify the follow actually worked
+      await queryClient.invalidateQueries({
+        queryKey: socialKeys.isFollowing(currentAccountId, data.targetAccountId),
       });
+
+      // After indexer delay, refetch to verify
+      setTimeout(async () => {
+        await queryClient.fetchQuery({
+          queryKey: socialKeys.isFollowing(currentAccountId, data.targetAccountId),
+          queryFn: async () => {
+            const params = new URLSearchParams({
+              account_id: currentAccountId,
+              target_account_id: data.targetAccountId,
+            });
+            return fetchApi(`/social/is-following?${params}`) as Promise<{ isFollowing: boolean }>;
+          },
+        });
+      }, 2000);
     },
     onError: (error) => {
       console.error("Follow error:", error);
@@ -240,16 +258,32 @@ export function useFollowUnfollow() {
     },
     onSuccess: async (data) => {
       toast.success("Unfollowed successfully!");
+      const currentAccountId = authClient.near?.getAccountId();
+      if (!currentAccountId) return;
 
-      // Invalidate related queries
+      // Invalidate following list
       await queryClient.invalidateQueries({
-        queryKey: socialKeys.following(data.targetAccountId),
+        queryKey: socialKeys.following(currentAccountId),
       });
-      // Also invalidate isFollowing queries for this target
-      queryClient.invalidateQueries({
-        queryKey: socialKeys.all,
-        refetchType: "none",
+
+      // IMPORTANT: Invalidate isFollowing query to verify the unfollow actually worked
+      await queryClient.invalidateQueries({
+        queryKey: socialKeys.isFollowing(currentAccountId, data.targetAccountId),
       });
+
+      // After indexer delay, refetch to verify
+      setTimeout(async () => {
+        await queryClient.fetchQuery({
+          queryKey: socialKeys.isFollowing(currentAccountId, data.targetAccountId),
+          queryFn: async () => {
+            const params = new URLSearchParams({
+              account_id: currentAccountId,
+              target_account_id: data.targetAccountId,
+            });
+            return fetchApi(`/social/is-following?${params}`) as Promise<{ isFollowing: boolean }>;
+          },
+        });
+      }, 2000);
     },
     onError: (error) => {
       console.error("Unfollow error:", error);

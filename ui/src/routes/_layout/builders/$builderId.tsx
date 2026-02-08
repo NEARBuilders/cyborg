@@ -117,14 +117,7 @@ function BuilderDetailPage() {
         backgroundImage: backgroundUrl,
         description: profile.description || "A member of the NEAR community.",
         tags: profile.tags ? Object.keys(profile.tags) : ["NEAR Community"],
-        socials: {
-          github:
-            profile.linktree?.github ||
-            builderId.replace(".near", "").toLowerCase(),
-          twitter: profile.linktree?.twitter,
-          website: profile.linktree?.website,
-          telegram: profile.linktree?.telegram,
-        },
+        socials: {},
         projects: [],
         isLegion: false,
         isInitiate: false,

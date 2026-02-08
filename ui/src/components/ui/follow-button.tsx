@@ -1,6 +1,6 @@
 import { Button } from "./button";
 import { UserPlus, UserMinus } from "lucide-react";
-import { useIsFollowing, useFollowUnfollow } from "@/hooks/useSocialGraph";
+import { useFollowers, useFollowUnfollow } from "@/hooks/useSocialGraph";
 
 interface FollowButtonProps {
   accountId: string;
@@ -20,7 +20,10 @@ export function FollowButton({
   className = "",
 }: FollowButtonProps) {
   const isOwnProfile = currentUserId === accountId;
-  const { data: isFollowingData, isLoading: isChecking } = useIsFollowing(currentUserId, accountId);
+
+  // Fetch the viewed profile's followers list (already loaded for display)
+  const { data: followersData } = useFollowers(accountId, 50, 0);
+
   const { follow, unfollow, isPending } = useFollowUnfollow();
 
   // Don't show button for own profile
@@ -37,8 +40,9 @@ export function FollowButton({
     );
   }
 
-  const isFollowing = isFollowingData?.isFollowing || false;
-  const isLoading = isChecking || isPending;
+  // Check if current user is in the viewed profile's followers list
+  const isFollowing = followersData?.accounts?.includes(currentUserId) || false;
+  const isLoading = isPending;
 
   const handleClick = () => {
     if (isFollowing) {

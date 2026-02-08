@@ -8,6 +8,7 @@ import { Skeleton } from "./skeleton";
 import { socialKeys } from "@/hooks/useSocialGraph";
 import { fetchApi } from "@/hooks/useSocialGraph";
 import { useNavigate } from "@tanstack/react-router";
+import { useProfiles } from "@/integrations/near-social-js";
 
 interface SocialModalProps {
   isOpen: boolean;
@@ -55,15 +56,23 @@ export function SocialModal({
   const total = data?.count || 0;
   const hasMore = data?.meta?.has_more || false;
 
+  // Fetch profiles for all accounts to get proper names and images
+  const accountIds = items || [];
+  const { profiles } = useProfiles(accountIds);
+
   // Reset page when modal opens/closes
   useEffect(() => {
     if (isOpen) setPage(0);
   }, [isOpen, type, accountId]);
 
-  // Filter items based on search
-  const filteredItems = items?.filter((accountId) =>
-    accountId.toLowerCase().includes(searchQuery.toLowerCase())
-  ) || [];
+  // Filter items based on search - search both accountId and profile name
+  const filteredItems = items?.filter((accountId) => {
+    const profile = profiles.get(accountId);
+    const name = profile?.name?.toLowerCase() || "";
+    const id = accountId.toLowerCase();
+    const query = searchQuery.toLowerCase();
+    return id.includes(query) || name.includes(query);
+  }) || [];
 
   // Handle account click
   const handleAccountClick = (targetAccountId: string) => {
@@ -132,27 +141,38 @@ export function SocialModal({
             </div>
           ) : (
             <div className="divide-y divide-border/50">
-              {filteredItems.map((accountId) => (
-                <div
-                  key={accountId}
-                  onClick={() => handleAccountClick(accountId)}
-                  className="flex items-center gap-3 px-6 py-4 hover:bg-muted/50 transition-colors cursor-pointer"
-                >
-                  <Avatar className="size-10">
-                    <AvatarFallback className="bg-primary/20 text-primary text-sm font-mono font-bold">
-                      {accountId.slice(0, 2).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-foreground truncate">
-                      {accountId.split(".")[0]}
-                    </p>
-                    <p className="text-sm text-muted-foreground truncate font-mono">
-                      {accountId}
-                    </p>
+              {filteredItems.map((accountId) => {
+                const profile = profiles.get(accountId);
+                const displayName = profile?.name || accountId.split(".")[0];
+                const avatarUrl = profile?.image?.ipfs_cid
+                  ? `https://ipfs.near.social/ipfs/${profile.image.ipfs_cid}`
+                  : profile?.image?.url || undefined;
+
+                return (
+                  <div
+                    key={accountId}
+                    onClick={() => handleAccountClick(accountId)}
+                    className="flex items-center gap-3 px-6 py-4 hover:bg-muted/50 transition-colors cursor-pointer"
+                  >
+                    <Avatar className="size-10">
+                      <AvatarImage src={avatarUrl} />
+                      <AvatarFallback className="bg-primary/20 text-primary text-sm font-mono font-bold">
+                        {displayName.slice(0, 2).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-foreground truncate">
+                        {displayName}
+                      </p>
+                      {profile?.name && (
+                        <p className="text-sm text-muted-foreground truncate font-mono">
+                          {accountId}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useEffect } from "react";
 import { createFileRoute, Outlet, useParams, useNavigate } from "@tanstack/react-router";
 import { BuilderList, type Builder } from "@/components/builders";
 import { useBuildersWithProfiles, useUserRanks } from "@/hooks";
@@ -43,6 +43,24 @@ function BuildersLayout() {
   // Prefetch ranks for all loaded builders so they're cached when viewing detail pages
   const builderAccountIds = useMemo(() => builders.map(b => b.accountId), [builders]);
   useUserRanks(builderAccountIds);
+
+  // Auto-select first builder when page loads and no builderId is specified
+  // Only on desktop (lg breakpoint and above) to avoid locking mobile users
+  useEffect(() => {
+    if (!builderId && !isLoading && builders.length > 0) {
+      // Check if we're on desktop (lg breakpoint is 1024px)
+      const isDesktop = window.innerWidth >= 1024;
+
+      if (isDesktop) {
+        const firstBuilder = builders[0];
+        navigate({
+          to: "/builders/$builderId",
+          params: { builderId: firstBuilder.accountId },
+          replace: true, // Replace the history entry instead of pushing
+        });
+      }
+    }
+  }, [builderId, isLoading, builders, navigate]);
 
   const handleSelectBuilder = (builder: Builder) => {
     navigate({ to: "/builders/$builderId", params: { builderId: builder.accountId } });

@@ -30,12 +30,7 @@ export interface Builder {
   tags: string[];
   description: string;
   projects: Project[];
-  socials: {
-    github?: string;
-    twitter?: string;
-    website?: string;
-    telegram?: string;
-  };
+  socials: Record<string, string>;
   isLegion?: boolean;
   isInitiate?: boolean;
   isNearlegion?: boolean; // holds nearlegion.nfts.tg

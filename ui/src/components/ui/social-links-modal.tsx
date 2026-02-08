@@ -1,14 +1,19 @@
 import { useState, useEffect } from "react";
-import { X } from "lucide-react";
+import { X, Plus, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+
+interface SocialLink {
+  platform: string;
+  url: string;
+}
 
 interface SocialLinksModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (links: { website?: string; github?: string; twitter?: string; telegram?: string }) => void | Promise<void>;
+  onSave: (links: Record<string, string>) => void | Promise<void>;
   isSaving?: boolean;
-  initialLinks?: { website?: string; github?: string; twitter?: string; telegram?: string };
+  initialLinks?: Record<string, string>;
 }
 
 export function SocialLinksModal({
@@ -16,12 +21,12 @@ export function SocialLinksModal({
   onClose,
   onSave,
   isSaving,
-  initialLinks = { website: "", github: "", twitter: "", telegram: "" },
+  initialLinks = {},
 }: SocialLinksModalProps) {
-  const [website, setWebsite] = useState(initialLinks.website || "");
-  const [github, setGithub] = useState(initialLinks.github || "");
-  const [twitter, setTwitter] = useState(initialLinks.twitter || "");
-  const [telegram, setTelegram] = useState(initialLinks.telegram || "");
+  // Convert initial links to array format
+  const [links, setLinks] = useState<SocialLink[]>(
+    Object.entries(initialLinks).map(([platform, url]) => ({ platform, url }))
+  );
   const [isMobile, setIsMobile] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
 
@@ -44,6 +49,13 @@ export function SocialLinksModal({
       document.body.style.overflow = "hidden";
       document.body.style.position = "fixed";
       document.body.style.width = "100%";
+      // Reset links when modal opens
+      setLinks(
+        Object.entries(initialLinks).map(([platform, url]) => ({
+          platform,
+          url,
+        }))
+      );
     }
 
     return () => {
@@ -52,7 +64,7 @@ export function SocialLinksModal({
       document.body.style.position = "";
       document.body.style.width = "";
     };
-  }, [isOpen, isClosing]);
+  }, [isOpen, isClosing, initialLinks]);
 
   const handleClose = () => {
     setIsClosing(true);
@@ -63,12 +75,28 @@ export function SocialLinksModal({
   };
 
   const handleSave = async () => {
-    await onSave({
-      website: website.trim() || undefined,
-      github: github.trim() || undefined,
-      twitter: twitter.trim() || undefined,
-      telegram: telegram.trim() || undefined,
+    // Convert array back to object, filtering out empty entries
+    const linksObject: Record<string, string> = {};
+    links.forEach(({ platform, url }) => {
+      if (platform.trim() && url.trim()) {
+        linksObject[platform.trim()] = url.trim();
+      }
     });
+    await onSave(linksObject);
+  };
+
+  const addLink = () => {
+    setLinks([...links, { platform: "", url: "" }]);
+  };
+
+  const removeLink = (index: number) => {
+    setLinks(links.filter((_, i) => i !== index));
+  };
+
+  const updateLink = (index: number, field: keyof SocialLink, value: string) => {
+    const updated = [...links];
+    updated[index][field] = value;
+    setLinks(updated);
   };
 
   if (!isOpen) return null;
@@ -94,7 +122,7 @@ export function SocialLinksModal({
             ? `w-full max-h-[85vh] rounded-t-2xl transform transition-transform duration-200 ${
                 isClosing ? "translate-y-full" : "translate-y-0"
               }`
-            : `w-full max-w-md rounded-2xl transform transition-all duration-200 ${
+            : `w-full max-w-lg rounded-2xl transform transition-all duration-200 ${
                 isClosing ? "scale-95 opacity-0" : "scale-100 opacity-100"
               }`
         } overflow-hidden flex flex-col`}
@@ -117,60 +145,58 @@ export function SocialLinksModal({
           <div className="space-y-5">
             {/* Info text */}
             <p className="text-sm text-muted-foreground">
-              Update your social links. Changes will be saved to NEAR Social blockchain.
+              Add your social links and websites. Enter the platform name and full URL.
             </p>
 
-            {/* Website */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Website</label>
-              <Input
-                value={website}
-                onChange={(e) => setWebsite(e.target.value)}
-                placeholder="jemartel.dev"
-                className="h-10"
-              />
+            {/* Links list */}
+            <div className="space-y-4">
+              {links.map((link, index) => (
+                <div key={index} className="flex gap-2 items-start">
+                  <div className="flex-1 grid grid-cols-[140px_1fr] gap-2">
+                    {/* Platform name */}
+                    <Input
+                      value={link.platform}
+                      onChange={(e) => updateLink(index, "platform", e.target.value)}
+                      placeholder="Platform"
+                      className="h-10"
+                    />
+                    {/* URL */}
+                    <Input
+                      value={link.url}
+                      onChange={(e) => updateLink(index, "url", e.target.value)}
+                      placeholder="https://..."
+                      className="h-10"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => removeLink(index)}
+                    className="shrink-0 h-10 w-10 text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+              ))}
             </div>
 
-            {/* GitHub */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">GitHub Username</label>
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">github.com/</span>
-                <Input
-                  value={github}
-                  onChange={(e) => setGithub(e.target.value)}
-                  placeholder="Kampouse"
-                  className="h-10 flex-1"
-                />
-              </div>
-            </div>
+            {/* Add link button */}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={addLink}
+              className="w-full"
+            >
+              <Plus className="size-4 mr-2" />
+              Add Link
+            </Button>
 
-            {/* Twitter */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Twitter Username</label>
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">@</span>
-                <Input
-                  value={twitter}
-                  onChange={(e) => setTwitter(e.target.value)}
-                  placeholder="jemartel98"
-                  className="h-10 flex-1"
-                />
-              </div>
-            </div>
-
-            {/* Telegram */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Telegram Username</label>
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">t.me/</span>
-                <Input
-                  value={telegram}
-                  onChange={(e) => setTelegram(e.target.value)}
-                  placeholder="username"
-                  className="h-10 flex-1"
-                />
-              </div>
+            {/* Examples */}
+            <div className="text-xs text-muted-foreground space-y-1 pt-2 border-t border-border/50">
+              <p className="font-medium">Examples:</p>
+              <p>Platform: "Twitter" → URL: "https://twitter.com/username"</p>
+              <p>Platform: "GitHub" → URL: "https://github.com/username"</p>
             </div>
           </div>
         </div>

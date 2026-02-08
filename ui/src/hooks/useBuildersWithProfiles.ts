@@ -78,13 +78,13 @@ export function useBuildersWithProfiles() {
         tags: profile.tags
           ? [...new Set([...Object.keys(profile.tags), ...builder.tags])]
           : builder.tags,
-        // Merge social links from NEAR Social linktree
-        socials: {
-          github: profile.linktree?.github || builder.socials.github,
-          twitter: profile.linktree?.twitter || builder.socials.twitter,
-          website: profile.linktree?.website || builder.socials.website,
-          telegram: profile.linktree?.telegram || builder.socials.telegram,
-        },
+        // Merge social links from NEAR Social linktree, filtering out empty values
+        socials: Object.fromEntries(
+          Object.entries({
+            ...builder.socials,
+            ...(profile.linktree || {}),
+          }).filter(([_, url]) => url && typeof url === "string" && url.trim().length > 0)
+        ),
         // Store the raw NEAR Social profile for reference
         nearSocialProfile: profile,
       };

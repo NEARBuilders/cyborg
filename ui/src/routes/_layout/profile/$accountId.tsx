@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useRouterState } from "@tanstack/react-router";
 import { Social } from "near-social-js";
@@ -16,7 +16,7 @@ import { EditModal, ProjectEditModal } from "../../../components/ui/edit-modal";
 import { SocialLinksModal } from "../../../components/ui/social-links-modal";
 import { Skeleton } from "../../../components/ui/skeleton";
 import { Settings, ArrowLeft } from "lucide-react";
-import { useProfile, usePoke } from "../../../integrations/near-social-js";
+import { useProfile, usePoke, useProfiles } from "../../../integrations/near-social-js";
 import {
   useUserRank,
   useHolderTypes,
@@ -43,12 +43,7 @@ interface BuilderProfileData {
   role?: string;
   tags?: string[];
   projects?: { name: string; description: string; status: string }[];
-  socials?: {
-    github?: string;
-    twitter?: string;
-    website?: string;
-    telegram?: string;
-  };
+  socials?: Record<string, string>;
 }
 
 // Chat state interface (same as in chat-page.tsx)
@@ -189,15 +184,23 @@ function ProfilePage() {
   const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
   const [isSocialLinksModalOpen, setIsSocialLinksModalOpen] = useState(false);
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
+  const [isTagsModalOpen, setIsTagsModalOpen] = useState(false);
   const [editingProjectIndex, setEditingProjectIndex] = useState<number | null>(
     null,
   );
   const [isSavingSocialLinks, setIsSavingSocialLinks] = useState(false);
+  const [isSavingTags, setIsSavingTags] = useState(false);
 
   // Social tab state (followers/following - social media style)
   const [socialTab, setSocialTab] = useState<
     "none" | "followers" | "following"
   >("none");
+
+  // Reset social tab when navigating to different profile
+  useEffect(() => {
+    setSocialTab("none");
+  }, [accountId]);
+
   const [editFormData, setEditFormData] = useState<BuilderProfileData>({
     displayName: "",
     description: "",
@@ -470,7 +473,11 @@ function ProfilePage() {
             <ProfileAbout description={description} />
 
             {/* Skills/Tags */}
-            <ProfileSkills tags={tags} />
+            <ProfileSkills
+              tags={tags}
+              isOwnProfile={isOwnProfile}
+              onEdit={() => setIsTagsModalOpen(true)}
+            />
 
             {/* Projects */}
             <ProfileProjects
@@ -805,6 +812,207 @@ function ProfilePage() {
           }
         }}
       />
+
+      {/* Tags Edit Modal */}
+      <EditModal
+        isOpen={isTagsModalOpen}
+        onClose={() => setIsTagsModalOpen(false)}
+        title="Edit Skills"
+        isSaving={isSavingTags}
+        onSave={async () => {
+          setIsSavingTags(true);
+          try {
+            const nearAuth = authClient.near;
+            if (!nearAuth) {
+              throw new Error("No NEAR wallet connected");
+            }
+
+            const walletAccountId = nearAuth.getAccountId();
+            if (!walletAccountId) {
+              throw new Error("Please connect your NEAR wallet first");
+            }
+
+            // Get the tags being edited (from localProfile if set, otherwise from source)
+            const currentTags = localProfile?.tags || tags;
+
+            // Filter out default tags from what will be saved
+            const filteredTags = currentTags.filter(tag =>
+              !["NEAR Expert", "Developer", "Community Leader"].includes(tag)
+            );
+
+            // Build tags object for NEAR Social (each tag as a key with empty string value)
+            const tagsObject: Record<string, string> = {};
+            filteredTags.forEach((tag) => {
+              tagsObject[tag] = "";
+            });
+
+            // Calculate storage deposit: ~10KB of data per 100 tags, so ~0.01 NEAR per 100 tags
+            // Adding a buffer for safety
+            const storageCost = Math.max(0.01, filteredTags.length * 0.0001).toFixed(4);
+
+            toast.info("Updating profile... please approve transaction");
+
+            // Use near-kit to update profile tags on NEAR Social
+            const near = nearAuth.getNearClient();
+            await near
+              .transaction(walletAccountId)
+              .functionCall(
+                "social.near",
+                "set",
+                {
+                  data: {
+                    [accountId]: {
+                      profile: {
+                        tags: tagsObject,
+                      },
+                    },
+                  },
+                },
+                {
+                  gas: "300 Tgas",
+                  attachedDeposit: `${storageCost} NEAR`,
+                },
+              )
+              .send();
+
+            console.log("Tags updated successfully on NEAR Social");
+
+            setIsTagsModalOpen(false);
+
+            // Update local profile with new tags
+            setLocalProfile((prev) => ({
+              ...prev,
+              tags: filteredTags,
+            }));
+
+            // Invalidate profile to fetch updated data
+            await queryClient.invalidateQueries({
+              queryKey: ["social", "profile", accountId],
+            });
+
+            toast.success("Skills updated on NEAR Social!");
+          } catch (error) {
+            console.error("Save error:", error);
+            toast.error(
+              error instanceof Error ? error.message : "Failed to save skills",
+            );
+          } finally {
+            setIsSavingTags(false);
+          }
+        }}
+      >
+        <TagsEditContent
+          initialTags={localProfile?.tags || tags}
+          onChange={(newTags) => {
+            setLocalProfile((prev) => ({
+              ...prev,
+              tags: newTags,
+            }));
+          }}
+        />
+      </EditModal>
+    </div>
+  );
+}
+
+// Tags Edit Content Component
+function TagsEditContent({
+  initialTags,
+  onChange,
+}: {
+  initialTags: string[];
+  onChange: (tags: string[]) => void;
+}) {
+  const [newTag, setNewTag] = useState("");
+  const [editingTags, setEditingTags] = useState(initialTags);
+
+  // Update editing tags when initialTags changes (modal opens)
+  useEffect(() => {
+    setEditingTags(initialTags);
+  }, [initialTags]);
+
+  // Filter out default NEAR tags from display
+  const filteredTags = editingTags.filter(tag =>
+    !["NEAR Expert", "Developer", "Community Leader"].includes(tag)
+  );
+
+  const handleAddTag = () => {
+    if (newTag.trim() && !filteredTags.includes(newTag.trim())) {
+      const updated = [...editingTags, newTag.trim()];
+      setEditingTags(updated);
+      onChange(updated);
+      setNewTag("");
+    }
+  };
+
+  const handleRemoveTag = (tagToRemove: string) => {
+    const updated = editingTags.filter((t) => t !== tagToRemove);
+    setEditingTags(updated);
+    onChange(updated);
+  };
+
+  return (
+    <div className="space-y-6">
+      <p className="text-sm text-muted-foreground">
+        Add or remove skills from your profile. These will be displayed on your
+        profile page.
+      </p>
+
+      {/* Current Tags */}
+      <div className="space-y-3">
+        <label className="text-sm font-medium text-foreground">
+          Current Skills
+        </label>
+        <div className="flex flex-wrap gap-2">
+          {filteredTags.length > 0 ? (
+            filteredTags.map((tag) => (
+              <span
+                key={tag}
+                className="text-sm bg-muted/60 text-foreground px-3 py-1.5 border border-border/50 flex items-center gap-2 rounded-md"
+              >
+                {tag}
+                <button
+                  type="button"
+                  onClick={() => handleRemoveTag(tag)}
+                  className="text-muted-foreground hover:text-destructive text-xs"
+                >
+                  ✕
+                </button>
+              </span>
+            ))
+          ) : (
+            <p className="text-sm text-muted-foreground">No skills added yet</p>
+          )}
+        </div>
+      </div>
+
+      {/* Add New Tag */}
+      <div className="space-y-3">
+        <label className="text-sm font-medium text-foreground">Add Skill</label>
+        <div className="flex gap-2">
+          <Input
+            value={newTag}
+            onChange={(e) => setNewTag(e.target.value)}
+            placeholder="e.g., React, TypeScript, Design..."
+            onKeyDown={(e) =>
+              e.key === "Enter" && (e.preventDefault(), handleAddTag())
+            }
+            className="flex-1"
+          />
+          <Button
+            type="button"
+            onClick={handleAddTag}
+            disabled={!newTag.trim()}
+          >
+            Add
+          </Button>
+        </div>
+      </div>
+
+      {/* Keyboard hint */}
+      <div className="text-xs text-muted-foreground text-center py-2">
+        Press <kbd className="px-1.5 py-0.5 bg-muted rounded text-muted-foreground font-mono">Enter</kbd> to add
+      </div>
     </div>
   );
 }
@@ -985,14 +1193,34 @@ function LegionRankSection({
   );
 }
 
-function ProfileSkills({ tags }: { tags: string[] }) {
+function ProfileSkills({ tags, isOwnProfile, onEdit }: { tags: string[]; isOwnProfile: boolean; onEdit?: () => void }) {
+  // Filter out default NEAR tags
+  const filteredTags = tags.filter(tag =>
+    !["NEAR Expert", "Developer", "Community Leader"].includes(tag)
+  );
+
+  if (filteredTags.length === 0) {
+    return null;
+  }
+
   return (
     <div className="space-y-3">
-      <h3 className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
-        Skills
-      </h3>
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
+          Skills
+        </h3>
+        {isOwnProfile && onEdit && (
+          <button
+            type="button"
+            className="text-xs text-primary hover:text-primary/80 transition-colors"
+            onClick={onEdit}
+          >
+            Edit
+          </button>
+        )}
+      </div>
       <div className="flex flex-wrap gap-2">
-        {tags.map((tag) => (
+        {filteredTags.map((tag) => (
           <span
             key={tag}
             className="text-sm bg-muted/60 text-foreground px-3 py-1.5 border border-border/50"
@@ -1118,17 +1346,15 @@ function ProfileSocials({
   isOwnProfile,
   onEdit,
 }: {
-  socials: {
-    github?: string;
-    twitter?: string;
-    website?: string;
-    telegram?: string;
-  };
+  socials: Record<string, string>;
   isOwnProfile?: boolean;
   onEdit?: () => void;
 }) {
-  const hasLinks =
-    socials.github || socials.twitter || socials.website || socials.telegram;
+  const linkEntries = Object.entries(socials || {})
+    .filter(([_, url]) => url && typeof url === "string")
+    .map(([platform, url]) => [platform, url as string]);
+
+  const hasLinks = linkEntries.length > 0;
 
   if (!hasLinks && !isOwnProfile) return null;
 
@@ -1150,50 +1376,22 @@ function ProfileSocials({
       </div>
       {hasLinks ? (
         <div className="flex flex-wrap gap-4">
-          {socials.website && (
-            <a
-              href={
-                socials.website.startsWith("http")
-                  ? socials.website
-                  : `https://${socials.website}`
-              }
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-primary hover:text-primary/80 transition-colors font-mono underline underline-offset-4"
-            >
-              {socials.website.replace(/^https?:\/\//, "")}
-            </a>
-          )}
-          {socials.github && (
-            <a
-              href={`https://github.com/${socials.github}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-primary hover:text-primary/80 transition-colors font-mono underline underline-offset-4"
-            >
-              github/{socials.github}
-            </a>
-          )}
-          {socials.twitter && (
-            <a
-              href={`https://twitter.com/${socials.twitter}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-primary hover:text-primary/80 transition-colors font-mono underline underline-offset-4"
-            >
-              @{socials.twitter}
-            </a>
-          )}
-          {socials.telegram && (
-            <a
-              href={`https://t.me/${socials.telegram}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-primary hover:text-primary/80 transition-colors font-mono underline underline-offset-4"
-            >
-              t.me/{socials.telegram}
-            </a>
-          )}
+          {linkEntries.map(([platform, url]) => {
+            // Ensure URL has protocol
+            const href = url.startsWith("http") ? url : `https://${url}`;
+
+            return (
+              <a
+                key={platform}
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-primary hover:text-primary/80 transition-colors font-mono underline underline-offset-4"
+              >
+                {platform}
+              </a>
+            );
+          })}
         </div>
       ) : (
         <p className="text-sm text-muted-foreground italic">
@@ -1336,7 +1534,9 @@ function ProfileEditForm({
       <div className="space-y-4">
         <h4 className="text-sm font-medium text-foreground">Skills</h4>
         <div className="flex flex-wrap gap-2">
-          {formData.tags?.map((tag) => (
+          {formData.tags
+            ?.filter(tag => !["NEAR Expert", "Developer", "Community Leader"].includes(tag))
+            .map((tag) => (
             <span
               key={tag}
               className="text-sm bg-muted/60 text-foreground px-3 py-1.5 border border-border/50 flex items-center gap-2 rounded-md"
@@ -1568,6 +1768,10 @@ function SocialList({ accountId, type }: SocialListProps) {
   // FastData API returns accounts as string[] (not objects)
   const items = data?.accounts;
 
+  // Fetch profiles for all accounts to get proper names and images
+  const accountIds = items || [];
+  const { profiles } = useProfiles(accountIds);
+
   if (isLoading) {
     return (
       <div className="p-4 space-y-3">
@@ -1594,27 +1798,38 @@ function SocialList({ accountId, type }: SocialListProps) {
 
   return (
     <div className="divide-y divide-border/50">
-      {items.map((accountId) => (
-        <Link
-          key={accountId}
-          to={`/profile/${accountId}`}
-          className="flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors block"
-        >
-          <Avatar className="size-10">
-            <AvatarFallback className="bg-primary/20 text-primary text-sm font-mono font-bold">
-              {accountId.slice(0, 2).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0">
-            <p className="font-medium text-foreground truncate">
-              {accountId.split(".")[0]}
-            </p>
-            <p className="text-sm text-muted-foreground truncate font-mono">
-              {item.accountId}
-            </p>
-          </div>
-        </Link>
-      ))}
+      {items.map((accountId) => {
+        const profile = profiles.get(accountId);
+        const displayName = profile?.name || accountId.split(".")[0];
+        const avatarUrl = profile?.image?.ipfs_cid
+          ? `https://ipfs.near.social/ipfs/${profile.image.ipfs_cid}`
+          : profile?.image?.url || undefined;
+
+        return (
+          <Link
+            key={accountId}
+            to={`/profile/${accountId}`}
+            className="flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors block"
+          >
+            <Avatar className="size-10">
+              <AvatarImage src={avatarUrl} />
+              <AvatarFallback className="bg-primary/20 text-primary text-sm font-mono font-bold">
+                {displayName.slice(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-foreground truncate">
+                {displayName}
+              </p>
+              {profile?.name && (
+                <p className="text-sm text-muted-foreground truncate font-mono">
+                  {accountId}
+                </p>
+              )}
+            </div>
+          </Link>
+        );
+      })}
     </div>
   );
 }

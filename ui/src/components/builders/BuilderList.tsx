@@ -227,12 +227,7 @@ export function BuilderList({
               nearSocialProfile: profile,
               hasCustomProfile: hasCustomAvatar,
               hasNearSocialProfile: true,
-              socials: {
-                github: profile.linktree?.github || accountId.replace(".near", "").toLowerCase(),
-                twitter: profile.linktree?.twitter,
-                website: profile.linktree?.website,
-                telegram: profile.linktree?.telegram,
-              },
+              socials: {},
             } as Builder;
           }).filter((b): b is Builder => b !== null);
 

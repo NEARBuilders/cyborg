@@ -124,10 +124,12 @@ export function useLegionIsFollowing(accountId: string | undefined, targetAccoun
       return fetchApi(`/legion/is-following?${params}`) as Promise<{ isFollowing: boolean }>;
     },
     enabled: !!accountId && !!targetAccountId,
-    // Longer staleTime to keep optimistic updates valid and reduce refetches
-    // Data will only refetch after 30 minutes or on window focus
-    staleTime: 30 * 60 * 1000,
-    gcTime: 60 * 60 * 1000,
+    // Shorter staleTime to ensure button state is accurate when navigating to profiles
+    // Will refetch after 2 minutes, but also invalidated on successful follow/unfollow
+    staleTime: 2 * 60 * 1000,
+    gcTime: 5 * 60 * 1000,
+    // Refetch on window focus to ensure state is always up-to-date
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -268,7 +270,6 @@ export function useLegionFollowUnfollow() {
     },
     onSuccess: async (data) => {
       toast.success("Followed!");
-      // Invalidate only list queries and stats, keep isFollowing optimistic update
       const currentAccountId = getCurrentAccountId();
       if (!currentAccountId) return;
 
@@ -290,6 +291,11 @@ export function useLegionFollowUnfollow() {
         queryKey: legionKeys.stats(data.targetAccountId),
       });
 
+      // IMPORTANT: Invalidate isFollowing query to verify the follow actually worked
+      await queryClient.invalidateQueries({
+        queryKey: legionKeys.isFollowing(currentAccountId, data.targetAccountId),
+      });
+
       // After a short delay for the indexer to process, refetch with cache bypass
       setTimeout(async () => {
         // Refetch following list bypassing cache to get fresh data from indexer
@@ -304,6 +310,20 @@ export function useLegionFollowUnfollow() {
             });
             const url = `/legion/following?${params}`;
             return fetchApi(url) as Promise<LegionSocialListResponse>;
+          },
+        });
+
+        // Also refetch isFollowing to verify the state
+        await queryClient.fetchQuery({
+          queryKey: legionKeys.isFollowing(currentAccountId, data.targetAccountId),
+          queryFn: async () => {
+            const params = new URLSearchParams({
+              account_id: currentAccountId,
+              target_account_id: data.targetAccountId,
+              bypass: '1',
+            });
+            const url = `/legion/is-following?${params}`;
+            return fetchApi(url) as Promise<{ isFollowing: boolean }>;
           },
         });
       }, 2000);
@@ -420,7 +440,6 @@ export function useLegionFollowUnfollow() {
     },
     onSuccess: async (data) => {
       toast.success("Unfollowed!");
-      // Invalidate only list queries and stats, keep isFollowing optimistic update
       const currentAccountId = getCurrentAccountId();
       if (!currentAccountId) return;
 
@@ -442,6 +461,11 @@ export function useLegionFollowUnfollow() {
         queryKey: legionKeys.stats(data.targetAccountId),
       });
 
+      // IMPORTANT: Invalidate isFollowing query to verify the unfollow actually worked
+      await queryClient.invalidateQueries({
+        queryKey: legionKeys.isFollowing(currentAccountId, data.targetAccountId),
+      });
+
       // After a short delay for the indexer to process, refetch with cache bypass
       setTimeout(async () => {
         // Refetch following list bypassing cache to get fresh data from indexer
@@ -456,6 +480,20 @@ export function useLegionFollowUnfollow() {
             });
             const url = `/legion/following?${params}`;
             return fetchApi(url) as Promise<LegionSocialListResponse>;
+          },
+        });
+
+        // Also refetch isFollowing to verify the state
+        await queryClient.fetchQuery({
+          queryKey: legionKeys.isFollowing(currentAccountId, data.targetAccountId),
+          queryFn: async () => {
+            const params = new URLSearchParams({
+              account_id: currentAccountId,
+              target_account_id: data.targetAccountId,
+              bypass: '1',
+            });
+            const url = `/legion/is-following?${params}`;
+            return fetchApi(url) as Promise<{ isFollowing: boolean }>;
           },
         });
       }, 2000);

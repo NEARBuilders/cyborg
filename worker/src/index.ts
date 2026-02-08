@@ -435,14 +435,7 @@ app.get("/api/builders/:accountId", async (c) => {
         : tags,
       role,
       projects: [],
-      socials: {
-        github:
-          parsedProfile?.linktree?.github ||
-          accountId.replace(".near", "").toLowerCase(),
-        twitter: parsedProfile?.linktree?.twitter,
-        website: parsedProfile?.linktree?.website,
-        telegram: parsedProfile?.linktree?.telegram,
-      },
+      socials: parsedProfile?.linktree || {},
       isLegion: isAscendant,
       isInitiate: isInitiate,
       isNearlegion: isNearlegion,
@@ -581,14 +574,7 @@ app.get("/api/builders-with-profiles", async (c) => {
           : tags,
         role,
         projects: [],
-        socials: {
-          github:
-            parsedProfile?.linktree?.github ||
-            row.account_id.replace(".near", "").toLowerCase(),
-          twitter: parsedProfile?.linktree?.twitter,
-          website: parsedProfile?.linktree?.website,
-          telegram: parsedProfile?.linktree?.telegram,
-        },
+        socials: parsedProfile?.linktree || {},
         isLegion: row.is_ascendant,
         isInitiate: row.is_initiate,
         isNearlegion: row.is_nearlegion,

@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect } from "react";
+import { Link } from "@tanstack/react-router";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Markdown } from "@/components/ui/markdown";
@@ -11,8 +12,21 @@ import { NearEmailChat, isValidNearAddress } from "@/components/email";
 import { LegionFollowButton } from "@/components/ui/legion-follow-button";
 import { LegionStats } from "@/components/ui/legion-stats";
 import type { Builder } from "@/types/builders";
-import { useLegionFollowers, useLegionFollowing, useLegionStats } from "@/hooks/useLegionGraph";
+import { useLegionFollowers, useLegionFollowing } from "@/hooks/useLegionGraph";
 import { authClient } from "@/lib/auth-client";
+import { useProfiles } from "@/integrations/near-social-js";
+import {
+  Github,
+  Twitter,
+  Send,
+  Globe,
+  MessageCircle,
+  Video,
+  Linkedin,
+  Instagram,
+  Youtube,
+  ExternalLink
+} from "lucide-react";
 
 interface BuilderDetailsProps {
   builder: Builder;
@@ -25,11 +39,17 @@ export function BuilderDetails({ builder }: BuilderDetailsProps) {
   // Tab state (followers/following)
   const [tab, setTab] = useState<"none" | "followers" | "following">("none");
 
-  // Fetch stats for tab counts
-  const { data: stats } = useLegionStats(builder.accountId);
+  // Reset tab when changing profiles
+  useEffect(() => {
+    setTab("none");
+  }, [builder.accountId]);
 
-  const followersCount = stats?.followers ?? 0;
-  const followingCount = stats?.following ?? 0;
+  // Fetch data once for counts - will be cached and reused for list display
+  const followersData = useLegionFollowers(builder.accountId, 50, 0);
+  const followingData = useLegionFollowing(builder.accountId, 50, 0);
+
+  const followersCount = followersData.data?.accounts?.length ?? 0;
+  const followingCount = followingData.data?.accounts?.length ?? 0;
 
   return (
     <div className="flex-1 min-h-0 border border-primary/30 bg-background overflow-y-auto">
@@ -51,79 +71,34 @@ export function BuilderDetails({ builder }: BuilderDetailsProps) {
 
         {/* Stats & Follow Button */}
         <div className="flex items-center justify-between gap-4">
-          <LegionStats
-            accountId={builder.accountId}
-            variant="compact"
+          <LegionStatsInline
+            followersCount={followersCount}
+            followingCount={followingCount}
             onFollowersClick={() => setTab(tab === "followers" ? "none" : "followers")}
             onFollowingClick={() => setTab(tab === "following" ? "none" : "following")}
+            activeTab={tab}
           />
           {currentAccountId && currentAccountId !== builder.accountId && (
-            <LegionFollowButton
-              accountId={builder.accountId}
-              currentUserId={currentAccountId}
-              size="sm"
-            />
+            <div className="mr-2">
+              <LegionFollowButton
+                accountId={builder.accountId}
+                currentUserId={currentAccountId}
+                size="sm"
+              />
+            </div>
           )}
         </div>
 
-        {/* Followers/Following Tabs */}
+        {/* Followers/Following List - only shown when tab is clicked, uses cached data */}
         {tab !== "none" && (
           <div className="space-y-4 p-3 bg-muted/20 border border-border/50 rounded-lg animate-in fade-in slide-in-from-top-2 duration-200">
-            <div className="flex items-center gap-4 border-b border-border/50">
-              <button
-                onClick={() => setTab("followers")}
-                className={`px-3 py-2 text-sm font-medium transition-all relative ${
-                  tab === "followers"
-                    ? "text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <span className="flex items-center gap-1.5">
-                  Followers
-                  <span className={`text-xs px-1.5 py-0.5 rounded-full ${
-                    tab === "followers"
-                      ? "bg-primary/20 text-primary"
-                      : "bg-muted text-muted-foreground"
-                  }`}>
-                    {followersCount}
-                  </span>
-                </span>
-                {tab === "followers" && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary animate-in slide-in-from-left-2 duration-200" />
-                )}
-              </button>
-              <button
-                onClick={() => setTab("following")}
-                className={`px-3 py-2 text-sm font-medium transition-all relative ${
-                  tab === "following"
-                    ? "text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <span className="flex items-center gap-1.5">
-                  Following
-                  <span className={`text-xs px-1.5 py-0.5 rounded-full ${
-                    tab === "following"
-                      ? "bg-primary/20 text-primary"
-                      : "bg-muted text-muted-foreground"
-                  }`}>
-                    {followingCount}
-                  </span>
-                </span>
-                {tab === "following" && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary animate-in slide-in-from-left-2 duration-200" />
-                )}
-              </button>
-              <button
-                onClick={() => setTab("none")}
-                className="ml-auto p-2 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-muted/50"
-                aria-label="Close tabs"
-              >
-                ✕
-              </button>
-            </div>
-
-            <LegionSocialList accountId={builder.accountId} type={tab} />
+            <LegionSocialList
+              accountId={builder.accountId}
+              type={tab}
+              followersData={followersData}
+              followingData={followingData}
+              onClose={() => setTab("none")}
+            />
           </div>
         )}
 
@@ -176,33 +151,44 @@ function BuilderHeader({ builder }: { builder: Builder }) {
 }
 
 function BuilderContact({ builder }: { builder: Builder }) {
+  if (!isValidNearAddress(builder.accountId)) {
+    return null;
+  }
+
   return (
     <div className="space-y-3">
       <h3 className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
         Contact
       </h3>
       <div className="flex flex-wrap gap-3">
-        {isValidNearAddress(builder.accountId) && (
-          <NearEmailChat
-            recipientAccountId={builder.accountId}
-            recipientName={builder.displayName}
-            recipientAvatar={builder.avatar || undefined}
-            variant="default"
-          />
-        )}
+        <NearEmailChat
+          recipientAccountId={builder.accountId}
+          recipientName={builder.displayName}
+          recipientAvatar={builder.avatar || undefined}
+          variant="default"
+        />
       </div>
     </div>
   );
 }
 
 function BuilderSkills({ tags }: { tags: string[] }) {
+  // Filter out default NEAR tags
+  const filteredTags = tags.filter(tag =>
+    !["NEAR Expert", "Developer", "Community Leader"].includes(tag)
+  );
+
+  if (filteredTags.length === 0) {
+    return null;
+  }
+
   return (
     <div className="space-y-3">
       <h3 className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
         Skills
       </h3>
       <div className="flex flex-wrap gap-2">
-        {tags.map((tag) => (
+        {filteredTags.map((tag) => (
           <span
             key={tag}
             className="text-sm bg-muted/60 text-foreground px-3 py-1.5 border border-border/50"
@@ -232,6 +218,10 @@ function BuilderProjects({
   projects: { name: string; description: string; status: string }[];
 }) {
   const [expandedProject, setExpandedProject] = useState<string | null>(null);
+
+  if (projects.length === 0) {
+    return null;
+  }
 
   return (
     <div className="space-y-3">
@@ -293,9 +283,77 @@ function ProjectStatus({ status }: { status: string }) {
 function BuilderSocials({
   socials,
 }: {
-  socials: { github?: string; twitter?: string; website?: string; telegram?: string };
+  socials: Record<string, string>;
 }) {
-  if (!socials.github && !socials.twitter && !socials.website && !socials.telegram) return null;
+  const linkEntries = Object.entries(socials || {})
+    .filter(([_, url]) => url && typeof url === "string")
+    .map(([platform, url]) => [platform, url.trim() as string]);
+
+  if (linkEntries.length === 0) return null;
+
+  // Icon mapping for common platforms
+  const getIcon = (platform: string) => {
+    const lowerPlatform = platform.toLowerCase();
+
+    if (lowerPlatform.includes("github")) return <Github className="size-4" />;
+    if (lowerPlatform.includes("twitter") || lowerPlatform.includes("x.com")) return <Twitter className="size-4" />;
+    if (lowerPlatform.includes("telegram")) return <Send className="size-4" />;
+    if (lowerPlatform.includes("discord")) return <MessageCircle className="size-4" />;
+    if (lowerPlatform.includes("youtube")) return <Youtube className="size-4" />;
+    if (lowerPlatform.includes("linkedin")) return <Linkedin className="size-4" />;
+    if (lowerPlatform.includes("instagram")) return <Instagram className="size-4" />;
+    if (lowerPlatform.includes("website") || lowerPlatform.includes("web")) return <Globe className="size-4" />;
+    if (lowerPlatform.includes("video") || lowerPlatform.includes("zoom") || lowerPlatform.includes("meet")) return <Video className="size-4" />;
+
+    return <ExternalLink className="size-4" />;
+  };
+
+  // Build proper URL based on platform
+  const buildUrl = (platform: string, url: string): string => {
+    const lowerPlatform = platform.toLowerCase();
+    const cleanUrl = url.trim();
+
+    // If already has protocol, return as is
+    if (cleanUrl.match(/^https?:\/\//i)) {
+      return cleanUrl;
+    }
+
+    // Platform-specific URL construction
+    if (lowerPlatform.includes("github")) {
+      // If it's just a username, construct GitHub URL
+      if (!cleanUrl.includes("/") && !cleanUrl.includes(".")) {
+        return `https://github.com/${cleanUrl}`;
+      }
+    }
+    if (lowerPlatform.includes("twitter") || lowerPlatform.includes("x.com")) {
+      if (!cleanUrl.includes("/") && !cleanUrl.includes(".")) {
+        return `https://twitter.com/${cleanUrl}`;
+      }
+    }
+    if (lowerPlatform.includes("linkedin")) {
+      if (!cleanUrl.includes("linkedin.com/")) {
+        return `https://linkedin.com/in/${cleanUrl}`;
+      }
+    }
+    if (lowerPlatform.includes("telegram")) {
+      if (!cleanUrl.includes("t.me/")) {
+        return `https://t.me/${cleanUrl}`;
+      }
+    }
+    if (lowerPlatform.includes("discord")) {
+      if (!cleanUrl.includes("discord.gg") && !cleanUrl.includes("discord.com")) {
+        return `https://discord.gg/${cleanUrl}`;
+      }
+    }
+    if (lowerPlatform.includes("youtube")) {
+      if (!cleanUrl.includes("youtube.com/") && !cleanUrl.includes("youtu.be/")) {
+        return `https://youtube.com/@${cleanUrl}`;
+      }
+    }
+
+    // Default: add https:// if not present
+    return `https://${cleanUrl}`;
+  };
 
   return (
     <div className="space-y-3">
@@ -303,46 +361,22 @@ function BuilderSocials({
         Connect
       </h3>
       <div className="flex flex-wrap gap-4">
-        {socials.website && (
-          <a
-            href={socials.website.startsWith("http") ? socials.website : `https://${socials.website}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-primary hover:text-primary/80 transition-colors font-mono underline underline-offset-4"
-          >
-            {socials.website.replace(/^https?:\/\//, "")}
-          </a>
-        )}
-        {socials.github && (
-          <a
-            href={`https://github.com/${socials.github}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-primary hover:text-primary/80 transition-colors font-mono underline underline-offset-4"
-          >
-            github/{socials.github}
-          </a>
-        )}
-        {socials.twitter && (
-          <a
-            href={`https://twitter.com/${socials.twitter}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-primary hover:text-primary/80 transition-colors font-mono underline underline-offset-4"
-          >
-            @{socials.twitter}
-          </a>
-        )}
-        {socials.telegram && (
-          <a
-            href={`https://t.me/${socials.telegram}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-primary hover:text-primary/80 transition-colors font-mono underline underline-offset-4"
-          >
-            t.me/{socials.telegram}
-          </a>
-        )}
+        {linkEntries.map(([platform, url]) => {
+          const href = buildUrl(platform, url);
+
+          return (
+            <a
+              key={platform}
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-primary hover:text-primary/80 transition-colors font-mono underline underline-offset-4 inline-flex items-center gap-1.5"
+            >
+              {getIcon(platform)}
+              {platform}
+            </a>
+          );
+        })}
       </div>
     </div>
   );
@@ -463,23 +497,68 @@ function NFTGrid({ holdings, accountId }: { holdings: Array<{ contractId: string
 }
 
 // =============================================================================
+// LEGION STATS INLINE COMPONENT (displays counts without fetching)
+// =============================================================================
+
+interface LegionStatsInlineProps {
+  followersCount: number;
+  followingCount: number;
+  onFollowersClick: () => void;
+  onFollowingClick: () => void;
+  activeTab: "none" | "followers" | "following";
+}
+
+function LegionStatsInline({ followersCount, followingCount, onFollowersClick, onFollowingClick, activeTab }: LegionStatsInlineProps) {
+  const isFollowersActive = activeTab === "followers";
+  const isFollowingActive = activeTab === "following";
+
+  return (
+    <div className="flex items-center gap-4 text-sm">
+      <button
+        onClick={onFollowersClick}
+        className={`hover:text-primary transition-colors cursor-pointer ${isFollowersActive ? "text-primary font-semibold" : ""}`}
+      >
+        <span>{followersCount || (isFollowersActive ? "0" : "")}</span>
+        <span className="text-muted-foreground ml-1">followers</span>
+      </button>
+      <span className="text-muted-foreground">·</span>
+      <button
+        onClick={onFollowingClick}
+        className={`hover:text-primary transition-colors cursor-pointer ${isFollowingActive ? "text-primary font-semibold" : ""}`}
+      >
+        <span>{followingCount || (isFollowingActive ? "0" : "")}</span>
+        <span className="text-muted-foreground ml-1">following</span>
+      </button>
+    </div>
+  );
+}
+
+// =============================================================================
 // LEGION SOCIAL LIST COMPONENT
 // =============================================================================
 
 interface LegionSocialListProps {
   accountId: string;
   type: "followers" | "following";
+  followersData: ReturnType<typeof useLegionFollowers>;
+  followingData: ReturnType<typeof useLegionFollowing>;
+  onClose: () => void;
 }
 
-function LegionSocialList({ accountId, type }: LegionSocialListProps) {
-  // Call both hooks unconditionally (React hooks rule)
-  const followersData = useLegionFollowers(accountId, 50, 0);
-  const followingData = useLegionFollowing(accountId, 50, 0);
-
+function LegionSocialList({ accountId, type, followersData, followingData, onClose }: LegionSocialListProps) {
+  // Use passed data (already fetched for counts)
   const { data, isLoading, isError } =
     type === "followers" ? followersData : followingData;
   // FastData API returns accounts as string[] (not objects)
   const items = data?.accounts;
+
+  // Fetch profiles for all accounts to get proper names and images
+  const accountIds = items || [];
+  const { profiles } = useProfiles(accountIds);
+
+  // Get counts for both tabs
+  const followersCount = followersData.data?.accounts?.length ?? 0;
+  const followingCount = followingData.data?.accounts?.length ?? 0;
 
   if (isLoading) {
     return (
@@ -520,29 +599,51 @@ function LegionSocialList({ accountId, type }: LegionSocialListProps) {
   }
 
   return (
-    <div className="divide-y divide-border/50">
-      {items.map((accountId, index) => (
-        <a
-          key={accountId}
-          href={`/builders/${accountId}`}
-          className="flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors block animate-in fade-in slide-in-from-left-2 duration-200"
-          style={{ animationDelay: `${Math.min(index * 30, 200)}ms` }}
-        >
-          <Avatar className="size-10">
-            <AvatarFallback className="bg-primary/20 text-primary text-sm font-mono font-bold">
-              {accountId.slice(0, 2).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0">
-            <p className="font-medium text-foreground truncate">
-              {accountId.split(".")[0]}
-            </p>
-            <p className="text-sm text-muted-foreground truncate font-mono">
-              {accountId}
-            </p>
-          </div>
-        </a>
-      ))}
+    <div className="relative">
+      {/* Close button */}
+      <button
+        onClick={onClose}
+        className="absolute top-2 right-2 p-1 text-muted-foreground hover:text-foreground transition-colors rounded hover:bg-muted/50 z-10"
+        aria-label="Close"
+      >
+        ✕
+      </button>
+      <div className="divide-y divide-border/50">
+        {items.map((accountId, index) => {
+          const profile = profiles.get(accountId);
+          const displayName = profile?.name || accountId.split(".")[0];
+          const avatarUrl = profile?.image?.ipfs_cid
+            ? `https://ipfs.near.social/ipfs/${profile.image.ipfs_cid}`
+            : profile?.image?.url || undefined;
+
+          return (
+            <Link
+              key={accountId}
+              to="/builders/$builderId"
+              params={{ builderId: accountId }}
+              className="flex items-start gap-4 px-4 py-3 hover:bg-muted/50 transition-colors block animate-in fade-in slide-in-from-left-2 duration-200"
+              style={{ animationDelay: `${Math.min(index * 30, 200)}ms` }}
+            >
+              <Avatar className="size-10">
+                <AvatarImage src={avatarUrl} />
+                <AvatarFallback className="bg-primary/20 text-primary text-sm font-mono font-bold">
+                  {displayName.slice(0, 2).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-foreground truncate">
+                  {displayName}
+                </p>
+                {profile?.name && (
+                  <p className="text-sm text-muted-foreground truncate font-mono">
+                    {accountId}
+                  </p>
+                )}
+              </div>
+            </Link>
+          );
+        })}
+      </div>
     </div>
   );
 }

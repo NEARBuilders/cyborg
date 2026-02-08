@@ -450,6 +450,8 @@ export class LegionGraphService {
 
   /**
    * Get Legion follow stats (followers/following counts)
+   * Uses cached D1 data when available for instant counts,
+   * otherwise fetches first page from FastData API
    */
   async getStats(
     accountId: string,
@@ -457,42 +459,69 @@ export class LegionGraphService {
     try {
       // Strip network suffix for contextual.near query
       const cleanAccountId = this.stripNetworkSuffix(accountId);
-
-      // Get both stats from FastData API in parallel
       const apiUrl = "https://fastdata.up.railway.app";
 
+      // Check D1 cache first for instant stats
+      const followersCacheKey = `legion:followers:${cleanAccountId}`;
+      const followingCacheKey = `legion:following:${cleanAccountId}`;
+
+      const [cachedFollowers, cachedFollowing] = await Promise.all([
+        this.getCachedFromD1<{ accountId: string }[]>(followersCacheKey),
+        this.getCachedFromD1<{ accountId: string }[]>(followingCacheKey),
+      ]);
+
+      // If we have cached data, use it for instant stats
+      if (cachedFollowers && cachedFollowing) {
+        const stats = {
+          followers: cachedFollowers.length,
+          following: cachedFollowing.length,
+        };
+        console.log("[LegionGraphService] Stats from cache for", cleanAccountId, stats);
+        return stats;
+      }
+
+      // Otherwise, fetch first page from FastData API with larger limit
       const [followersResponse, followingResponse] = await Promise.all([
-        fetch(`${apiUrl}/v1/social/followers?account_id=${cleanAccountId}&contract_id=contextual.near&limit=1`),
-        fetch(`${apiUrl}/v1/social/following?account_id=${cleanAccountId}&contract_id=contextual.near&limit=1`),
+        fetch(`${apiUrl}/v1/social/followers?account_id=${cleanAccountId}&contract_id=contextual.near&limit=1000`),
+        fetch(`${apiUrl}/v1/social/following?account_id=${cleanAccountId}&contract_id=contextual.near&limit=1000`),
       ]);
 
       let followersCount = 0;
       let followingCount = 0;
 
       if (followersResponse.ok) {
-        const data = await followersResponse.json() as { total?: number };
-        followersCount = data.total || 0;
+        const data = await followersResponse.json() as {
+          accounts?: string[];
+          count: number;
+          meta: { has_more: boolean; next_cursor?: string };
+        };
+        followersCount = data.accounts?.length || 0;
+        // If has_more, there are more followers than we fetched
+        if (data.meta.has_more) {
+          console.log("[LegionGraphService] Followers has more pages, count is at least:", followersCount);
+        }
       } else {
         console.error("[LegionGraphService] Followers API error:", followersResponse.status);
       }
 
       if (followingResponse.ok) {
-        const data = await followingResponse.json() as { total?: number };
-        followingCount = data.total || 0;
+        const data = await followingResponse.json() as {
+          accounts?: string[];
+          count: number;
+          meta: { has_more: boolean; next_cursor?: string };
+        };
+        followingCount = data.accounts?.length || 0;
+        // If has_more, there are more following than we fetched
+        if (data.meta.has_more) {
+          console.log("[LegionGraphService] Following has more pages, count is at least:", followingCount);
+        }
       } else {
         console.error("[LegionGraphService] Following API error:", followingResponse.status);
       }
 
-      console.log(
-        "[LegionGraphService] Stats for",
-        cleanAccountId,
-        "followers:",
-        followersCount,
-        "following:",
-        followingCount,
-      );
-
-      return { followers: followersCount, following: followingCount };
+      const stats = { followers: followersCount, following: followingCount };
+      console.log("[LegionGraphService] Stats from API for", cleanAccountId, stats);
+      return stats;
     } catch (error) {
       console.error("[LegionGraphService] Error fetching legion stats:", error);
       return { followers: 0, following: 0 };
