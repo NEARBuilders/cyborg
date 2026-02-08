@@ -103,6 +103,59 @@ export const tools: OpenAI.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
+      name: "search_by_social",
+      strict: true,
+      description: "Find builders who have specific social media accounts. Search for people with Twitter/X, Telegram, GitHub, Discord, YouTube, LinkedIn, Instagram, or any website URL.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          platform: {
+            type: "string",
+            description: "Social platform to search for. Options: twitter, x, telegram, github, discord, youtube, linkedin, instagram, website, or any custom platform name",
+          },
+          limit: {
+            type: "number",
+            description: "Number of results to return (default: 20, max: 100)",
+          },
+        },
+        required: ["platform"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "search_by_tags",
+      strict: true,
+      description: "Find builders by their skills and interests (tags). Search for people with specific tags like 'react', 'defi', 'nft', 'smart contracts', 'rust', etc.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          tags: {
+            type: "array",
+            items: {
+              type: "string",
+            },
+            description: "Array of tags/skills to search for (e.g., ['react', 'typescript'], ['defi', 'trading'], ['rust', 'smart contracts'])",
+          },
+          matchAll: {
+            type: "boolean",
+            description: "If true, only return builders who have ALL the specified tags. If false, returns builders who have ANY of the tags (default: false)",
+          },
+          limit: {
+            type: "number",
+            description: "Number of results to return (default: 20, max: 100)",
+          },
+        },
+        required: ["tags"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "get_nft_holders",
       strict: true,
       description: "Get holders of a specific NFT contract. Shows account IDs and quantities for NFTs like nearlegion.nfts.tg, ascendant.nearlegion.near, initiate.nearlegion.near, etc.",
@@ -257,6 +310,8 @@ export class AgentService {
 
 **You have access to tools that can:**
 - Search for builders by interests, skills, and what they do
+- Search by social platforms (find people with Twitter/X, Telegram, GitHub, Discord, YouTube, LinkedIn, Instagram, etc.)
+- Search by tags/skills (find people with specific interests like 'react', 'defi', 'nft', 'smart contracts', 'rust', etc.)
 - Get detailed profiles for specific builders (including NFT avatars!)
 - List Legion members by rank (Ascendant, Initiate, Holder)
 - Check member rank tiers
@@ -297,7 +352,14 @@ When presenting multiple builders, separate them with horizontal rules (---).
 - Mention their social links
 - Link to their profile page: [/profile/accountId](/profile/accountId)
 
-When users ask about finding people, connecting with others, or discovering builders with specific skills/interests, use the available tools to search the builder database and provide helpful recommendations.`;
+When users ask about finding people, connecting with others, or discovering builders with specific skills/interests, use the available tools to search the builder database and provide helpful recommendations.
+
+**Advanced Search Examples:**
+- "Find people with Twitter" → Use search_by_social with platform="twitter"
+- "Find Telegram users" → Use search_by_social with platform="telegram"
+- "Find React developers" → Use search_by_tags with tags=["react"]
+- "Find people who know defi and smart contracts" → Use search_by_tags with tags=["defi", "smart contracts"] and matchAll=true
+- "Find rust or python developers" → Use search_by_tags with tags=["rust", "python"] and matchAll=false`;
 
     if (!this.nearService) {
       return basePrompt;
@@ -1055,6 +1117,147 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
   }
 
   /**
+   * Search builders by social media platform
+   */
+  private async searchBySocial(params: {
+    platform: string;
+    limit?: number;
+  }): Promise<string> {
+    const platform = params.platform.toLowerCase().trim();
+    const limit = Math.min(params.limit || 20, 100);
+
+    if (platform.length < 2) {
+      return JSON.stringify({ error: "Platform must be at least 2 characters" });
+    }
+
+    try {
+      console.log(`[searchBySocial] Searching for platform: ${platform}`);
+
+      // Get all profiles and check their linktree/social links
+      const profiles = await this.db
+        .select({
+          accountId: schema.nearSocialProfiles.accountId,
+          name: schema.nearSocialProfiles.name,
+          description: schema.nearSocialProfiles.description,
+          profileData: schema.nearSocialProfiles.profileData,
+          image: schema.nearSocialProfiles.image,
+          nftAvatarUrl: schema.nearSocialProfiles.nftAvatarUrl,
+        })
+        .from(schema.nearSocialProfiles)
+        .limit(500); // Get a reasonable batch to check
+
+      // Filter profiles that have the specified social platform
+      const matchingProfiles = profiles.filter((profile) => {
+        try {
+          const profileData = JSON.parse(profile.profileData);
+          const linktree = profileData?.linktree || {};
+
+          // Check if the platform exists in linktree (case-insensitive)
+          const hasPlatform = Object.keys(linktree).some(
+            (key) => key.toLowerCase() === platform || key.toLowerCase().includes(platform)
+          );
+
+          return hasPlatform && linktree[Object.keys(linktree).find(
+            (key) => key.toLowerCase() === platform || key.toLowerCase().includes(platform)
+          )];
+        } catch {
+          return false;
+        }
+      }).slice(0, limit);
+
+      if (matchingProfiles.length > 0) {
+        return await this.formatBuildersAsMarkdown(
+          matchingProfiles,
+          `builders with ${platform}`,
+          limit
+        );
+      }
+
+      return JSON.stringify({
+        type: "error",
+        message: `No builders found with ${platform}. Try other platforms like twitter, telegram, github, discord, youtube, linkedin, instagram, or website.`,
+      });
+    } catch (error) {
+      console.error("[searchBySocial] Error:", error);
+      return JSON.stringify({ type: "error", message: "Failed to search by social platform. Please try again." });
+    }
+  }
+
+  /**
+   * Search builders by tags/skills
+   */
+  private async searchByTags(params: {
+    tags: string[];
+    matchAll?: boolean;
+    limit?: number;
+  }): Promise<string> {
+    const tags = params.tags.map((t) => t.toLowerCase().trim()).filter((t) => t.length > 0);
+    const matchAll = params.matchAll || false;
+    const limit = Math.min(params.limit || 20, 100);
+
+    if (tags.length === 0) {
+      return JSON.stringify({ error: "At least one tag is required" });
+    }
+
+    try {
+      console.log(`[searchByTags] Searching for tags: ${tags.join(", ")} (matchAll: ${matchAll})`);
+
+      // Get all profiles and check their tags
+      const profiles = await this.db
+        .select({
+          accountId: schema.nearSocialProfiles.accountId,
+          name: schema.nearSocialProfiles.name,
+          description: schema.nearSocialProfiles.description,
+          profileData: schema.nearSocialProfiles.profileData,
+          image: schema.nearSocialProfiles.image,
+          nftAvatarUrl: schema.nearSocialProfiles.nftAvatarUrl,
+        })
+        .from(schema.nearSocialProfiles)
+        .limit(1000); // Get a larger batch for tag matching
+
+      // Filter profiles that match the tag criteria
+      const matchingProfiles = profiles.filter((profile) => {
+        try {
+          const profileData = JSON.parse(profile.profileData);
+          const profileTags = profileData?.tags || {};
+          const profileTagKeys = Object.keys(profileTags).map((t) => t.toLowerCase());
+
+          if (matchAll) {
+            // Must have ALL the specified tags
+            return tags.every((tag) => profileTagKeys.some(
+              (pt) => pt.includes(tag) || tag.includes(pt)
+            ));
+          } else {
+            // Must have AT LEAST ONE of the specified tags
+            return tags.some((tag) => profileTagKeys.some(
+              (pt) => pt.includes(tag) || tag.includes(pt)
+            ));
+          }
+        } catch {
+          return false;
+        }
+      }).slice(0, limit);
+
+      if (matchingProfiles.length > 0) {
+        const matchType = matchAll ? "all of" : "any of";
+        return await this.formatBuildersAsMarkdown(
+          matchingProfiles,
+          `builders with ${matchType}: ${tags.join(", ")}`,
+          limit
+        );
+      }
+
+      return JSON.stringify({
+        type: "error",
+        message: `No builders found with ${tags.join(" or ")}. Try different tags like: react, typescript, defi, nft, rust, smart contracts, trading, gaming, etc.`,
+      });
+    } catch (error) {
+      console.error("[searchByTags] Error:", error);
+      return JSON.stringify({ type: "error", message: "Failed to search by tags. Please try again." });
+    }
+  }
+
+  /**
    * Format builders as markdown cards
    */
   private async formatBuildersAsMarkdown(
@@ -1449,6 +1652,12 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
     switch (name) {
       case "search_builders":
         return this.searchBuilders(args as { query: string; limit?: number });
+
+      case "search_by_social":
+        return this.searchBySocial(args as { platform: string; limit?: number });
+
+      case "search_by_tags":
+        return this.searchByTags(args as { tags: string[]; matchAll?: boolean; limit?: number });
 
       case "get_nft_holders":
         return this.getNftHolders(args as { contractId: string; limit?: number });
