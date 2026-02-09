@@ -19,7 +19,10 @@ import { Route as LayoutProfileAccountIdRouteImport } from './routes/_layout/pro
 import { Route as LayoutBuildersBuilderIdRouteImport } from './routes/_layout/builders/$builderId'
 import { Route as LayoutAuthenticatedSettingsRouteImport } from './routes/_layout/_authenticated/settings'
 import { Route as LayoutAuthenticatedAdminRouteImport } from './routes/_layout/_authenticated/_admin'
+import { Route as LayoutAuthenticatedProjectsIndexRouteImport } from './routes/_layout/_authenticated/projects/index'
 import { Route as LayoutAuthenticatedChatIndexRouteImport } from './routes/_layout/_authenticated/chat/index'
+import { Route as LayoutAuthenticatedProjectsCreateRouteImport } from './routes/_layout/_authenticated/projects/create'
+import { Route as LayoutAuthenticatedProjectsIdRouteImport } from './routes/_layout/_authenticated/projects/$id'
 import { Route as LayoutAuthenticatedKeysKeyRouteImport } from './routes/_layout/_authenticated/keys/$key'
 import { Route as LayoutAuthenticatedAdminDashboardRouteImport } from './routes/_layout/_authenticated/_admin/dashboard'
 
@@ -72,10 +75,28 @@ const LayoutAuthenticatedAdminRoute =
     id: '/_admin',
     getParentRoute: () => LayoutAuthenticatedRoute,
   } as any)
+const LayoutAuthenticatedProjectsIndexRoute =
+  LayoutAuthenticatedProjectsIndexRouteImport.update({
+    id: '/projects/',
+    path: '/projects/',
+    getParentRoute: () => LayoutAuthenticatedRoute,
+  } as any)
 const LayoutAuthenticatedChatIndexRoute =
   LayoutAuthenticatedChatIndexRouteImport.update({
     id: '/chat/',
     path: '/chat/',
+    getParentRoute: () => LayoutAuthenticatedRoute,
+  } as any)
+const LayoutAuthenticatedProjectsCreateRoute =
+  LayoutAuthenticatedProjectsCreateRouteImport.update({
+    id: '/projects/create',
+    path: '/projects/create',
+    getParentRoute: () => LayoutAuthenticatedRoute,
+  } as any)
+const LayoutAuthenticatedProjectsIdRoute =
+  LayoutAuthenticatedProjectsIdRouteImport.update({
+    id: '/projects/$id',
+    path: '/projects/$id',
     getParentRoute: () => LayoutAuthenticatedRoute,
   } as any)
 const LayoutAuthenticatedKeysKeyRoute =
@@ -101,7 +122,10 @@ export interface FileRoutesByFullPath {
   '/profile/$accountId': typeof LayoutProfileAccountIdRoute
   '/dashboard': typeof LayoutAuthenticatedAdminDashboardRoute
   '/keys/$key': typeof LayoutAuthenticatedKeysKeyRoute
+  '/projects/$id': typeof LayoutAuthenticatedProjectsIdRoute
+  '/projects/create': typeof LayoutAuthenticatedProjectsCreateRoute
   '/chat/': typeof LayoutAuthenticatedChatIndexRoute
+  '/projects/': typeof LayoutAuthenticatedProjectsIndexRoute
 }
 export interface FileRoutesByTo {
   '/test-colors': typeof TestColorsRoute
@@ -113,7 +137,10 @@ export interface FileRoutesByTo {
   '/profile/$accountId': typeof LayoutProfileAccountIdRoute
   '/dashboard': typeof LayoutAuthenticatedAdminDashboardRoute
   '/keys/$key': typeof LayoutAuthenticatedKeysKeyRoute
+  '/projects/$id': typeof LayoutAuthenticatedProjectsIdRoute
+  '/projects/create': typeof LayoutAuthenticatedProjectsCreateRoute
   '/chat': typeof LayoutAuthenticatedChatIndexRoute
+  '/projects': typeof LayoutAuthenticatedProjectsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -129,7 +156,10 @@ export interface FileRoutesById {
   '/_layout/profile/$accountId': typeof LayoutProfileAccountIdRoute
   '/_layout/_authenticated/_admin/dashboard': typeof LayoutAuthenticatedAdminDashboardRoute
   '/_layout/_authenticated/keys/$key': typeof LayoutAuthenticatedKeysKeyRoute
+  '/_layout/_authenticated/projects/$id': typeof LayoutAuthenticatedProjectsIdRoute
+  '/_layout/_authenticated/projects/create': typeof LayoutAuthenticatedProjectsCreateRoute
   '/_layout/_authenticated/chat/': typeof LayoutAuthenticatedChatIndexRoute
+  '/_layout/_authenticated/projects/': typeof LayoutAuthenticatedProjectsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -143,7 +173,10 @@ export interface FileRouteTypes {
     | '/profile/$accountId'
     | '/dashboard'
     | '/keys/$key'
+    | '/projects/$id'
+    | '/projects/create'
     | '/chat/'
+    | '/projects/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/test-colors'
@@ -155,7 +188,10 @@ export interface FileRouteTypes {
     | '/profile/$accountId'
     | '/dashboard'
     | '/keys/$key'
+    | '/projects/$id'
+    | '/projects/create'
     | '/chat'
+    | '/projects'
   id:
     | '__root__'
     | '/_layout'
@@ -170,7 +206,10 @@ export interface FileRouteTypes {
     | '/_layout/profile/$accountId'
     | '/_layout/_authenticated/_admin/dashboard'
     | '/_layout/_authenticated/keys/$key'
+    | '/_layout/_authenticated/projects/$id'
+    | '/_layout/_authenticated/projects/create'
     | '/_layout/_authenticated/chat/'
+    | '/_layout/_authenticated/projects/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -250,11 +289,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutAuthenticatedAdminRouteImport
       parentRoute: typeof LayoutAuthenticatedRoute
     }
+    '/_layout/_authenticated/projects/': {
+      id: '/_layout/_authenticated/projects/'
+      path: '/projects'
+      fullPath: '/projects/'
+      preLoaderRoute: typeof LayoutAuthenticatedProjectsIndexRouteImport
+      parentRoute: typeof LayoutAuthenticatedRoute
+    }
     '/_layout/_authenticated/chat/': {
       id: '/_layout/_authenticated/chat/'
       path: '/chat'
       fullPath: '/chat/'
       preLoaderRoute: typeof LayoutAuthenticatedChatIndexRouteImport
+      parentRoute: typeof LayoutAuthenticatedRoute
+    }
+    '/_layout/_authenticated/projects/create': {
+      id: '/_layout/_authenticated/projects/create'
+      path: '/projects/create'
+      fullPath: '/projects/create'
+      preLoaderRoute: typeof LayoutAuthenticatedProjectsCreateRouteImport
+      parentRoute: typeof LayoutAuthenticatedRoute
+    }
+    '/_layout/_authenticated/projects/$id': {
+      id: '/_layout/_authenticated/projects/$id'
+      path: '/projects/$id'
+      fullPath: '/projects/$id'
+      preLoaderRoute: typeof LayoutAuthenticatedProjectsIdRouteImport
       parentRoute: typeof LayoutAuthenticatedRoute
     }
     '/_layout/_authenticated/keys/$key': {
@@ -293,14 +353,21 @@ interface LayoutAuthenticatedRouteChildren {
   LayoutAuthenticatedAdminRoute: typeof LayoutAuthenticatedAdminRouteWithChildren
   LayoutAuthenticatedSettingsRoute: typeof LayoutAuthenticatedSettingsRoute
   LayoutAuthenticatedKeysKeyRoute: typeof LayoutAuthenticatedKeysKeyRoute
+  LayoutAuthenticatedProjectsIdRoute: typeof LayoutAuthenticatedProjectsIdRoute
+  LayoutAuthenticatedProjectsCreateRoute: typeof LayoutAuthenticatedProjectsCreateRoute
   LayoutAuthenticatedChatIndexRoute: typeof LayoutAuthenticatedChatIndexRoute
+  LayoutAuthenticatedProjectsIndexRoute: typeof LayoutAuthenticatedProjectsIndexRoute
 }
 
 const LayoutAuthenticatedRouteChildren: LayoutAuthenticatedRouteChildren = {
   LayoutAuthenticatedAdminRoute: LayoutAuthenticatedAdminRouteWithChildren,
   LayoutAuthenticatedSettingsRoute: LayoutAuthenticatedSettingsRoute,
   LayoutAuthenticatedKeysKeyRoute: LayoutAuthenticatedKeysKeyRoute,
+  LayoutAuthenticatedProjectsIdRoute: LayoutAuthenticatedProjectsIdRoute,
+  LayoutAuthenticatedProjectsCreateRoute:
+    LayoutAuthenticatedProjectsCreateRoute,
   LayoutAuthenticatedChatIndexRoute: LayoutAuthenticatedChatIndexRoute,
+  LayoutAuthenticatedProjectsIndexRoute: LayoutAuthenticatedProjectsIndexRoute,
 }
 
 const LayoutAuthenticatedRouteWithChildren =

@@ -25,6 +25,18 @@ function Layout() {
                 Near legion
               </Link>
               <Link
+                to="/chat"
+                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                chat
+              </Link>
+              <Link
+                to="/projects"
+                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                projects
+              </Link>
+              <Link
                 to="/builders"
                 className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
               >

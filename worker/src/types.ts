@@ -20,6 +20,7 @@ export interface Env {
   NEAR_INITIATE_CONTRACT: string;
   NEAR_ACCOUNT: string;
   BETTER_AUTH_URL?: string;
+  FASTDATA_URL?: string; // Optional FastData API URL (defaults to railway.app if not set)
 
   // Secrets (set via wrangler secret put)
   BETTER_AUTH_SECRET?: string;

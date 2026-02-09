@@ -1773,6 +1773,487 @@ app.post("/api/legion/invalidate-cache", async (c) => {
 });
 
 // =============================================================================
+// PROJECTS (FastData - Client-side signing required)
+// =============================================================================
+
+async function getProjectsContext(c: any, env: Env) {
+  // Initialize database first
+  const db = createDatabase(env.DB);
+
+  // Initialize auth and get session (pass db to query account table)
+  const auth = createAuth(env);
+  const sessionContext = await getSessionFromRequest(auth, c.req.raw, db);
+
+  console.log("[getProjectsContext] Session nearAccountId:", sessionContext?.nearAccountId);
+
+  return {
+    db,
+    nearAccountId: sessionContext?.nearAccountId,
+    role: sessionContext?.role,
+  };
+}
+
+// Create project - prepares transaction for client-side signing
+app.post("/api/projects/create", async (c) => {
+  const ctx = await getProjectsContext(c, c.env);
+
+  if (!ctx.nearAccountId) {
+    return c.json({ error: "Authentication required" }, 401);
+  }
+
+  try {
+    const body = await c.req.json();
+    const { name, description, status } = body;
+
+    if (!name || typeof name !== "string" || name.length === 0 || name.length > 100) {
+      return c.json({ error: "name is required (max 100 characters)" }, 400);
+    }
+
+    if (description && (typeof description !== "string" || description.length > 1000)) {
+      return c.json({ error: "description must be max 1000 characters" }, 400);
+    }
+
+    if (status && !["active", "completed", "archived"].includes(status)) {
+      return c.json({ error: "status must be active, completed, or archived" }, 400);
+    }
+
+    // Generate project ID and build FastData KV args
+    const projectId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const projectStatus = status || "active";
+
+    const transaction = {
+      contractId: "contextual.near",
+      methodName: "__fastdata_kv",
+      args: {
+        [`projects/${projectId}/name`]: name,
+        ...(description ? { [`projects/${projectId}/description`]: description } : {}),
+        [`projects/${projectId}/status`]: projectStatus,
+        [`projects/${projectId}/created`]: now,
+        [`projects/${projectId}/updated`]: now,
+        [`index/project/${projectId}`]: JSON.stringify({
+          type: "project",
+          accountId: ctx.nearAccountId,
+          name,
+          status: projectStatus,
+          createdAt: now,
+        }),
+      },
+      gas: "300000000000000",
+      deposit: "0.01 NEAR",
+    };
+
+    return c.json({
+      id: projectId,
+      nearAccountId: ctx.nearAccountId,
+      name,
+      description: description || null,
+      status: projectStatus,
+      createdAt: now,
+      updatedAt: now,
+      transaction,
+    });
+  } catch (error) {
+    console.error("[API] Create project error:", error);
+    return c.json({ error: "Failed to create project" }, 500);
+  }
+});
+
+// Get projects list (reads from FastData API)
+app.get("/api/projects", async (c) => {
+  const ctx = await getProjectsContext(c, c.env);
+
+  console.log("[PROJECTS] nearAccountId from session:", ctx.nearAccountId);
+
+  if (!ctx.nearAccountId) {
+    return c.json({ error: "Authentication required" }, 401);
+  }
+
+  try {
+    const statusFilter = c.req.query("status");
+    const limit = Math.min(Number(c.req.query("limit") || "50"), 100);
+    const offset = Number(c.req.query("offset") || "0");
+
+    // Use FastData v1 API with correct format
+    const fastdataUrl = new URL(`${c.env.FASTDATA_URL || "https://fastdata.up.railway.app"}/v1/kv/query`);
+    fastdataUrl.searchParams.set("accountId", ctx.nearAccountId);
+    fastdataUrl.searchParams.set("contractId", "contextual.near");
+    fastdataUrl.searchParams.set("key_prefix", "projects");
+    fastdataUrl.searchParams.set("format", "tree");
+    fastdataUrl.searchParams.set("value_format", "json");
+    fastdataUrl.searchParams.set("exclude_null", "true");
+
+    console.log("[PROJECTS] Fetching from FastData:", fastdataUrl.toString());
+
+    // Fetch with retry logic for 502 errors
+    let response: Response;
+    let retries = 3;
+    for (let i = 0; i < retries; i++) {
+      response = await fetch(fastdataUrl.toString(), {
+        signal: AbortSignal.timeout(10000), // 10 second timeout
+      });
+
+      if (response.ok || response.status !== 502) break;
+      console.log(`[PROJECTS] Retry ${i + 1}/${retries} after ${response.status}`);
+      await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1))); // Exponential backoff
+    }
+
+    if (!response || !response.ok) {
+      console.error("[API] FastData query failed:", response?.status);
+      return c.json({ projects: [], pagination: { limit, offset, hasMore: false } });
+    }
+
+    const data = await response.json();
+    console.log("[PROJECTS] FastData response received, tree keys:", Object.keys(data.tree || {}));
+
+    const treeData = data as { tree?: Record<string, Record<string, any>> };
+
+    // Parse projects from tree format
+    const projects: Array<{
+      id: string;
+      nearAccountId: string;
+      name: string;
+      description: string | null;
+      status: "active" | "completed" | "archived";
+      createdAt: string;
+      updatedAt: string;
+    }> = [];
+
+    // Tree format: { tree: { projects: { projectId: { name, description, status, created, updated } } } }
+    const projectsTree = treeData.tree?.projects || {};
+    for (const [projectId, projectData] of Object.entries(projectsTree)) {
+      const { name, description, status, created, updated } = projectData;
+
+      if (!name || !status || !created || !updated) continue;
+
+      // Filter by status if specified
+      if (statusFilter && status !== status) continue;
+
+      projects.push({
+        id: projectId,
+        nearAccountId: ctx.nearAccountId,
+        name,
+        description: description || null,
+        status: status as "active" | "completed" | "archived",
+        createdAt: created,  // FastData returns "created"
+        updatedAt: updated,  // FastData returns "updated"
+      });
+    }
+
+    // Sort by updated date (newest first)
+    projects.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
+    // Apply pagination
+    const hasMore = offset + limit < projects.length;
+    const paginatedProjects = projects.slice(offset, offset + limit);
+
+    console.log("[PROJECTS] Parsed projects:", projects.length, "Returning:", paginatedProjects.length);
+
+    return c.json({
+      projects: paginatedProjects,
+      pagination: { limit, offset, hasMore },
+    });
+  } catch (error) {
+    console.error("[API] Get projects error:", error);
+    return c.json({ error: "Failed to fetch projects" }, 500);
+  }
+});
+
+// Get single project
+app.get("/api/projects/:projectId", async (c) => {
+  const ctx = await getProjectsContext(c, c.env);
+
+  if (!ctx.nearAccountId) {
+    return c.json({ error: "Authentication required" }, 401);
+  }
+
+  try {
+    const projectId = c.req.param("projectId");
+    if (!projectId) {
+      return c.json({ error: "projectId is required" }, 400);
+    }
+
+    // Use FastData v1 API with tree format for structured data
+    const fastdataUrl = new URL(`${c.env.FASTDATA_URL || "https://fastdata.up.railway.app"}/v1/kv/query`);
+    fastdataUrl.searchParams.set("accountId", ctx.nearAccountId);
+    fastdataUrl.searchParams.set("contractId", "contextual.near");
+    fastdataUrl.searchParams.set("key_prefix", `projects/${projectId}`);
+    fastdataUrl.searchParams.set("format", "tree");
+    fastdataUrl.searchParams.set("value_format", "json");
+    fastdataUrl.searchParams.set("exclude_null", "true");
+
+    const response = await fetch(fastdataUrl.toString());
+
+    if (!response.ok) {
+      console.error("[API] FastData query failed:", response.status);
+      return c.json({ error: "Project not found" }, 404);
+    }
+
+    const data = await response.json();
+    const treeData = data as { tree?: Record<string, Record<string, any>> };
+
+    // Extract project data from tree: { tree: { projects: { projectId: { name, status, ... } } } }
+    const projectData = treeData.tree?.projects?.[projectId];
+    if (!projectData) {
+      return c.json({ error: "Project not found" }, 404);
+    }
+
+    const { name, description, status, created, updated } = projectData;
+
+    if (!name || !status || !created || !updated) {
+      return c.json({ error: "Project not found" }, 404);
+    }
+
+    return c.json({
+      id: projectId,
+      nearAccountId: ctx.nearAccountId,
+      name,
+      description: description || null,
+      status: status as "active" | "completed" | "archived",
+      createdAt: created,
+      updatedAt: updated,
+    });
+  } catch (error) {
+    console.error("[API] Get project error:", error);
+    return c.json({ error: "Failed to fetch project" }, 500);
+  }
+});
+
+// Update project - prepares transaction for client-side signing
+app.put("/api/projects/:projectId", async (c) => {
+  const ctx = await getProjectsContext(c, c.env);
+
+  if (!ctx.nearAccountId) {
+    return c.json({ error: "Authentication required" }, 401);
+  }
+
+  try {
+    const projectId = c.req.param("projectId");
+    const body = await c.req.json();
+    const { name, description, status } = body;
+
+    if (!projectId) {
+      return c.json({ error: "projectId is required" }, 400);
+    }
+
+    // Validate inputs
+    if (name !== undefined && (typeof name !== "string" || name.length === 0 || name.length > 100)) {
+      return c.json({ error: "name must be 1-100 characters" }, 400);
+    }
+
+    if (description !== undefined && (typeof description !== "string" || description.length > 1000)) {
+      return c.json({ error: "description must be max 1000 characters" }, 400);
+    }
+
+    if (status !== undefined && !["active", "completed", "archived"].includes(status)) {
+      return c.json({ error: "status must be active, completed, or archived" }, 400);
+    }
+
+    // First, fetch current project data from FastData
+    const fastdataUrl = new URL(`${c.env.FASTDATA_URL || "https://fastdata.up.railway.app"}/v1/kv/query`);
+    fastdataUrl.searchParams.set("accountId", ctx.nearAccountId);
+    fastdataUrl.searchParams.set("contractId", "contextual.near");
+    fastdataUrl.searchParams.set("key_prefix", `projects/${projectId}`);
+    fastdataUrl.searchParams.set("format", "tree");
+    fastdataUrl.searchParams.set("value_format", "json");
+    fastdataUrl.searchParams.set("exclude_null", "true");
+
+    const response = await fetch(fastdataUrl.toString());
+
+    if (!response.ok) {
+      return c.json({ error: "Failed to fetch project" }, 500);
+    }
+
+    const data = await response.json();
+    const treeData = data as { tree?: Record<string, Record<string, any>> };
+
+    // Extract project data from tree
+    const projectData = treeData.tree?.projects?.[projectId];
+    if (!projectData) {
+      return c.json({ error: "Project not found" }, 404);
+    }
+
+    // Get current values or use defaults
+    const currentName = projectData.name;
+    const currentDescription = projectData.description;
+    const currentStatus = projectData.status;
+    const createdAt = projectData.created;
+
+    if (!currentName || !currentStatus) {
+      return c.json({ error: "Project not found" }, 404);
+    }
+
+    // Build update args
+    const now = new Date().toISOString();
+    const updateArgs: Record<string, string | null> = {
+      [`projects/${projectId}/updated`]: now,
+    };
+
+    if (name !== undefined) updateArgs[`projects/${projectId}/name`] = name;
+    if (description !== undefined) {
+      if (description) {
+        updateArgs[`projects/${projectId}/description`] = description;
+      } else {
+        updateArgs[`projects/${projectId}/description`] = null; // Delete if empty
+      }
+    }
+    if (status !== undefined) updateArgs[`projects/${projectId}/status`] = status;
+
+    const transaction = {
+      contractId: "contextual.near",
+      methodName: "__fastdata_kv",
+      args: updateArgs,
+      gas: "300000000000000",
+      deposit: "0.01 NEAR",
+    };
+
+    return c.json({
+      id: projectId,
+      nearAccountId: ctx.nearAccountId,
+      name: name ?? currentName,
+      description: description ?? currentDescription ?? null,
+      status: status ?? currentStatus,
+      createdAt,
+      updatedAt: now,
+      transaction,
+    });
+  } catch (error) {
+    console.error("[API] Update project error:", error);
+    return c.json({ error: "Failed to update project" }, 500);
+  }
+});
+
+// Delete project - prepares transaction for client-side signing
+app.delete("/api/projects/:projectId", async (c) => {
+  const ctx = await getProjectsContext(c, c.env);
+
+  if (!ctx.nearAccountId) {
+    return c.json({ error: "Authentication required" }, 401);
+  }
+
+  try {
+    const projectId = c.req.param("projectId");
+    if (!projectId) {
+      return c.json({ error: "projectId is required" }, 400);
+    }
+
+    // Verify project exists using FastData
+    const fastdataUrl = new URL(`${c.env.FASTDATA_URL || "https://fastdata.up.railway.app"}/v1/kv/query`);
+    fastdataUrl.searchParams.set("accountId", ctx.nearAccountId);
+    fastdataUrl.searchParams.set("contractId", "contextual.near");
+    fastdataUrl.searchParams.set("key_prefix", `projects/${projectId}`);
+    fastdataUrl.searchParams.set("format", "tree");
+    fastdataUrl.searchParams.set("value_format", "json");
+    fastdataUrl.searchParams.set("exclude_null", "true");
+
+    const response = await fetch(fastdataUrl.toString());
+
+    if (!response.ok) {
+      return c.json({ error: "Failed to fetch project" }, 500);
+    }
+
+    const data = await response.json();
+    const treeData = data as { tree?: Record<string, Record<string, any>> };
+
+    // Check if project exists
+    const projectData = treeData.tree?.projects?.[projectId];
+    if (!projectData || !projectData.name) {
+      return c.json({ error: "Project not found" }, 404);
+    }
+
+    // Build delete args (set all to null to delete)
+    const deleteArgs: Record<string, string | null> = {
+      [`projects/${projectId}/name`]: null,
+      [`projects/${projectId}/description`]: null,
+      [`projects/${projectId}/status`]: null,
+      [`projects/${projectId}/created`]: null,
+      [`projects/${projectId}/updated`]: null,
+      [`index/project/${projectId}`]: null,
+    };
+
+    const transaction = {
+      contractId: "contextual.near",
+      methodName: "__fastdata_kv",
+      args: deleteArgs,
+      gas: "300000000000000",
+      deposit: "0.01 NEAR",
+    };
+
+    return c.json({
+      success: true,
+      transaction,
+    });
+  } catch (error) {
+    console.error("[API] Delete project error:", error);
+    return c.json({ error: "Failed to delete project" }, 500);
+  }
+});
+
+// Get project KV entries (for displaying additional key-value data)
+app.get("/api/projects/:projectId/kv", async (c) => {
+  const ctx = await getProjectsContext(c, c.env);
+
+  if (!ctx.nearAccountId) {
+    return c.json({ error: "Authentication required" }, 401);
+  }
+
+  try {
+    const projectId = c.req.param("projectId");
+    const limit = Math.min(Number(c.req.query("limit") || "50"), 100);
+
+    if (!projectId) {
+      return c.json({ error: "projectId is required" }, 400);
+    }
+
+    // Query all keys for this project prefix (excluding the main project fields)
+    const fastdataUrl = new URL(`${c.env.FASTDATA_URL || "https://fastdata.up.railway.app"}/v1/kv/query`);
+    fastdataUrl.searchParams.set("accountId", ctx.nearAccountId);
+    fastdataUrl.searchParams.set("contractId", "contextual.near");
+    fastdataUrl.searchParams.set("key_prefix", `projects/${projectId}`);
+    fastdataUrl.searchParams.set("format", "tree");
+    fastdataUrl.searchParams.set("value_format", "json");
+    fastdataUrl.searchParams.set("exclude_null", "true");
+
+    const response = await fetch(fastdataUrl.toString());
+
+    if (!response.ok) {
+      console.error("[API] FastData query failed:", response.status);
+      return c.json({ entries: [] });
+    }
+
+    const data = await response.json();
+    const treeData = data as { tree?: Record<string, Record<string, any>> };
+
+    // Extract project data
+    const projectData = treeData.tree?.projects?.[projectId];
+    if (!projectData) {
+      return c.json({ entries: [] });
+    }
+
+    // Filter out the standard project fields, return only custom KV data
+    const standardFields = ["name", "description", "status", "created", "updated"];
+    const entries: Array<{ projectId: string; key: string; value: string; createdAt: string; updatedAt: string }> = [];
+
+    for (const [key, value] of Object.entries(projectData)) {
+      if (!standardFields.includes(key)) {
+        entries.push({
+          projectId,
+          key,
+          value: String(value),
+          createdAt: projectData.created || new Date().toISOString(),
+          updatedAt: projectData.updated || new Date().toISOString(),
+        });
+      }
+    }
+
+    return c.json({ entries: entries.slice(0, limit) });
+  } catch (error) {
+    console.error("[API] Get project KV error:", error);
+    return c.json({ error: "Failed to fetch project KV data" }, 500);
+  }
+});
+
+// =============================================================================
 // STATIC ASSETS (serve UI from same domain as auth)
 // =============================================================================
 

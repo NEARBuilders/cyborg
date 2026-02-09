@@ -28,6 +28,52 @@ const KeyValueSchema = z.object({
   updatedAt: z.iso.datetime(),
 });
 
+const ProjectSchema = z.object({
+  id: z.string(),
+  nearAccountId: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  status: z.enum(["active", "completed", "archived"]),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+
+const ProjectWithTransactionSchema = z.object({
+  id: z.string(),
+  nearAccountId: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  status: z.enum(["active", "completed", "archived"]),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+  transaction: z.object({
+    contractId: z.string(),
+    methodName: z.string(),
+    args: z.record(z.union([z.string(), z.null()])),
+    gas: z.string(),
+    deposit: z.string(),
+  }),
+});
+
+const ProjectDeleteWithTransactionSchema = z.object({
+  success: z.boolean(),
+  transaction: z.object({
+    contractId: z.string(),
+    methodName: z.string(),
+    args: z.record(z.union([z.string(), z.null()])),
+    gas: z.string(),
+    deposit: z.string(),
+  }),
+});
+
+const ProjectKvSchema = z.object({
+  projectId: z.string(),
+  key: z.string(),
+  value: z.string(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+
 const StreamChunkSchema = z.object({
   content: z.string(),
 });
@@ -133,6 +179,7 @@ export const contract = oc.router({
         conversations: z.number(),
         messages: z.number(),
         kvEntries: z.number(),
+        projects: z.number(),
       }),
     )
     .errors(CommonPluginErrors),
@@ -410,6 +457,140 @@ export const contract = oc.router({
       z.object({
         isFollowing: z.boolean(),
       })
+    )
+    .errors(CommonPluginErrors),
+
+  // ===========================================================================
+  // PROJECTS
+  // ===========================================================================
+
+  createProject: oc
+    .route({ method: "POST", path: "/projects" })
+    .input(
+      z.object({
+        name: z.string().min(1).max(100),
+        description: z.string().max(1000).optional(),
+        status: z.enum(["active", "completed", "archived"]).optional(),
+      }),
+    )
+    .output(ProjectWithTransactionSchema)
+    .errors(CommonPluginErrors),
+
+  getProjects: oc
+    .route({ method: "GET", path: "/projects" })
+    .input(
+      z.object({
+        status: z.enum(["active", "completed", "archived"]).optional(),
+        limit: z.number().int().min(1).max(100).default(50),
+        offset: z.number().int().min(0).default(0),
+      }),
+    )
+    .output(
+      z.object({
+        projects: z.array(ProjectSchema),
+        pagination: z.object({
+          limit: z.number(),
+          offset: z.number(),
+          hasMore: z.boolean(),
+        }),
+      }),
+    )
+    .errors(CommonPluginErrors),
+
+  getProject: oc
+    .route({ method: "GET", path: "/projects/{id}" })
+    .input(
+      z.object({
+        id: z.string().min(1),
+      }),
+    )
+    .output(ProjectSchema)
+    .errors(CommonPluginErrors),
+
+  updateProject: oc
+    .route({ method: "PUT", path: "/projects/{id}" })
+    .input(
+      z.object({
+        id: z.string().min(1),
+        name: z.string().min(1).max(100).optional(),
+        description: z.string().max(1000).optional(),
+        status: z.enum(["active", "completed", "archived"]).optional(),
+      }),
+    )
+    .output(ProjectWithTransactionSchema)
+    .errors(CommonPluginErrors),
+
+  deleteProject: oc
+    .route({ method: "DELETE", path: "/projects/{id}" })
+    .input(
+      z.object({
+        id: z.string().min(1),
+      }),
+    )
+    .output(ProjectDeleteWithTransactionSchema)
+    .errors(CommonPluginErrors),
+
+  setProjectKv: oc
+    .route({ method: "POST", path: "/projects/{projectId}/kv" })
+    .input(
+      z.object({
+        projectId: z.string().min(1),
+        key: z
+          .string()
+          .min(1)
+          .max(256)
+          .regex(/^[a-zA-Z0-9_\-\.\/]+$/, "Key must be alphanumeric with _ - . /"),
+        value: z.string().max(100000),
+      }),
+    )
+    .output(
+      z.object({
+        projectId: z.string(),
+        key: z.string(),
+        value: z.string(),
+        createdAt: z.iso.datetime(),
+        updatedAt: z.iso.datetime(),
+        transaction: z.object({
+          contractId: z.string(),
+          methodName: z.string(),
+          args: z.record(z.union([z.string(), z.null()])),
+          gas: z.string(),
+          deposit: z.string(),
+        }),
+      })
+    )
+    .errors(CommonPluginErrors),
+
+  getProjectKv: oc
+    .route({ method: "GET", path: "/projects/{projectId}/kv/{key}" })
+    .input(
+      z.object({
+        projectId: z.string().min(1),
+        key: z.string().min(1).max(256),
+      }),
+    )
+    .output(ProjectKvSchema)
+    .errors(CommonPluginErrors),
+
+  listProjectKv: oc
+    .route({ method: "GET", path: "/projects/{projectId}/kv" })
+    .input(
+      z.object({
+        projectId: z.string().min(1),
+        prefix: z.string().optional(),
+        limit: z.number().int().min(1).max(100).default(50),
+        offset: z.number().int().min(0).default(0),
+      }),
+    )
+    .output(
+      z.object({
+        entries: z.array(ProjectKvSchema),
+        pagination: z.object({
+          limit: z.number(),
+          offset: z.number(),
+          hasMore: z.boolean(),
+        }),
+      }),
     )
     .errors(CommonPluginErrors),
 });

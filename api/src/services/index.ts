@@ -15,3 +15,6 @@ export type { EmailResult, SendEmailInput } from './email';
 
 export { SocialService, SocialContext, SocialLive } from './social';
 export type { SocialConfig, FollowerInfo, PaginatedResult } from './social';
+
+export { ProjectsService, ProjectsContext, ProjectsLive } from './projects';
+export type { ProjectData, ProjectKvData, PaginatedProjects } from './projects';

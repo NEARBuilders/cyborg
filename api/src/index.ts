@@ -3,7 +3,7 @@ import { Effect } from "every-plugin/effect";
 import type { Scope } from "every-plugin/effect";
 import { ORPCError } from "every-plugin/orpc";
 import { z } from "every-plugin/zod";
-import { and, eq, count, desc } from "drizzle-orm";
+import { and, eq, count, desc, like } from "drizzle-orm";
 import { contract } from "./contract";
 import * as schema from "./db/schema";
 import { DatabaseContext, DatabaseLive } from "./db";
@@ -21,6 +21,9 @@ import {
   SocialService,
   SocialContext,
   SocialLive,
+  ProjectsService,
+  ProjectsContext,
+  ProjectsLive,
 } from "./services";
 import type { Database as DrizzleDatabase } from "./db";
 import { handleBuildersRequest } from "./builders";
@@ -31,6 +34,7 @@ type PluginDeps = {
   nearService: NearService | null;
   emailService: EmailService | null;
   socialService: SocialService | null;
+  projectsService: ProjectsService | null;
 };
 export default createPlugin({
   variables: z.object({
@@ -117,6 +121,17 @@ export default createPlugin({
       const socialService = yield* Effect.provide(SocialContext, socialLayer);
       console.log("[API] Social service initialized");
 
+      // Initialize projects service
+      console.log("[API] Creating projects service...");
+      const projectsLayer = ProjectsLive(db, {
+        network: "mainnet",
+        rpcUrl: config.variables.NEAR_RPC_URL,
+        fastDataContract: config.variables.NEAR_FASTDATA_CONTRACT || "contextual.near",
+        fastdataApiUrl: config.variables.NEAR_FASTDATA_API_URL,
+      });
+      const projectsService = yield* Effect.provide(ProjectsContext, projectsLayer);
+      console.log("[API] Projects service initialized");
+
       console.log("[API] Plugin initialized successfully");
 
       return {
@@ -125,6 +140,7 @@ export default createPlugin({
         nearService,
         emailService,
         socialService,
+        projectsService,
       };
     }).pipe(
       Effect.tapError((error: unknown) =>
@@ -147,7 +163,7 @@ export default createPlugin({
     }),
 
   createRouter: (context, builder) => {
-    const { agentService, db, nearService, emailService, socialService } = context;
+    const { agentService, db, nearService, emailService, socialService, projectsService } = context;
     const isDev = process.env.NODE_ENV !== "production";
 
     const requireAuth = builder.middleware(async ({ context, next }) => {
@@ -248,6 +264,7 @@ export default createPlugin({
             conversations: conversationCount?.value ?? 0,
             messages: messageCount?.value ?? 0,
             kvEntries: kvCount?.value ?? 0,
+            projects: 0, // Projects stored on blockchain, not in DB
           };
         }),
 
@@ -673,6 +690,324 @@ export default createPlugin({
 
         return { isFollowing };
       }),
+
+      // ===========================================================================
+      // PROJECTS (FastData - client-side signing required)
+      // ===========================================================================
+
+      createProject: builder.createProject
+        .use(requireAuth)
+        .handler(async ({ input, context }) => {
+          if (!projectsService) {
+            throw new ORPCError("SERVICE_UNAVAILABLE", {
+              message: "Projects service not available",
+            });
+          }
+
+          const result = await projectsService.prepareCreateProjectTransaction(
+            context.nearAccountId,
+            {
+              name: input.name,
+              description: input.description,
+              status: input.status || "active",
+            }
+          );
+
+          if (!result.success || !result.transaction) {
+            throw new ORPCError("INTERNAL_SERVER_ERROR", {
+              message: result.error || "Failed to prepare transaction",
+            });
+          }
+
+          // Return transaction for client-side signing
+          return {
+            id: result.projectId!,
+            nearAccountId: context.nearAccountId,
+            name: input.name,
+            description: input.description || null,
+            status: input.status || "active",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            transaction: result.transaction,
+          };
+        }),
+
+      getProjects: builder.getProjects
+        .use(requireAuth)
+        .handler(async ({ input, context }) => {
+          if (!projectsService) {
+            return {
+              projects: [],
+              pagination: { limit: input.limit, offset: input.offset, hasMore: false },
+            };
+          }
+
+          const projects = await projectsService.getProjects(
+            context.nearAccountId,
+            input.status
+          );
+
+          // Apply pagination
+          const hasMore = input.offset + input.limit < projects.length;
+          const paginatedProjects = projects.slice(input.offset, input.offset + input.limit);
+
+          return {
+            projects: paginatedProjects.map((p) => ({
+              id: p.id,
+              nearAccountId: context.nearAccountId,
+              name: p.name,
+              description: p.description || null,
+              status: p.status,
+              createdAt: p.createdAt,
+              updatedAt: p.updatedAt,
+            })),
+            pagination: {
+              limit: input.limit,
+              offset: input.offset,
+              hasMore,
+            },
+          };
+        }),
+
+      getProject: builder.getProject
+        .use(requireAuth)
+        .handler(async ({ input, context }) => {
+          if (!projectsService) {
+            throw new ORPCError("SERVICE_UNAVAILABLE", {
+              message: "Projects service not available",
+            });
+          }
+
+          const project = await projectsService.getProject(context.nearAccountId, input.id);
+
+          if (!project) {
+            throw new ORPCError("NOT_FOUND", {
+              message: "Project not found",
+            });
+          }
+
+          return {
+            id: project.id,
+            nearAccountId: context.nearAccountId,
+            name: project.name,
+            description: project.description || null,
+            status: project.status,
+            createdAt: project.createdAt,
+            updatedAt: project.updatedAt,
+          };
+        }),
+
+      updateProject: builder.updateProject
+        .use(requireAuth)
+        .handler(async ({ input, context }) => {
+          if (!projectsService) {
+            throw new ORPCError("SERVICE_UNAVAILABLE", {
+              message: "Projects service not available",
+            });
+          }
+
+          // First, get the existing project
+          const existing = await projectsService.getProject(context.nearAccountId, input.id);
+
+          if (!existing) {
+            throw new ORPCError("NOT_FOUND", {
+              message: "Project not found",
+            });
+          }
+
+          // Prepare update transaction
+          const result = await projectsService.prepareUpdateProjectTransaction(
+            context.nearAccountId,
+            {
+              id: input.id,
+              name: input.name ?? existing.name,
+              description: input.description ?? existing.description,
+              status: input.status ?? existing.status,
+              createdAt: existing.createdAt,
+              updatedAt: existing.updatedAt,
+            }
+          );
+
+          if (!result.success || !result.transaction) {
+            throw new ORPCError("INTERNAL_SERVER_ERROR", {
+              message: result.error || "Failed to prepare transaction",
+            });
+          }
+
+          // Return transaction for client-side signing
+          return {
+            id: input.id,
+            nearAccountId: context.nearAccountId,
+            name: input.name ?? existing.name,
+            description: input.description ?? existing.description ?? null,
+            status: input.status ?? existing.status,
+            createdAt: existing.createdAt,
+            updatedAt: new Date().toISOString(),
+            transaction: result.transaction,
+          };
+        }),
+
+      deleteProject: builder.deleteProject
+        .use(requireAuth)
+        .handler(async ({ input, context }) => {
+          if (!projectsService) {
+            throw new ORPCError("SERVICE_UNAVAILABLE", {
+              message: "Projects service not available",
+            });
+          }
+
+          // Verify project exists
+          const existing = await projectsService.getProject(context.nearAccountId, input.id);
+
+          if (!existing) {
+            throw new ORPCError("NOT_FOUND", {
+              message: "Project not found",
+            });
+          }
+
+          const result = await projectsService.prepareDeleteProjectTransaction(
+            context.nearAccountId,
+            input.id
+          );
+
+          if (!result.success || !result.transaction) {
+            throw new ORPCError("INTERNAL_SERVER_ERROR", {
+              message: result.error || "Failed to prepare transaction",
+            });
+          }
+
+          // Return transaction for client-side signing
+          return {
+            success: true,
+            transaction: result.transaction,
+          };
+        }),
+
+      setProjectKv: builder.setProjectKv
+        .use(requireAuth)
+        .handler(async ({ input, context }) => {
+          if (!projectsService) {
+            throw new ORPCError("SERVICE_UNAVAILABLE", {
+              message: "Projects service not available",
+            });
+          }
+
+          // Verify project exists
+          const existing = await projectsService.getProject(context.nearAccountId, input.projectId);
+
+          if (!existing) {
+            throw new ORPCError("NOT_FOUND", {
+              message: "Project not found",
+            });
+          }
+
+          const result = await projectsService.prepareSetProjectKvTransaction(
+            context.nearAccountId,
+            input.projectId,
+            input.key,
+            input.value
+          );
+
+          if (!result.success || !result.transaction) {
+            throw new ORPCError("INTERNAL_SERVER_ERROR", {
+              message: result.error || "Failed to prepare transaction",
+            });
+          }
+
+          // Return transaction for client-side signing
+          return {
+            projectId: input.projectId,
+            key: input.key,
+            value: input.value,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            transaction: result.transaction,
+          };
+        }),
+
+      getProjectKv: builder.getProjectKv
+        .use(requireAuth)
+        .handler(async ({ input, context }) => {
+          if (!projectsService) {
+            throw new ORPCError("SERVICE_UNAVAILABLE", {
+              message: "Projects service not available",
+            });
+          }
+
+          // Verify project exists
+          const existing = await projectsService.getProject(context.nearAccountId, input.projectId);
+
+          if (!existing) {
+            throw new ORPCError("NOT_FOUND", {
+              message: "Project not found",
+            });
+          }
+
+          const kvData = await projectsService.getProjectKv(
+            context.nearAccountId,
+            input.projectId,
+            input.key
+          );
+
+          if (!kvData) {
+            throw new ORPCError("NOT_FOUND", {
+              message: "Key not found",
+            });
+          }
+
+          return {
+            projectId: kvData.projectId,
+            key: kvData.key,
+            value: kvData.value,
+            createdAt: kvData.createdAt,
+            updatedAt: kvData.updatedAt,
+          };
+        }),
+
+      listProjectKv: builder.listProjectKv
+        .use(requireAuth)
+        .handler(async ({ input, context }) => {
+          if (!projectsService) {
+            return {
+              entries: [],
+              pagination: { limit: input.limit, offset: input.offset, hasMore: false },
+            };
+          }
+
+          // Verify project exists
+          const existing = await projectsService.getProject(context.nearAccountId, input.projectId);
+
+          if (!existing) {
+            throw new ORPCError("NOT_FOUND", {
+              message: "Project not found",
+            });
+          }
+
+          const entries = await projectsService.listProjectKv(
+            context.nearAccountId,
+            input.projectId,
+            input.prefix
+          );
+
+          // Apply pagination
+          const hasMore = input.offset + input.limit < entries.length;
+          const paginatedEntries = entries.slice(input.offset, input.offset + input.limit);
+
+          return {
+            entries: paginatedEntries.map((e) => ({
+              projectId: e.projectId,
+              key: e.key,
+              value: e.value,
+              createdAt: e.createdAt,
+              updatedAt: e.updatedAt,
+            })),
+            pagination: {
+              limit: input.limit,
+              offset: input.offset,
+              hasMore,
+            },
+          };
+        }),
     };
   },
 });

@@ -6,6 +6,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouterState } from "@tanstack/react-router";
 import { toast } from "sonner";
+import { HelpCircle } from "lucide-react";
 import {
   streamChat,
   isChunkData,
@@ -14,6 +15,7 @@ import {
 } from "../../utils/stream";
 import { ChatMessage } from "./chat-message";
 import { ChatInput } from "./chat-input";
+import { ChatHelpModal } from "../ui/chat-help-modal";
 
 interface Message {
   id: string;
@@ -44,6 +46,7 @@ export function ChatPage() {
   const [messages, setMessages] = useState<Message[]>(() => restoredState?.messages ?? []);
   const [conversationId, setConversationId] = useState<string | null>(() => restoredState?.conversationId ?? null);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -208,6 +211,13 @@ export function ChatPage() {
         </div>
         <div className="flex items-center gap-2">
           <button
+            onClick={() => setIsHelpModalOpen(true)}
+            className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all rounded-lg"
+            aria-label="Help"
+          >
+            <HelpCircle className="size-4" />
+          </button>
+          <button
             onClick={handleNewConversation}
             className="px-3 py-1.5 text-xs font-mono border border-border hover:border-primary/50 bg-muted/20 hover:bg-muted/40 transition-all rounded-lg"
           >
@@ -216,14 +226,27 @@ export function ChatPage() {
         </div>
       </div>
 
+      {/* Help Modal */}
+      <ChatHelpModal
+        isOpen={isHelpModalOpen}
+        onClose={() => setIsHelpModalOpen(false)}
+      />
+
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full max-w-2xl mx-auto px-4">
             <h2 className="text-lg font-medium mb-2">Start a conversation</h2>
-            <p className="text-sm text-muted-foreground text-center">
+            <p className="text-sm text-muted-foreground text-center mb-4">
               Ask a question or start typing below.
             </p>
+            <button
+              onClick={() => setIsHelpModalOpen(true)}
+              className="px-4 py-2 text-xs font-mono border border-border hover:border-primary/50 bg-muted/20 hover:bg-muted/40 transition-all rounded-lg inline-flex items-center gap-2"
+            >
+              <HelpCircle className="size-4" />
+              See example queries
+            </button>
           </div>
         ) : (
           messages.map((message) => (

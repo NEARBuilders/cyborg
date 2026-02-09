@@ -190,6 +190,7 @@ function ProfilePage() {
   );
   const [isSavingSocialLinks, setIsSavingSocialLinks] = useState(false);
   const [isSavingTags, setIsSavingTags] = useState(false);
+  const [isSavingProject, setIsSavingProject] = useState(false);
 
   // Social tab state (followers/following - social media style)
   const [socialTab, setSocialTab] = useState<
@@ -698,32 +699,96 @@ function ProfilePage() {
             ? projects[editingProjectIndex]
             : { name: "", description: "", status: "Active" }
         }
-        onSave={(project) => {
-          // Update local state with the edited/added project
-          const updatedProjects =
-            editingProjectIndex !== null
-              ? [
-                  ...projects.slice(0, editingProjectIndex),
-                  project,
-                  ...projects.slice(editingProjectIndex + 1),
-                ]
-              : [...projects, project];
+        isSaving={isSavingProject}
+        onSave={async (project) => {
+          setIsSavingProject(true);
+          try {
+            const nearAuth = authClient.near;
+            if (!nearAuth) {
+              throw new Error("No NEAR wallet connected");
+            }
 
-          setLocalProfile({
-            displayName,
-            description,
-            role,
-            tags,
-            projects: updatedProjects,
-            socials,
-          });
+            const walletAccountId = nearAuth.getAccountId();
+            if (!walletAccountId) {
+              throw new Error("Please connect your NEAR wallet first");
+            }
 
-          setIsProjectModalOpen(false);
-          toast.success(
-            editingProjectIndex !== null
-              ? "Project updated!"
-              : "Project added!",
-          );
+            // Create a URL-safe slug from project name
+            const slug = project.name
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, '-')
+              .replace(/^-|-$/g, '');
+
+            // Build __fastdata_kv structure for projects
+            const fastDataKvData: Record<string, string> = {
+              [`profile/projects/${slug}/name`]: project.name,
+              [`profile/projects/${slug}/description`]: project.description,
+              [`profile/projects/${slug}/status`]: project.status,
+            };
+
+            // Add index/notify to help indexer and notify followers
+            const notifyPayload = {
+              type: editingProjectIndex !== null ? "project_updated" : "project_added",
+              accountId: walletAccountId,
+              projectSlug: slug,
+              projectName: project.name,
+            };
+            fastDataKvData["index/notify"] = JSON.stringify(notifyPayload);
+
+            toast.info("Saving project... please approve transaction");
+
+            // Use __fastdata_kv on contextual.near
+            const near = nearAuth.getNearClient();
+            await near
+              .transaction(walletAccountId)
+              .functionCall(
+                "contextual.near",
+                "__fastdata_kv",
+                {
+                  data: fastDataKvData,
+                },
+                {
+                  gas: "300 Tgas",
+                  attachedDeposit: "0 NEAR",
+                },
+              )
+              .send();
+
+            console.log("Project saved successfully to blockchain");
+
+            // Update local state with the edited/added project
+            const updatedProjects =
+              editingProjectIndex !== null
+                ? [
+                    ...projects.slice(0, editingProjectIndex),
+                    project,
+                    ...projects.slice(editingProjectIndex + 1),
+                  ]
+                : [...projects, project];
+
+            setLocalProfile({
+              displayName,
+              description,
+              role,
+              tags,
+              projects: updatedProjects,
+              socials,
+            });
+
+            setIsProjectModalOpen(false);
+            toast.success(
+              editingProjectIndex !== null
+                ? "Project updated on blockchain!"
+                : "Project added to blockchain!",
+            );
+          } catch (error) {
+            console.error("Save project error:", error);
+            toast.error(
+              error instanceof Error ? error.message : "Failed to save project",
+            );
+          } finally {
+            setIsSavingProject(false);
+          }
         }}
       />
 

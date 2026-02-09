@@ -28,6 +28,7 @@ NEAR_LEGION_CONTRACT = "ascendant.nearlegion.near"
 NEAR_INITIATE_CONTRACT = "initiate.nearlegion.near"
 NEAR_ACCOUNT = "near-agent"
 BETTER_AUTH_URL = "https://near-agent.pages.dev"
+FASTDATA_URL = "https://fastdata.up.railway.app"
 
 # Environment-specific settings
 [env.production]
@@ -35,6 +36,7 @@ name = "near-agent"
 
 [env.production.vars]
 BETTER_AUTH_URL = "https://near-agent.pages.dev"
+FASTDATA_URL = "https://fastdata.up.railway.app"
 
 # Secrets (set via: wrangler secret put SECRET_NAME)
 # - BETTER_AUTH_SECRET
