@@ -357,7 +357,7 @@ export const contract = oc.router({
             body: z.string(),
             timestamp: z.string(),
             isIncoming: z.boolean(),
-          })
+          }),
         ),
       }),
     )
@@ -372,13 +372,13 @@ export const contract = oc.router({
     .input(
       z.object({
         targetAccountId: z.string().min(1).max(256),
-      })
+      }),
     )
     .output(
       z.object({
         success: z.boolean(),
         transaction: z.any().optional(),
-      })
+      }),
     )
     .errors(CommonPluginErrors),
 
@@ -387,13 +387,13 @@ export const contract = oc.router({
     .input(
       z.object({
         targetAccountId: z.string().min(1).max(256),
-      })
+      }),
     )
     .output(
       z.object({
         success: z.boolean(),
         transaction: z.any().optional(),
-      })
+      }),
     )
     .errors(CommonPluginErrors),
 
@@ -406,7 +406,7 @@ export const contract = oc.router({
         limit: z.number().int().min(1).max(100).default(50),
         offset: z.number().int().min(0).default(0),
         after_account: z.string().optional(),
-      })
+      }),
     )
     .output(
       z.object({
@@ -417,7 +417,7 @@ export const contract = oc.router({
           next_cursor: z.string().optional(),
           truncated: z.boolean().optional(),
         }),
-      })
+      }),
     )
     .errors(CommonPluginErrors),
 
@@ -430,7 +430,7 @@ export const contract = oc.router({
         limit: z.number().int().min(1).max(100).default(50),
         offset: z.number().int().min(0).default(0),
         after_account: z.string().optional(),
-      })
+      }),
     )
     .output(
       z.object({
@@ -441,7 +441,7 @@ export const contract = oc.router({
           next_cursor: z.string().optional(),
           truncated: z.boolean().optional(),
         }),
-      })
+      }),
     )
     .errors(CommonPluginErrors),
 
@@ -451,12 +451,12 @@ export const contract = oc.router({
       z.object({
         account_id: z.string().min(1),
         target_account_id: z.string().min(1),
-      })
+      }),
     )
     .output(
       z.object({
         isFollowing: z.boolean(),
-      })
+      }),
     )
     .errors(CommonPluginErrors),
 
@@ -539,7 +539,10 @@ export const contract = oc.router({
           .string()
           .min(1)
           .max(256)
-          .regex(/^[a-zA-Z0-9_\-\.\/]+$/, "Key must be alphanumeric with _ - . /"),
+          .regex(
+            /^[a-zA-Z0-9_\-\.\/]+$/,
+            "Key must be alphanumeric with _ - . /",
+          ),
         value: z.string().max(100000),
       }),
     )
@@ -557,7 +560,7 @@ export const contract = oc.router({
           gas: z.string(),
           deposit: z.string(),
         }),
-      })
+      }),
     )
     .errors(CommonPluginErrors),
 

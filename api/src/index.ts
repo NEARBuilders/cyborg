@@ -115,7 +115,8 @@ export default createPlugin({
       const socialLayer = SocialLive(db, {
         network: "mainnet",
         rpcUrl: config.variables.NEAR_RPC_URL,
-        fastDataContract: config.variables.NEAR_FASTDATA_CONTRACT || "contextual.near",
+        fastDataContract:
+          config.variables.NEAR_FASTDATA_CONTRACT || "contextual.near",
         fastdataApiUrl: config.variables.NEAR_FASTDATA_API_URL,
       });
       const socialService = yield* Effect.provide(SocialContext, socialLayer);
@@ -126,10 +127,14 @@ export default createPlugin({
       const projectsLayer = ProjectsLive(db, {
         network: "mainnet",
         rpcUrl: config.variables.NEAR_RPC_URL,
-        fastDataContract: config.variables.NEAR_FASTDATA_CONTRACT || "contextual.near",
+        fastDataContract:
+          config.variables.NEAR_FASTDATA_CONTRACT || "contextual.near",
         fastdataApiUrl: config.variables.NEAR_FASTDATA_API_URL,
       });
-      const projectsService = yield* Effect.provide(ProjectsContext, projectsLayer);
+      const projectsService = yield* Effect.provide(
+        ProjectsContext,
+        projectsLayer,
+      );
       console.log("[API] Projects service initialized");
 
       console.log("[API] Plugin initialized successfully");
@@ -163,7 +168,14 @@ export default createPlugin({
     }),
 
   createRouter: (context, builder) => {
-    const { agentService, db, nearService, emailService, socialService, projectsService } = context;
+    const {
+      agentService,
+      db,
+      nearService,
+      emailService,
+      socialService,
+      projectsService,
+    } = context;
     const isDev = process.env.NODE_ENV !== "production";
 
     const requireAuth = builder.middleware(async ({ context, next }) => {
@@ -275,39 +287,39 @@ export default createPlugin({
       getUserRank: builder.getUserRank
         .use(requireAuth)
         .handler(async ({ input }) => {
-        if (!nearService) {
-          return {
-            rank: null,
-            tokenId: null,
-            hasNft: false,
-            hasInitiate: false,
-          };
-        }
+          if (!nearService) {
+            return {
+              rank: null,
+              tokenId: null,
+              hasNft: false,
+              hasInitiate: false,
+            };
+          }
 
-        try {
-          // Check both initiate token and rank skillcapes
-          const [hasInitiate, rankData] = await Promise.all([
-            nearService.hasInitiateToken(input.accountId),
-            nearService.getUserRank(input.accountId),
-          ]);
+          try {
+            // Check both initiate token and rank skillcapes
+            const [hasInitiate, rankData] = await Promise.all([
+              nearService.hasInitiateToken(input.accountId),
+              nearService.getUserRank(input.accountId),
+            ]);
 
-          return {
-            rank: rankData?.rank ?? null,
-            tokenId: rankData?.tokenId ?? null,
-            hasNft: rankData !== null,
-            hasInitiate,
-          };
-        } catch (error) {
-          console.error("[API] Error fetching user rank:", error);
-          // Graceful fallback
-          return {
-            rank: null,
-            tokenId: null,
-            hasNft: false,
-            hasInitiate: false,
-          };
-        }
-      }),
+            return {
+              rank: rankData?.rank ?? null,
+              tokenId: rankData?.tokenId ?? null,
+              hasNft: rankData !== null,
+              hasInitiate,
+            };
+          } catch (error) {
+            console.error("[API] Error fetching user rank:", error);
+            // Graceful fallback
+            return {
+              rank: null,
+              tokenId: null,
+              hasNft: false,
+              hasInitiate: false,
+            };
+          }
+        }),
 
       // ===========================================================================
       // KEY VALUE
@@ -550,7 +562,7 @@ export default createPlugin({
           }
 
           return await Effect.runPromise(
-            emailService.sendEmail(input.to, input.subject, input.body)
+            emailService.sendEmail(input.to, input.subject, input.body),
           );
         }),
 
@@ -579,7 +591,7 @@ export default createPlugin({
 
           const result = await socialService.prepareFollowTransaction(
             context.nearAccountId,
-            input.targetAccountId
+            input.targetAccountId,
           );
 
           if (!result.success) {
@@ -605,7 +617,7 @@ export default createPlugin({
 
           const result = await socialService.prepareUnfollowTransaction(
             context.nearAccountId,
-            input.targetAccountId
+            input.targetAccountId,
           );
 
           if (!result.success) {
@@ -633,7 +645,7 @@ export default createPlugin({
           input.account_id,
           input.limit,
           input.offset,
-          input.after_account
+          input.after_account,
         );
 
         // Extract just account IDs to match FastData spec
@@ -662,7 +674,7 @@ export default createPlugin({
           input.account_id,
           input.limit,
           input.offset,
-          input.after_account
+          input.after_account,
         );
 
         // Extract just account IDs to match FastData spec
@@ -685,7 +697,7 @@ export default createPlugin({
 
         const isFollowing = await socialService.isFollowing(
           input.account_id,
-          input.target_account_id
+          input.target_account_id,
         );
 
         return { isFollowing };
@@ -710,7 +722,7 @@ export default createPlugin({
               name: input.name,
               description: input.description,
               status: input.status || "active",
-            }
+            },
           );
 
           if (!result.success || !result.transaction) {
@@ -738,18 +750,25 @@ export default createPlugin({
           if (!projectsService) {
             return {
               projects: [],
-              pagination: { limit: input.limit, offset: input.offset, hasMore: false },
+              pagination: {
+                limit: input.limit,
+                offset: input.offset,
+                hasMore: false,
+              },
             };
           }
 
           const projects = await projectsService.getProjects(
             context.nearAccountId,
-            input.status
+            input.status,
           );
 
           // Apply pagination
           const hasMore = input.offset + input.limit < projects.length;
-          const paginatedProjects = projects.slice(input.offset, input.offset + input.limit);
+          const paginatedProjects = projects.slice(
+            input.offset,
+            input.offset + input.limit,
+          );
 
           return {
             projects: paginatedProjects.map((p) => ({
@@ -778,7 +797,10 @@ export default createPlugin({
             });
           }
 
-          const project = await projectsService.getProject(context.nearAccountId, input.id);
+          const project = await projectsService.getProject(
+            context.nearAccountId,
+            input.id,
+          );
 
           if (!project) {
             throw new ORPCError("NOT_FOUND", {
@@ -807,7 +829,10 @@ export default createPlugin({
           }
 
           // First, get the existing project
-          const existing = await projectsService.getProject(context.nearAccountId, input.id);
+          const existing = await projectsService.getProject(
+            context.nearAccountId,
+            input.id,
+          );
 
           if (!existing) {
             throw new ORPCError("NOT_FOUND", {
@@ -825,7 +850,7 @@ export default createPlugin({
               status: input.status ?? existing.status,
               createdAt: existing.createdAt,
               updatedAt: existing.updatedAt,
-            }
+            },
           );
 
           if (!result.success || !result.transaction) {
@@ -857,7 +882,10 @@ export default createPlugin({
           }
 
           // Verify project exists
-          const existing = await projectsService.getProject(context.nearAccountId, input.id);
+          const existing = await projectsService.getProject(
+            context.nearAccountId,
+            input.id,
+          );
 
           if (!existing) {
             throw new ORPCError("NOT_FOUND", {
@@ -867,7 +895,7 @@ export default createPlugin({
 
           const result = await projectsService.prepareDeleteProjectTransaction(
             context.nearAccountId,
-            input.id
+            input.id,
           );
 
           if (!result.success || !result.transaction) {
@@ -893,7 +921,10 @@ export default createPlugin({
           }
 
           // Verify project exists
-          const existing = await projectsService.getProject(context.nearAccountId, input.projectId);
+          const existing = await projectsService.getProject(
+            context.nearAccountId,
+            input.projectId,
+          );
 
           if (!existing) {
             throw new ORPCError("NOT_FOUND", {
@@ -905,7 +936,7 @@ export default createPlugin({
             context.nearAccountId,
             input.projectId,
             input.key,
-            input.value
+            input.value,
           );
 
           if (!result.success || !result.transaction) {
@@ -935,7 +966,10 @@ export default createPlugin({
           }
 
           // Verify project exists
-          const existing = await projectsService.getProject(context.nearAccountId, input.projectId);
+          const existing = await projectsService.getProject(
+            context.nearAccountId,
+            input.projectId,
+          );
 
           if (!existing) {
             throw new ORPCError("NOT_FOUND", {
@@ -946,7 +980,7 @@ export default createPlugin({
           const kvData = await projectsService.getProjectKv(
             context.nearAccountId,
             input.projectId,
-            input.key
+            input.key,
           );
 
           if (!kvData) {
@@ -970,12 +1004,19 @@ export default createPlugin({
           if (!projectsService) {
             return {
               entries: [],
-              pagination: { limit: input.limit, offset: input.offset, hasMore: false },
+              pagination: {
+                limit: input.limit,
+                offset: input.offset,
+                hasMore: false,
+              },
             };
           }
 
           // Verify project exists
-          const existing = await projectsService.getProject(context.nearAccountId, input.projectId);
+          const existing = await projectsService.getProject(
+            context.nearAccountId,
+            input.projectId,
+          );
 
           if (!existing) {
             throw new ORPCError("NOT_FOUND", {
@@ -986,12 +1027,15 @@ export default createPlugin({
           const entries = await projectsService.listProjectKv(
             context.nearAccountId,
             input.projectId,
-            input.prefix
+            input.prefix,
           );
 
           // Apply pagination
           const hasMore = input.offset + input.limit < entries.length;
-          const paginatedEntries = entries.slice(input.offset, input.offset + input.limit);
+          const paginatedEntries = entries.slice(
+            input.offset,
+            input.offset + input.limit,
+          );
 
           return {
             entries: paginatedEntries.map((e) => ({

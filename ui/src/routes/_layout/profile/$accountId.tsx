@@ -16,7 +16,11 @@ import { EditModal, ProjectEditModal } from "../../../components/ui/edit-modal";
 import { SocialLinksModal } from "../../../components/ui/social-links-modal";
 import { Skeleton } from "../../../components/ui/skeleton";
 import { Settings, ArrowLeft } from "lucide-react";
-import { useProfile, usePoke, useProfiles } from "../../../integrations/near-social-js";
+import {
+  useProfile,
+  usePoke,
+  useProfiles,
+} from "../../../integrations/near-social-js";
 import {
   useUserRank,
   useHolderTypes,
@@ -173,6 +177,35 @@ function ProfilePage() {
     (currentAccountId === accountId ||
       normalizeAccountId(currentAccountId) === normalizeAccountId(accountId));
 
+  // Fetch projects for this account (from API, like builder details page)
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [isLoadingProjects, setIsLoadingProjects] = useState(false);
+
+  useEffect(() => {
+    async function fetchProjects() {
+      setIsLoadingProjects(true);
+      try {
+        // Use the public projects endpoint (works for any account)
+        const params = new URLSearchParams({
+          accountId: accountId,
+          limit: "50",
+        });
+        const response = await fetch(`/api/projects?${params}`);
+        if (response.ok) {
+          const data = await response.json();
+          setProjects(data.projects || []);
+        }
+      } catch (error) {
+        console.error("[ProfilePage] Error fetching projects:", error);
+        setProjects([]);
+      } finally {
+        setIsLoadingProjects(false);
+      }
+    }
+
+    fetchProjects();
+  }, [accountId]);
+
   const [isEditing, setIsEditing] = useState(false);
 
   // Local state for edits (overrides KV data)
@@ -251,13 +284,6 @@ function ProfilePage() {
   const tags =
     (sourceProfile?.tags?.length ? sourceProfile.tags : null) ||
     (profile?.tags ? Object.keys(profile.tags) : ["NEAR Builder"]);
-  const projects = sourceProfile?.projects || [
-    {
-      name: "NEAR Project",
-      description: "Building on the NEAR ecosystem.",
-      status: "Active",
-    },
-  ];
   const socials = sourceProfile?.socials || {
     github: profile?.linktree?.github as string | undefined,
     twitter: profile?.linktree?.twitter as string | undefined,
@@ -483,6 +509,7 @@ function ProfilePage() {
             {/* Projects */}
             <ProfileProjects
               projects={projects}
+              isLoadingProjects={isLoadingProjects}
               isOwnProfile={isOwnProfile}
               onEditProject={(index) => {
                 setEditingProjectIndex(index);
@@ -716,8 +743,8 @@ function ProfilePage() {
             // Create a URL-safe slug from project name
             const slug = project.name
               .toLowerCase()
-              .replace(/[^a-z0-9]+/g, '-')
-              .replace(/^-|-$/g, '');
+              .replace(/[^a-z0-9]+/g, "-")
+              .replace(/^-|-$/g, "");
 
             // Build __fastdata_kv structure for projects
             const fastDataKvData: Record<string, string> = {
@@ -728,7 +755,10 @@ function ProfilePage() {
 
             // Add index/notify to help indexer and notify followers
             const notifyPayload = {
-              type: editingProjectIndex !== null ? "project_updated" : "project_added",
+              type:
+                editingProjectIndex !== null
+                  ? "project_updated"
+                  : "project_added",
               accountId: walletAccountId,
               projectSlug: slug,
               projectName: project.name,
@@ -901,8 +931,9 @@ function ProfilePage() {
             const currentTags = localProfile?.tags || tags;
 
             // Filter out default tags from what will be saved
-            const filteredTags = currentTags.filter(tag =>
-              !["NEAR Expert", "Developer", "Community Leader"].includes(tag)
+            const filteredTags = currentTags.filter(
+              (tag) =>
+                !["NEAR Expert", "Developer", "Community Leader"].includes(tag),
             );
 
             // Build tags object for NEAR Social (each tag as a key with empty string value)
@@ -913,7 +944,10 @@ function ProfilePage() {
 
             // Calculate storage deposit: ~10KB of data per 100 tags, so ~0.01 NEAR per 100 tags
             // Adding a buffer for safety
-            const storageCost = Math.max(0.01, filteredTags.length * 0.0001).toFixed(4);
+            const storageCost = Math.max(
+              0.01,
+              filteredTags.length * 0.0001,
+            ).toFixed(4);
 
             toast.info("Updating profile... please approve transaction");
 
@@ -997,8 +1031,8 @@ function TagsEditContent({
   }, [initialTags]);
 
   // Filter out default NEAR tags from display
-  const filteredTags = editingTags.filter(tag =>
-    !["NEAR Expert", "Developer", "Community Leader"].includes(tag)
+  const filteredTags = editingTags.filter(
+    (tag) => !["NEAR Expert", "Developer", "Community Leader"].includes(tag),
   );
 
   const handleAddTag = () => {
@@ -1076,7 +1110,11 @@ function TagsEditContent({
 
       {/* Keyboard hint */}
       <div className="text-xs text-muted-foreground text-center py-2">
-        Press <kbd className="px-1.5 py-0.5 bg-muted rounded text-muted-foreground font-mono">Enter</kbd> to add
+        Press{" "}
+        <kbd className="px-1.5 py-0.5 bg-muted rounded text-muted-foreground font-mono">
+          Enter
+        </kbd>{" "}
+        to add
       </div>
     </div>
   );
@@ -1258,10 +1296,18 @@ function LegionRankSection({
   );
 }
 
-function ProfileSkills({ tags, isOwnProfile, onEdit }: { tags: string[]; isOwnProfile: boolean; onEdit?: () => void }) {
+function ProfileSkills({
+  tags,
+  isOwnProfile,
+  onEdit,
+}: {
+  tags: string[];
+  isOwnProfile: boolean;
+  onEdit?: () => void;
+}) {
   // Filter out default NEAR tags
-  const filteredTags = tags.filter(tag =>
-    !["NEAR Expert", "Developer", "Community Leader"].includes(tag)
+  const filteredTags = tags.filter(
+    (tag) => !["NEAR Expert", "Developer", "Community Leader"].includes(tag),
   );
 
   if (filteredTags.length === 0) {
@@ -1600,22 +1646,25 @@ function ProfileEditForm({
         <h4 className="text-sm font-medium text-foreground">Skills</h4>
         <div className="flex flex-wrap gap-2">
           {formData.tags
-            ?.filter(tag => !["NEAR Expert", "Developer", "Community Leader"].includes(tag))
+            ?.filter(
+              (tag) =>
+                !["NEAR Expert", "Developer", "Community Leader"].includes(tag),
+            )
             .map((tag) => (
-            <span
-              key={tag}
-              className="text-sm bg-muted/60 text-foreground px-3 py-1.5 border border-border/50 flex items-center gap-2 rounded-md"
-            >
-              {tag}
-              <button
-                type="button"
-                onClick={() => handleRemoveTag(tag)}
-                className="text-muted-foreground hover:text-destructive text-xs"
+              <span
+                key={tag}
+                className="text-sm bg-muted/60 text-foreground px-3 py-1.5 border border-border/50 flex items-center gap-2 rounded-md"
               >
-                ✕
-              </button>
-            </span>
-          ))}
+                {tag}
+                <button
+                  type="button"
+                  onClick={() => handleRemoveTag(tag)}
+                  className="text-muted-foreground hover:text-destructive text-xs"
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
         </div>
         <div className="flex gap-2">
           <Input

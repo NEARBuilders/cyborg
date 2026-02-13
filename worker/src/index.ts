@@ -71,9 +71,14 @@ app.use(
     },
     credentials: true,
     allowMethods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowHeaders: ["Content-Type", "Authorization", "Accept", "X-Requested-With"],
+    allowHeaders: [
+      "Content-Type",
+      "Authorization",
+      "Accept",
+      "X-Requested-With",
+    ],
     exposeHeaders: ["Content-Length", "Content-Type", "Set-Cookie"],
-  })
+  }),
 );
 
 // Host guard middleware for public endpoints
@@ -88,9 +93,10 @@ function createHostGuard() {
     // 4. Origin header
     // 5. Referer header (extract host from URL)
     // 6. Fall back to URL hostname
-    let host = c.req.header("X-Forwarded-Host")
-      || c.req.header("X-Original-Host")
-      || url.searchParams.get("originHost");
+    let host =
+      c.req.header("X-Forwarded-Host") ||
+      c.req.header("X-Original-Host") ||
+      url.searchParams.get("originHost");
 
     if (!host) {
       const origin = c.req.header("origin");
@@ -121,8 +127,10 @@ function createHostGuard() {
     // Check if host is allowed
     const isAllowedHost = ALLOWED_HOSTS.some((allowed) => {
       if (allowed === host) return true;
-      if (allowed.startsWith("localhost") && host.startsWith("localhost")) return true;
-      if (allowed.includes(".pages.dev") && host.endsWith(".pages.dev")) return true;
+      if (allowed.startsWith("localhost") && host.startsWith("localhost"))
+        return true;
+      if (allowed.includes(".pages.dev") && host.endsWith(".pages.dev"))
+        return true;
       return false;
     });
 
@@ -140,11 +148,13 @@ function createHostGuard() {
 // =============================================================================
 
 app.get("/health", (c) => c.text("OK"));
-app.get("/ping", (c) => c.json({
-  status: "ok",
-  timestamp: new Date().toISOString(),
-  service: "near-agent",
-}));
+app.get("/ping", (c) =>
+  c.json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    service: "near-agent",
+  }),
+);
 
 // =============================================================================
 // PUBLIC ASCENDANT HOLDERS (Database-based, no RPC on edge)
@@ -152,8 +162,12 @@ app.get("/ping", (c) => c.json({
 
 app.get("/nfts/ascendant/holders", async (c) => {
   const queryParams = c.req.query();
-  const limit = queryParams.limit ? parseInt(queryParams.limit as string) : undefined;
-  const offset = queryParams.offset ? parseInt(queryParams.offset as string) : undefined;
+  const limit = queryParams.limit
+    ? parseInt(queryParams.limit as string)
+    : undefined;
+  const offset = queryParams.offset
+    ? parseInt(queryParams.offset as string)
+    : undefined;
 
   const db = createDatabase(c.env.DB);
 
@@ -176,10 +190,7 @@ app.get("/nfts/ascendant/holders", async (c) => {
     });
   } catch (error) {
     console.error("[API] Error fetching holders:", error);
-    return c.json(
-      { error: "Failed to fetch Ascendant holders" },
-      500
-    );
+    return c.json({ error: "Failed to fetch Ascendant holders" }, 500);
   }
 });
 
@@ -215,10 +226,7 @@ app.get("/nfts/legion/holders/:accountId", async (c) => {
     });
   } catch (error) {
     console.error("[API] Error fetching holder types:", error);
-    return c.json(
-      { error: "Failed to fetch holder types" },
-      500
-    );
+    return c.json({ error: "Failed to fetch holder types" }, 500);
   }
 });
 
@@ -255,7 +263,7 @@ buildersLegacyRoutes.get("/:id", async (c) => {
     return c.json({
       accountId: profile.accountId,
       profile: profileData,
-      holdings: holdings.map(h => ({
+      holdings: holdings.map((h) => ({
         contractId: h.contractId,
         quantity: h.quantity,
       })),
@@ -286,7 +294,7 @@ publicRoutes.get("/", async (c) => {
   const input = {
     path: queryParams.path || "collections",
     params: Object.fromEntries(
-      Object.entries(queryParams).filter(([k]) => k !== "path")
+      Object.entries(queryParams).filter(([k]) => k !== "path"),
     ),
     nearblocksApiKey: c.env.NEARBLOCKS_API_KEY,
     cache: new CacheService(c.env.CACHE),
@@ -359,8 +367,10 @@ app.get("/api/builders/:accountId", async (c) => {
       FROM legion_holders
       WHERE account_id = ?
       GROUP BY account_id
-      `
-    ).bind(accountId).first();
+      `,
+    )
+      .bind(accountId)
+      .first();
 
     // Fetch ALL holdings for this account
     const holdingsResult = await c.env.DB.prepare(
@@ -369,8 +379,10 @@ app.get("/api/builders/:accountId", async (c) => {
       FROM legion_holders
       WHERE account_id = ?
       ORDER BY contract_id
-      `
-    ).bind(accountId).all();
+      `,
+    )
+      .bind(accountId)
+      .all();
 
     const holdings = (holdingsResult.results || []).map((h: any) => ({
       contractId: h.contract_id,
@@ -408,12 +420,14 @@ app.get("/api/builders/:accountId", async (c) => {
     }
 
     // Check if custom avatar - prioritize NFT avatar
-    const defaultAvatarPattern = /^https:\/\/api\.dicebear\.com\/7\.x\/avataaars\/svg/;
-    const avatarUrl = profileRecord?.nftAvatarUrl ||
+    const defaultAvatarPattern =
+      /^https:\/\/api\.dicebear\.com\/7\.x\/avataaars\/svg/;
+    const avatarUrl =
+      profileRecord?.nftAvatarUrl ||
       (parsedProfile?.image?.ipfs_cid
         ? `https://ipfs.near.social/ipfs/${parsedProfile.image.ipfs_cid}`
         : parsedProfile?.image?.url) ||
-        `https://api.dicebear.com/7.x/avataaars/svg?seed=${accountId}`;
+      `https://api.dicebear.com/7.x/avataaars/svg?seed=${accountId}`;
 
     const hasCustomAvatar = avatarUrl && !defaultAvatarPattern.test(avatarUrl);
 
@@ -430,9 +444,7 @@ app.get("/api/builders/:accountId", async (c) => {
       description:
         parsedProfile?.description ||
         `A passionate builder in the NEAR ecosystem.`,
-      tags: parsedProfile?.tags
-        ? Object.keys(parsedProfile.tags)
-        : tags,
+      tags: parsedProfile?.tags ? Object.keys(parsedProfile.tags) : tags,
       role,
       projects: [],
       socials: parsedProfile?.linktree || {},
@@ -446,7 +458,13 @@ app.get("/api/builders/:accountId", async (c) => {
     });
   } catch (error) {
     console.error("[API] Error fetching builder:", error);
-    return c.json({ error: "Failed to fetch builder", details: error instanceof Error ? error.message : String(error) }, 500);
+    return c.json(
+      {
+        error: "Failed to fetch builder",
+        details: error instanceof Error ? error.message : String(error),
+      },
+      500,
+    );
   }
 });
 
@@ -468,15 +486,17 @@ app.get("/api/builders-with-profiles", async (c) => {
       GROUP BY account_id
       ORDER BY account_id
       LIMIT ? OFFSET ?
-      `
-    ).bind(limit, offset).all();
+      `,
+    )
+      .bind(limit, offset)
+      .all();
 
     // Fetch total count
     const countResult = await c.env.DB.prepare(
-      `SELECT COUNT(DISTINCT account_id) as count FROM legion_holders`
+      `SELECT COUNT(DISTINCT account_id) as count FROM legion_holders`,
     ).first();
 
-    const total = countResult?.count as number || 0;
+    const total = (countResult?.count as number) || 0;
     const rows = result.results || [];
 
     // Get all account IDs for batch profile lookup
@@ -484,26 +504,38 @@ app.get("/api/builders-with-profiles", async (c) => {
 
     // Use Drizzle for profile lookup
     const db = createDatabase(c.env.DB);
-    const profiles = accountIds.length > 0 ? await db.query.nearSocialProfiles.findMany({
-      where: (profile, { inArray }) => inArray(profile.accountId, accountIds),
-    }) : [];
+    const profiles =
+      accountIds.length > 0
+        ? await db.query.nearSocialProfiles.findMany({
+            where: (profile, { inArray }) =>
+              inArray(profile.accountId, accountIds),
+          })
+        : [];
 
     // Fetch holdings for all accounts
-    const holdingsResults = accountIds.length > 0 ? await c.env.DB.prepare(
-      `
+    const holdingsResults =
+      accountIds.length > 0
+        ? await c.env.DB.prepare(
+            `
       SELECT account_id, contract_id, quantity
       FROM legion_holders
-      WHERE account_id IN (${accountIds.map(() => '?').join(',')})
+      WHERE account_id IN (${accountIds.map(() => "?").join(",")})
       ORDER BY account_id, contract_id
-      `
-    ).bind(...accountIds).all() : { results: [] };
+      `,
+          )
+            .bind(...accountIds)
+            .all()
+        : { results: [] };
 
     // Group holdings by account_id for quick lookup
-    const holdingsMap = new Map<string, Array<{ contractId: string; quantity: number }>>();
+    const holdingsMap = new Map<
+      string,
+      Array<{ contractId: string; quantity: number }>
+    >();
     for (const accountId of accountIds) {
       holdingsMap.set(accountId, []);
     }
-    for (const h of (holdingsResults.results || [])) {
+    for (const h of holdingsResults.results || []) {
       const holdings = holdingsMap.get(h.account_id) || [];
       holdings.push({ contractId: h.contract_id, quantity: h.quantity });
       holdingsMap.set(h.account_id, holdings);
@@ -520,7 +552,7 @@ app.get("/api/builders-with-profiles", async (c) => {
           description: p.description,
           profileData: p.profileData,
         },
-      ])
+      ]),
     );
 
     // Combine accounts with their profiles
@@ -546,14 +578,17 @@ app.get("/api/builders-with-profiles", async (c) => {
       }
 
       // Check if custom avatar - prioritize NFT avatar
-      const defaultAvatarPattern = /^https:\/\/api\.dicebear\.com\/7\.x\/avataaars\/svg/;
-      const avatarUrl = profile?.nftAvatarUrl ||
+      const defaultAvatarPattern =
+        /^https:\/\/api\.dicebear\.com\/7\.x\/avataaars\/svg/;
+      const avatarUrl =
+        profile?.nftAvatarUrl ||
         (parsedProfile?.image?.ipfs_cid
           ? `https://ipfs.near.social/ipfs/${parsedProfile.image.ipfs_cid}`
           : parsedProfile?.image?.url) ||
-          `https://api.dicebear.com/7.x/avataaars/svg?seed=${row.account_id}`;
+        `https://api.dicebear.com/7.x/avataaars/svg?seed=${row.account_id}`;
 
-      const hasCustomAvatar = avatarUrl && !defaultAvatarPattern.test(avatarUrl);
+      const hasCustomAvatar =
+        avatarUrl && !defaultAvatarPattern.test(avatarUrl);
 
       // Background image
       const backgroundUrl = parsedProfile?.backgroundImage?.ipfs_cid
@@ -569,9 +604,7 @@ app.get("/api/builders-with-profiles", async (c) => {
         description:
           parsedProfile?.description ||
           `A passionate builder in the NEAR ecosystem.`,
-        tags: parsedProfile?.tags
-          ? Object.keys(parsedProfile.tags)
-          : tags,
+        tags: parsedProfile?.tags ? Object.keys(parsedProfile.tags) : tags,
         role,
         projects: [],
         socials: parsedProfile?.linktree || {},
@@ -594,7 +627,13 @@ app.get("/api/builders-with-profiles", async (c) => {
     });
   } catch (error) {
     console.error("[API] Error fetching builders with profiles:", error);
-    return c.json({ error: "Failed to fetch builders", details: error instanceof Error ? error.message : String(error) }, 500);
+    return c.json(
+      {
+        error: "Failed to fetch builders",
+        details: error instanceof Error ? error.message : String(error),
+      },
+      500,
+    );
   }
 });
 
@@ -620,7 +659,10 @@ app.get("/api/nfts/:accountId", async (c) => {
     const holdingsWithTokens = await Promise.all(
       holdings.map(async (holding) => {
         try {
-          const tokens = await fetchNFTTokensForAccount(accountId, holding.contractId);
+          const tokens = await fetchNFTTokensForAccount(
+            accountId,
+            holding.contractId,
+          );
           return {
             contractId: holding.contractId,
             quantity: holding.quantity,
@@ -632,7 +674,10 @@ app.get("/api/nfts/:accountId", async (c) => {
             })),
           };
         } catch (error) {
-          console.error(`[NFT] Error fetching tokens for ${holding.contractId}:`, error);
+          console.error(
+            `[NFT] Error fetching tokens for ${holding.contractId}:`,
+            error,
+          );
           return {
             contractId: holding.contractId,
             quantity: holding.quantity,
@@ -640,7 +685,7 @@ app.get("/api/nfts/:accountId", async (c) => {
             error: "Failed to fetch tokens",
           };
         }
-      })
+      }),
     );
 
     return c.json({ holdings: holdingsWithTokens });
@@ -656,7 +701,7 @@ app.get("/api/nfts/:accountId", async (c) => {
 async function fetchNFTTokensForAccount(
   accountId: string,
   contractId: string,
-  limit = 50
+  limit = 50,
 ): Promise<Array<{ token_id: string; metadata?: any }>> {
   const args = JSON.stringify({
     account_id: accountId,
@@ -695,7 +740,11 @@ async function fetchNFTTokensForAccount(
   const rawResult = result.result?.result || [];
   let tokens: any[] = [];
 
-  if (Array.isArray(rawResult) && rawResult.length > 0 && typeof rawResult[0] === 'number') {
+  if (
+    Array.isArray(rawResult) &&
+    rawResult.length > 0 &&
+    typeof rawResult[0] === "number"
+  ) {
     const buffer = Buffer.from(new Uint8Array(rawResult));
     tokens = JSON.parse(buffer.toString());
   } else if (typeof rawResult === "string" && rawResult.length > 0) {
@@ -728,12 +777,12 @@ async function extractImageUrl(token: any): Promise<string | null> {
           // Image URL: https://arweave.net/.../Images/{fileName}
           const metadataUrl = new URL(metadata.reference);
           // Remove both filename and 'Metadata' folder to get to root
-          const pathParts = metadataUrl.pathname.split('/');
+          const pathParts = metadataUrl.pathname.split("/");
           pathParts.pop(); // Remove filename
-          if (pathParts[pathParts.length - 1] === 'Metadata') {
+          if (pathParts[pathParts.length - 1] === "Metadata") {
             pathParts.pop(); // Remove 'Metadata' folder
           }
-          const baseUrl = `${metadataUrl.protocol}//${metadataUrl.host}${pathParts.join('/')}`;
+          const baseUrl = `${metadataUrl.protocol}//${metadataUrl.host}${pathParts.join("/")}`;
           return `${baseUrl}/Images/${meta.fileName}`;
         }
       }
@@ -754,9 +803,7 @@ async function extractImageUrl(token: any): Promise<string | null> {
     const media = metadata.media.startsWith("/")
       ? metadata.media.substring(1)
       : metadata.media;
-    return baseUri.endsWith("/")
-      ? baseUri + media
-      : baseUri + "/" + media;
+    return baseUri.endsWith("/") ? baseUri + media : baseUri + "/" + media;
   }
 
   return null;
@@ -779,10 +826,15 @@ app.get("/api/nfts/images/:accountId", async (c) => {
 
     // If no images found, fetch them on-demand from blockchain
     if (nftImages.length === 0) {
-      console.log(`[NFT IMAGES] No cached images for ${accountId}, fetching on-demand...`);
+      console.log(
+        `[NFT IMAGES] No cached images for ${accountId}, fetching on-demand...`,
+      );
 
       // Fetch NFT tokens for this account
-      const tokens = await fetchNFTTokensForAccount(accountId, "nearlegion.nfts.tg");
+      const tokens = await fetchNFTTokensForAccount(
+        accountId,
+        "nearlegion.nfts.tg",
+      );
 
       if (tokens.length > 0) {
         // Extract image URLs and insert into database
@@ -794,7 +846,8 @@ app.get("/api/nfts/images/:accountId", async (c) => {
           const title = token.metadata?.title || null;
 
           // Insert into database
-          await db.insert(schema.legionNftImages)
+          await db
+            .insert(schema.legionNftImages)
             .values({
               tokenId,
               accountId,
@@ -812,7 +865,9 @@ app.get("/api/nfts/images/:accountId", async (c) => {
           where: (img, { eq }) => eq(img.accountId, accountId),
         });
 
-        console.log(`[NFT IMAGES] Fetched and cached ${nftImages.length} NFT images for ${accountId}`);
+        console.log(
+          `[NFT IMAGES] Fetched and cached ${nftImages.length} NFT images for ${accountId}`,
+        );
       }
     }
 
@@ -871,7 +926,9 @@ profilesRoutes.post("/", async (c) => {
 
   // Try to get from KV cache first
   const cachedProfiles = await cache.getProfiles(accountIds);
-  const uncachedIds = accountIds.filter((id: string) => !cachedProfiles.has(id));
+  const uncachedIds = accountIds.filter(
+    (id: string) => !cachedProfiles.has(id),
+  );
 
   // Fetch only uncached profiles using near-social-js
   const fetchedProfiles: Record<string, any> = {};
@@ -887,7 +944,7 @@ profilesRoutes.post("/", async (c) => {
         } catch (e) {
           console.error(`[API] Error fetching profile for ${accountId}:`, e);
         }
-      })
+      }),
     );
 
     // Cache fetched profiles
@@ -920,7 +977,9 @@ profilesRoutes.get("/", async (c) => {
 
   // Try to get from KV cache first
   const cachedProfiles = await cache.getProfiles(accountIds);
-  const uncachedIds = accountIds.filter((id: string) => !cachedProfiles.has(id));
+  const uncachedIds = accountIds.filter(
+    (id: string) => !cachedProfiles.has(id),
+  );
 
   // Fetch only uncached profiles using near-social-js
   const fetchedProfiles: Record<string, any> = {};
@@ -936,7 +995,7 @@ profilesRoutes.get("/", async (c) => {
         } catch (e) {
           console.error(`[API] Error fetching profile for ${accountId}:`, e);
         }
-      })
+      }),
     );
 
     // Cache fetched profiles
@@ -984,8 +1043,8 @@ profilesRoutes.get("/search", async (c) => {
       .where(
         or(
           like(schema.nearSocialProfiles.accountId, `%${validatedQuery}%`),
-          like(schema.nearSocialProfiles.name, `%${validatedQuery}%`)
-        )
+          like(schema.nearSocialProfiles.name, `%${validatedQuery}%`),
+        ),
       )
       .limit(20);
 
@@ -998,7 +1057,7 @@ profilesRoutes.get("/search", async (c) => {
           // Include nftAvatarUrl in the response
           profiles[result.accountId] = {
             ...parsedData,
-            nftAvatarUrl: result.nftAvatarUrl
+            nftAvatarUrl: result.nftAvatarUrl,
           };
         } catch {
           // If JSON parse fails, construct minimal profile
@@ -1077,7 +1136,12 @@ app.all("/api/auth/*", async (c) => {
     console.log(`[Auth] Response status: ${response.status}`);
 
     // Log Set-Cookie headers
-    const setCookies = (response.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie?.() || response.headers.get("set-cookie") || [];
+    const setCookies =
+      (
+        response.headers as Headers & { getSetCookie?: () => string[] }
+      ).getSetCookie?.() ||
+      response.headers.get("set-cookie") ||
+      [];
     console.log(`[Auth] Set-Cookie headers:`, setCookies);
 
     // Log response body for non-success responses
@@ -1094,7 +1158,10 @@ app.all("/api/auth/*", async (c) => {
     return response;
   } catch (error: any) {
     console.error("[Auth] Error:", error?.message || error);
-    return c.json({ error: "Auth error", message: error?.message || String(error) }, 500);
+    return c.json(
+      { error: "Auth error", message: error?.message || String(error) },
+      500,
+    );
   }
 });
 
@@ -1144,10 +1211,14 @@ profileUpsertRoutes.post("/", async (c) => {
     } else if (imageValue && typeof imageValue === "object") {
       image = (imageValue.url || imageValue.ipfs_cid || "").substring(0, 500);
     }
-    const description = String(profileData?.description || "").substring(0, 2000); // Limit description
+    const description = String(profileData?.description || "").substring(
+      0,
+      2000,
+    ); // Limit description
 
     // Upsert profile to database
-    await db.insert(schema.nearSocialProfiles)
+    await db
+      .insert(schema.nearSocialProfiles)
       .values({
         accountId: validatedAccountId,
         profileData: JSON.stringify(profileData),
@@ -1211,7 +1282,7 @@ app.post("/api/chat", async (c) => {
       baseUrl: env.NEAR_AI_BASE_URL,
       model: env.NEAR_AI_MODEL,
     },
-    nearService
+    nearService,
   );
 
   if (!agentService) {
@@ -1222,7 +1293,7 @@ app.post("/api/chat", async (c) => {
   const result = await agentService.processMessage(
     sessionContext.nearAccountId,
     body.message,
-    body.conversationId
+    body.conversationId,
   );
   return c.json(result);
 });
@@ -1256,7 +1327,7 @@ app.post("/api/chat/stream", async (c) => {
       baseUrl: env.NEAR_AI_BASE_URL,
       model: env.NEAR_AI_MODEL,
     },
-    nearService
+    nearService,
   );
 
   if (!agentService) {
@@ -1274,7 +1345,7 @@ app.post("/api/chat/stream", async (c) => {
         const generator = agentService.processMessageStream(
           sessionContext.nearAccountId,
           body.message,
-          body.conversationId
+          body.conversationId,
         );
 
         for await (const event of generator) {
@@ -1342,11 +1413,14 @@ app.post("/api/social/follow", async (c) => {
 
     const result = await ctx.socialService.prepareFollowTransaction(
       ctx.nearAccountId,
-      targetAccountId
+      targetAccountId,
     );
 
     if (!result.success) {
-      return c.json({ error: result.error || "Failed to prepare transaction" }, 500);
+      return c.json(
+        { error: result.error || "Failed to prepare transaction" },
+        500,
+      );
     }
 
     return c.json({
@@ -1377,11 +1451,14 @@ app.post("/api/social/unfollow", async (c) => {
 
     const result = await ctx.socialService.prepareUnfollowTransaction(
       ctx.nearAccountId,
-      targetAccountId
+      targetAccountId,
     );
 
     if (!result.success) {
-      return c.json({ error: result.error || "Failed to prepare transaction" }, 500);
+      return c.json(
+        { error: result.error || "Failed to prepare transaction" },
+        500,
+      );
     }
 
     return c.json({
@@ -1407,7 +1484,11 @@ app.get("/api/social/followers/:accountId", async (c) => {
   const ctx = await getSocialContext(c, c.env);
 
   try {
-    const result = await ctx.socialService.getFollowers(accountId, limit, offset);
+    const result = await ctx.socialService.getFollowers(
+      accountId,
+      limit,
+      offset,
+    );
 
     return c.json({
       followers: result.items,
@@ -1437,7 +1518,11 @@ app.get("/api/social/following/:accountId", async (c) => {
   const ctx = await getSocialContext(c, c.env);
 
   try {
-    const result = await ctx.socialService.getFollowing(accountId, limit, offset);
+    const result = await ctx.socialService.getFollowing(
+      accountId,
+      limit,
+      offset,
+    );
 
     return c.json({
       following: result.items,
@@ -1455,24 +1540,33 @@ app.get("/api/social/following/:accountId", async (c) => {
 });
 
 // Check if following
-app.get("/api/social/following/:accountId/check/:targetAccountId", async (c) => {
-  const accountId = c.req.param("accountId");
-  const targetAccountId = c.req.param("targetAccountId");
+app.get(
+  "/api/social/following/:accountId/check/:targetAccountId",
+  async (c) => {
+    const accountId = c.req.param("accountId");
+    const targetAccountId = c.req.param("targetAccountId");
 
-  if (!accountId || !targetAccountId) {
-    return c.json({ error: "accountId and targetAccountId are required" }, 400);
-  }
+    if (!accountId || !targetAccountId) {
+      return c.json(
+        { error: "accountId and targetAccountId are required" },
+        400,
+      );
+    }
 
-  const ctx = await getSocialContext(c, c.env);
+    const ctx = await getSocialContext(c, c.env);
 
-  try {
-    const isFollowing = await ctx.socialService.isFollowing(accountId, targetAccountId);
-    return c.json({ isFollowing });
-  } catch (error) {
-    console.error("[API] Check following error:", error);
-    return c.json({ error: "Failed to check follow status" }, 500);
-  }
-});
+    try {
+      const isFollowing = await ctx.socialService.isFollowing(
+        accountId,
+        targetAccountId,
+      );
+      return c.json({ isFollowing });
+    } catch (error) {
+      console.error("[API] Check following error:", error);
+      return c.json({ error: "Failed to check follow status" }, 500);
+    }
+  },
+);
 
 // =============================================================================
 // DEBUG: View raw social graph data from social.near
@@ -1490,11 +1584,11 @@ app.get("/api/debug/social-graph/:accountId", async (c) => {
     const social = new Social({ network: "mainnet" });
 
     // Get all graph data for this account
-    const data = await social.get({
+    const data = (await social.get({
       keys: [
-        `${accountId}/graph/follow/**`,  // who they follow
+        `${accountId}/graph/follow/**`, // who they follow
       ],
-    }) as Record<string, any> | undefined;
+    })) as Record<string, any> | undefined;
 
     const followList = data?.[accountId]?.graph?.follow || {};
 
@@ -1553,7 +1647,10 @@ app.post("/api/legion/follow", async (c) => {
 
     // Validate account IDs (must contain "." to be valid NEAR address)
     if (!ctx.nearAccountId.includes(".")) {
-      console.error("[API] Invalid nearAccountId from session:", ctx.nearAccountId);
+      console.error(
+        "[API] Invalid nearAccountId from session:",
+        ctx.nearAccountId,
+      );
       return c.json({ error: "Invalid account ID from session" }, 400);
     }
 
@@ -1569,11 +1666,14 @@ app.post("/api/legion/follow", async (c) => {
 
     const result = await ctx.legionService.prepareFollowTransaction(
       ctx.nearAccountId,
-      targetAccountId
+      targetAccountId,
     );
 
     if (!result.success) {
-      return c.json({ error: result.error || "Failed to prepare transaction" }, 400);
+      return c.json(
+        { error: result.error || "Failed to prepare transaction" },
+        400,
+      );
     }
 
     return c.json({
@@ -1604,11 +1704,14 @@ app.post("/api/legion/unfollow", async (c) => {
 
     const result = await ctx.legionService.prepareUnfollowTransaction(
       ctx.nearAccountId,
-      targetAccountId
+      targetAccountId,
     );
 
     if (!result.success) {
-      return c.json({ error: result.error || "Failed to prepare transaction" }, 500);
+      return c.json(
+        { error: result.error || "Failed to prepare transaction" },
+        500,
+      );
     }
 
     return c.json({
@@ -1636,13 +1739,22 @@ app.get("/api/legion/followers", async (c) => {
 
   // Can't use after_account with offset > 0
   if (afterAccount && offset > 0) {
-    return c.json({ error: "after_account cannot be combined with offset > 0" }, 400);
+    return c.json(
+      { error: "after_account cannot be combined with offset > 0" },
+      400,
+    );
   }
 
   const ctx = await getLegionContext(c, c.env);
 
   try {
-    const result = await ctx.legionService.getFollowers(accountId, limit, offset, bypass, afterAccount || undefined);
+    const result = await ctx.legionService.getFollowers(
+      accountId,
+      limit,
+      offset,
+      bypass,
+      afterAccount || undefined,
+    );
 
     // Extract just account IDs to match FastData spec
     const accounts = result.items.map((item) => item.accountId);
@@ -1656,7 +1768,10 @@ app.get("/api/legion/followers", async (c) => {
       },
     };
 
-    console.log(`[API] GET /legion/followers - Response:`, JSON.stringify(response, null, 2));
+    console.log(
+      `[API] GET /legion/followers - Response:`,
+      JSON.stringify(response, null, 2),
+    );
 
     return c.json(response);
   } catch (error) {
@@ -1678,17 +1793,28 @@ app.get("/api/legion/following", async (c) => {
   const bypass = c.req.query("bypass") === "1";
   const afterAccount = c.req.query("after_account"); // cursor for pagination
 
-  console.log(`[API] GET /legion/following - account_id: ${accountId}, limit: ${limit}, offset: ${offset}, bypass: ${bypass}, after_account: ${afterAccount || 'none'}`);
+  console.log(
+    `[API] GET /legion/following - account_id: ${accountId}, limit: ${limit}, offset: ${offset}, bypass: ${bypass}, after_account: ${afterAccount || "none"}`,
+  );
 
   // Can't use after_account with offset > 0
   if (afterAccount && offset > 0) {
-    return c.json({ error: "after_account cannot be combined with offset > 0" }, 400);
+    return c.json(
+      { error: "after_account cannot be combined with offset > 0" },
+      400,
+    );
   }
 
   const ctx = await getLegionContext(c, c.env);
 
   try {
-    const result = await ctx.legionService.getFollowing(accountId, limit, offset, bypass, afterAccount || undefined);
+    const result = await ctx.legionService.getFollowing(
+      accountId,
+      limit,
+      offset,
+      bypass,
+      afterAccount || undefined,
+    );
 
     // Extract just account IDs to match FastData spec
     const accounts = result.items.map((item) => item.accountId);
@@ -1702,7 +1828,10 @@ app.get("/api/legion/following", async (c) => {
       },
     };
 
-    console.log(`[API] GET /legion/following - Response:`, JSON.stringify(response, null, 2));
+    console.log(
+      `[API] GET /legion/following - Response:`,
+      JSON.stringify(response, null, 2),
+    );
 
     return c.json(response);
   } catch (error) {
@@ -1717,13 +1846,19 @@ app.get("/api/legion/is-following", async (c) => {
   const targetAccountId = c.req.query("target_account_id");
 
   if (!accountId || !targetAccountId) {
-    return c.json({ error: "account_id and target_account_id are required" }, 400);
+    return c.json(
+      { error: "account_id and target_account_id are required" },
+      400,
+    );
   }
 
   const ctx = await getLegionContext(c, c.env);
 
   try {
-    const isFollowing = await ctx.legionService.isFollowing(accountId, targetAccountId);
+    const isFollowing = await ctx.legionService.isFollowing(
+      accountId,
+      targetAccountId,
+    );
     return c.json({ isFollowing });
   } catch (error) {
     console.error("[API] Check legion following error:", error);
@@ -1784,7 +1919,10 @@ async function getProjectsContext(c: any, env: Env) {
   const auth = createAuth(env);
   const sessionContext = await getSessionFromRequest(auth, c.req.raw, db);
 
-  console.log("[getProjectsContext] Session nearAccountId:", sessionContext?.nearAccountId);
+  console.log(
+    "[getProjectsContext] Session nearAccountId:",
+    sessionContext?.nearAccountId,
+  );
 
   return {
     db,
@@ -1805,16 +1943,27 @@ app.post("/api/projects/create", async (c) => {
     const body = await c.req.json();
     const { name, description, status } = body;
 
-    if (!name || typeof name !== "string" || name.length === 0 || name.length > 100) {
+    if (
+      !name ||
+      typeof name !== "string" ||
+      name.length === 0 ||
+      name.length > 100
+    ) {
       return c.json({ error: "name is required (max 100 characters)" }, 400);
     }
 
-    if (description && (typeof description !== "string" || description.length > 1000)) {
+    if (
+      description &&
+      (typeof description !== "string" || description.length > 1000)
+    ) {
       return c.json({ error: "description must be max 1000 characters" }, 400);
     }
 
     if (status && !["active", "completed", "archived"].includes(status)) {
-      return c.json({ error: "status must be active, completed, or archived" }, 400);
+      return c.json(
+        { error: "status must be active, completed, or archived" },
+        400,
+      );
     }
 
     // Generate project ID and build FastData KV args
@@ -1827,7 +1976,9 @@ app.post("/api/projects/create", async (c) => {
       methodName: "__fastdata_kv",
       args: {
         [`projects/${projectId}/name`]: name,
-        ...(description ? { [`projects/${projectId}/description`]: description } : {}),
+        ...(description
+          ? { [`projects/${projectId}/description`]: description }
+          : {}),
         [`projects/${projectId}/status`]: projectStatus,
         [`projects/${projectId}/created`]: now,
         [`projects/${projectId}/updated`]: now,
@@ -1859,399 +2010,37 @@ app.post("/api/projects/create", async (c) => {
   }
 });
 
-// Get projects list (reads from FastData API)
-app.get("/api/projects", async (c) => {
-  const ctx = await getProjectsContext(c, c.env);
+// =============================================================================
+// API ROUTES (from routes/api.ts)
+// =============================================================================
 
-  console.log("[PROJECTS] nearAccountId from session:", ctx.nearAccountId);
+const apiRoutes = createApiRoutes(() => {
+  const db = createDatabase(c.env.DB);
+  const nearService = new NearService(db, {
+    rpcUrl: c.env.NEAR_RPC_URL,
+    contractId: c.env.NEAR_LEGION_CONTRACT,
+    initiateContractId: c.env.NEAR_INITIATE_CONTRACT,
+  });
+  const agentService = createAgentService(
+    db,
+    {
+      apiKey: c.env.NEAR_AI_API_KEY,
+      baseUrl: c.env.NEAR_AI_BASE_URL,
+      model: c.env.NEAR_AI_MODEL,
+    },
+    nearService,
+  );
+  const socialService = new SocialService(db, { network: "mainnet" });
 
-  if (!ctx.nearAccountId) {
-    return c.json({ error: "Authentication required" }, 401);
-  }
-
-  try {
-    const statusFilter = c.req.query("status");
-    const limit = Math.min(Number(c.req.query("limit") || "50"), 100);
-    const offset = Number(c.req.query("offset") || "0");
-
-    // Use FastData v1 API with correct format
-    const fastdataUrl = new URL(`${c.env.FASTDATA_URL || "https://fastdata.up.railway.app"}/v1/kv/query`);
-    fastdataUrl.searchParams.set("accountId", ctx.nearAccountId);
-    fastdataUrl.searchParams.set("contractId", "contextual.near");
-    fastdataUrl.searchParams.set("key_prefix", "projects");
-    fastdataUrl.searchParams.set("format", "tree");
-    fastdataUrl.searchParams.set("value_format", "json");
-    fastdataUrl.searchParams.set("exclude_null", "true");
-
-    console.log("[PROJECTS] Fetching from FastData:", fastdataUrl.toString());
-
-    // Fetch with retry logic for 502 errors
-    let response: Response;
-    let retries = 3;
-    for (let i = 0; i < retries; i++) {
-      response = await fetch(fastdataUrl.toString(), {
-        signal: AbortSignal.timeout(10000), // 10 second timeout
-      });
-
-      if (response.ok || response.status !== 502) break;
-      console.log(`[PROJECTS] Retry ${i + 1}/${retries} after ${response.status}`);
-      await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1))); // Exponential backoff
-    }
-
-    if (!response || !response.ok) {
-      console.error("[API] FastData query failed:", response?.status);
-      return c.json({ projects: [], pagination: { limit, offset, hasMore: false } });
-    }
-
-    const data = await response.json();
-    console.log("[PROJECTS] FastData response received, tree keys:", Object.keys(data.tree || {}));
-
-    const treeData = data as { tree?: Record<string, Record<string, any>> };
-
-    // Parse projects from tree format
-    const projects: Array<{
-      id: string;
-      nearAccountId: string;
-      name: string;
-      description: string | null;
-      status: "active" | "completed" | "archived";
-      createdAt: string;
-      updatedAt: string;
-    }> = [];
-
-    // Tree format: { tree: { projects: { projectId: { name, description, status, created, updated } } } }
-    const projectsTree = treeData.tree?.projects || {};
-    for (const [projectId, projectData] of Object.entries(projectsTree)) {
-      const { name, description, status, created, updated } = projectData;
-
-      if (!name || !status || !created || !updated) continue;
-
-      // Filter by status if specified
-      if (statusFilter && status !== status) continue;
-
-      projects.push({
-        id: projectId,
-        nearAccountId: ctx.nearAccountId,
-        name,
-        description: description || null,
-        status: status as "active" | "completed" | "archived",
-        createdAt: created,  // FastData returns "created"
-        updatedAt: updated,  // FastData returns "updated"
-      });
-    }
-
-    // Sort by updated date (newest first)
-    projects.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-
-    // Apply pagination
-    const hasMore = offset + limit < projects.length;
-    const paginatedProjects = projects.slice(offset, offset + limit);
-
-    console.log("[PROJECTS] Parsed projects:", projects.length, "Returning:", paginatedProjects.length);
-
-    return c.json({
-      projects: paginatedProjects,
-      pagination: { limit, offset, hasMore },
-    });
-  } catch (error) {
-    console.error("[API] Get projects error:", error);
-    return c.json({ error: "Failed to fetch projects" }, 500);
-  }
+  return {
+    db,
+    agentService,
+    nearService,
+    socialService,
+  };
 });
 
-// Get single project
-app.get("/api/projects/:projectId", async (c) => {
-  const ctx = await getProjectsContext(c, c.env);
-
-  if (!ctx.nearAccountId) {
-    return c.json({ error: "Authentication required" }, 401);
-  }
-
-  try {
-    const projectId = c.req.param("projectId");
-    if (!projectId) {
-      return c.json({ error: "projectId is required" }, 400);
-    }
-
-    // Use FastData v1 API with tree format for structured data
-    const fastdataUrl = new URL(`${c.env.FASTDATA_URL || "https://fastdata.up.railway.app"}/v1/kv/query`);
-    fastdataUrl.searchParams.set("accountId", ctx.nearAccountId);
-    fastdataUrl.searchParams.set("contractId", "contextual.near");
-    fastdataUrl.searchParams.set("key_prefix", `projects/${projectId}`);
-    fastdataUrl.searchParams.set("format", "tree");
-    fastdataUrl.searchParams.set("value_format", "json");
-    fastdataUrl.searchParams.set("exclude_null", "true");
-
-    const response = await fetch(fastdataUrl.toString());
-
-    if (!response.ok) {
-      console.error("[API] FastData query failed:", response.status);
-      return c.json({ error: "Project not found" }, 404);
-    }
-
-    const data = await response.json();
-    const treeData = data as { tree?: Record<string, Record<string, any>> };
-
-    // Extract project data from tree: { tree: { projects: { projectId: { name, status, ... } } } }
-    const projectData = treeData.tree?.projects?.[projectId];
-    if (!projectData) {
-      return c.json({ error: "Project not found" }, 404);
-    }
-
-    const { name, description, status, created, updated } = projectData;
-
-    if (!name || !status || !created || !updated) {
-      return c.json({ error: "Project not found" }, 404);
-    }
-
-    return c.json({
-      id: projectId,
-      nearAccountId: ctx.nearAccountId,
-      name,
-      description: description || null,
-      status: status as "active" | "completed" | "archived",
-      createdAt: created,
-      updatedAt: updated,
-    });
-  } catch (error) {
-    console.error("[API] Get project error:", error);
-    return c.json({ error: "Failed to fetch project" }, 500);
-  }
-});
-
-// Update project - prepares transaction for client-side signing
-app.put("/api/projects/:projectId", async (c) => {
-  const ctx = await getProjectsContext(c, c.env);
-
-  if (!ctx.nearAccountId) {
-    return c.json({ error: "Authentication required" }, 401);
-  }
-
-  try {
-    const projectId = c.req.param("projectId");
-    const body = await c.req.json();
-    const { name, description, status } = body;
-
-    if (!projectId) {
-      return c.json({ error: "projectId is required" }, 400);
-    }
-
-    // Validate inputs
-    if (name !== undefined && (typeof name !== "string" || name.length === 0 || name.length > 100)) {
-      return c.json({ error: "name must be 1-100 characters" }, 400);
-    }
-
-    if (description !== undefined && (typeof description !== "string" || description.length > 1000)) {
-      return c.json({ error: "description must be max 1000 characters" }, 400);
-    }
-
-    if (status !== undefined && !["active", "completed", "archived"].includes(status)) {
-      return c.json({ error: "status must be active, completed, or archived" }, 400);
-    }
-
-    // First, fetch current project data from FastData
-    const fastdataUrl = new URL(`${c.env.FASTDATA_URL || "https://fastdata.up.railway.app"}/v1/kv/query`);
-    fastdataUrl.searchParams.set("accountId", ctx.nearAccountId);
-    fastdataUrl.searchParams.set("contractId", "contextual.near");
-    fastdataUrl.searchParams.set("key_prefix", `projects/${projectId}`);
-    fastdataUrl.searchParams.set("format", "tree");
-    fastdataUrl.searchParams.set("value_format", "json");
-    fastdataUrl.searchParams.set("exclude_null", "true");
-
-    const response = await fetch(fastdataUrl.toString());
-
-    if (!response.ok) {
-      return c.json({ error: "Failed to fetch project" }, 500);
-    }
-
-    const data = await response.json();
-    const treeData = data as { tree?: Record<string, Record<string, any>> };
-
-    // Extract project data from tree
-    const projectData = treeData.tree?.projects?.[projectId];
-    if (!projectData) {
-      return c.json({ error: "Project not found" }, 404);
-    }
-
-    // Get current values or use defaults
-    const currentName = projectData.name;
-    const currentDescription = projectData.description;
-    const currentStatus = projectData.status;
-    const createdAt = projectData.created;
-
-    if (!currentName || !currentStatus) {
-      return c.json({ error: "Project not found" }, 404);
-    }
-
-    // Build update args
-    const now = new Date().toISOString();
-    const updateArgs: Record<string, string | null> = {
-      [`projects/${projectId}/updated`]: now,
-    };
-
-    if (name !== undefined) updateArgs[`projects/${projectId}/name`] = name;
-    if (description !== undefined) {
-      if (description) {
-        updateArgs[`projects/${projectId}/description`] = description;
-      } else {
-        updateArgs[`projects/${projectId}/description`] = null; // Delete if empty
-      }
-    }
-    if (status !== undefined) updateArgs[`projects/${projectId}/status`] = status;
-
-    const transaction = {
-      contractId: "contextual.near",
-      methodName: "__fastdata_kv",
-      args: updateArgs,
-      gas: "300000000000000",
-      deposit: "0.01 NEAR",
-    };
-
-    return c.json({
-      id: projectId,
-      nearAccountId: ctx.nearAccountId,
-      name: name ?? currentName,
-      description: description ?? currentDescription ?? null,
-      status: status ?? currentStatus,
-      createdAt,
-      updatedAt: now,
-      transaction,
-    });
-  } catch (error) {
-    console.error("[API] Update project error:", error);
-    return c.json({ error: "Failed to update project" }, 500);
-  }
-});
-
-// Delete project - prepares transaction for client-side signing
-app.delete("/api/projects/:projectId", async (c) => {
-  const ctx = await getProjectsContext(c, c.env);
-
-  if (!ctx.nearAccountId) {
-    return c.json({ error: "Authentication required" }, 401);
-  }
-
-  try {
-    const projectId = c.req.param("projectId");
-    if (!projectId) {
-      return c.json({ error: "projectId is required" }, 400);
-    }
-
-    // Verify project exists using FastData
-    const fastdataUrl = new URL(`${c.env.FASTDATA_URL || "https://fastdata.up.railway.app"}/v1/kv/query`);
-    fastdataUrl.searchParams.set("accountId", ctx.nearAccountId);
-    fastdataUrl.searchParams.set("contractId", "contextual.near");
-    fastdataUrl.searchParams.set("key_prefix", `projects/${projectId}`);
-    fastdataUrl.searchParams.set("format", "tree");
-    fastdataUrl.searchParams.set("value_format", "json");
-    fastdataUrl.searchParams.set("exclude_null", "true");
-
-    const response = await fetch(fastdataUrl.toString());
-
-    if (!response.ok) {
-      return c.json({ error: "Failed to fetch project" }, 500);
-    }
-
-    const data = await response.json();
-    const treeData = data as { tree?: Record<string, Record<string, any>> };
-
-    // Check if project exists
-    const projectData = treeData.tree?.projects?.[projectId];
-    if (!projectData || !projectData.name) {
-      return c.json({ error: "Project not found" }, 404);
-    }
-
-    // Build delete args (set all to null to delete)
-    const deleteArgs: Record<string, string | null> = {
-      [`projects/${projectId}/name`]: null,
-      [`projects/${projectId}/description`]: null,
-      [`projects/${projectId}/status`]: null,
-      [`projects/${projectId}/created`]: null,
-      [`projects/${projectId}/updated`]: null,
-      [`index/project/${projectId}`]: null,
-    };
-
-    const transaction = {
-      contractId: "contextual.near",
-      methodName: "__fastdata_kv",
-      args: deleteArgs,
-      gas: "300000000000000",
-      deposit: "0.01 NEAR",
-    };
-
-    return c.json({
-      success: true,
-      transaction,
-    });
-  } catch (error) {
-    console.error("[API] Delete project error:", error);
-    return c.json({ error: "Failed to delete project" }, 500);
-  }
-});
-
-// Get project KV entries (for displaying additional key-value data)
-app.get("/api/projects/:projectId/kv", async (c) => {
-  const ctx = await getProjectsContext(c, c.env);
-
-  if (!ctx.nearAccountId) {
-    return c.json({ error: "Authentication required" }, 401);
-  }
-
-  try {
-    const projectId = c.req.param("projectId");
-    const limit = Math.min(Number(c.req.query("limit") || "50"), 100);
-
-    if (!projectId) {
-      return c.json({ error: "projectId is required" }, 400);
-    }
-
-    // Query all keys for this project prefix (excluding the main project fields)
-    const fastdataUrl = new URL(`${c.env.FASTDATA_URL || "https://fastdata.up.railway.app"}/v1/kv/query`);
-    fastdataUrl.searchParams.set("accountId", ctx.nearAccountId);
-    fastdataUrl.searchParams.set("contractId", "contextual.near");
-    fastdataUrl.searchParams.set("key_prefix", `projects/${projectId}`);
-    fastdataUrl.searchParams.set("format", "tree");
-    fastdataUrl.searchParams.set("value_format", "json");
-    fastdataUrl.searchParams.set("exclude_null", "true");
-
-    const response = await fetch(fastdataUrl.toString());
-
-    if (!response.ok) {
-      console.error("[API] FastData query failed:", response.status);
-      return c.json({ entries: [] });
-    }
-
-    const data = await response.json();
-    const treeData = data as { tree?: Record<string, Record<string, any>> };
-
-    // Extract project data
-    const projectData = treeData.tree?.projects?.[projectId];
-    if (!projectData) {
-      return c.json({ entries: [] });
-    }
-
-    // Filter out the standard project fields, return only custom KV data
-    const standardFields = ["name", "description", "status", "created", "updated"];
-    const entries: Array<{ projectId: string; key: string; value: string; createdAt: string; updatedAt: string }> = [];
-
-    for (const [key, value] of Object.entries(projectData)) {
-      if (!standardFields.includes(key)) {
-        entries.push({
-          projectId,
-          key,
-          value: String(value),
-          createdAt: projectData.created || new Date().toISOString(),
-          updatedAt: projectData.updated || new Date().toISOString(),
-        });
-      }
-    }
-
-    return c.json({ entries: entries.slice(0, limit) });
-  } catch (error) {
-    console.error("[API] Get project KV error:", error);
-    return c.json({ error: "Failed to fetch project KV data" }, 500);
-  }
-});
+app.route("/api", apiRoutes);
 
 // =============================================================================
 // STATIC ASSETS (serve UI from same domain as auth)
@@ -2265,7 +2054,7 @@ app.get("*", async (c) => {
   // Try to fetch from assets first
   try {
     const assetResponse = await c.env.ASSETS.fetch(
-      new Request(pathname, c.req.raw)
+      new Request(pathname, c.req.raw),
     );
 
     // If asset exists, return it
@@ -2278,7 +2067,9 @@ app.get("*", async (c) => {
 
   // For SPA routing, return index.html for non-API routes
   try {
-    const indexResponse = await c.env.ASSETS.fetch(new Request("/index.html", c.req.raw));
+    const indexResponse = await c.env.ASSETS.fetch(
+      new Request("/index.html", c.req.raw),
+    );
     return indexResponse;
   } catch (e) {
     return c.text("Not Found", 404);

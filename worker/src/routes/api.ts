@@ -13,6 +13,7 @@ import * as schema from "../db/schema";
 import type { AgentService } from "../services/agent";
 import type { NearService } from "../services/near";
 import type { SocialService } from "../services/social";
+import { ProjectsService } from "../services/projects";
 
 // =============================================================================
 // VALIDATION SCHEMAS
@@ -173,7 +174,7 @@ export function createApiRoutes(getContext: () => ApiContext) {
     const entry = await ctx.db.query.kvStore.findFirst({
       where: and(
         eq(schema.kvStore.key, key),
-        eq(schema.kvStore.nearAccountId, ctx.nearAccountId)
+        eq(schema.kvStore.nearAccountId, ctx.nearAccountId),
       ),
     });
 
@@ -231,7 +232,7 @@ export function createApiRoutes(getContext: () => ApiContext) {
     const entry = await ctx.db.query.kvStore.findFirst({
       where: and(
         eq(schema.kvStore.key, key),
-        eq(schema.kvStore.nearAccountId, ctx.nearAccountId)
+        eq(schema.kvStore.nearAccountId, ctx.nearAccountId),
       ),
     });
 
@@ -260,7 +261,7 @@ export function createApiRoutes(getContext: () => ApiContext) {
     if (!ctx.agentService) {
       return c.json(
         { error: "NEAR AI not connected. Configure NEAR_AI_API_KEY." },
-        503
+        503,
       );
     }
 
@@ -276,7 +277,7 @@ export function createApiRoutes(getContext: () => ApiContext) {
       const result = await ctx.agentService.processMessage(
         ctx.nearAccountId,
         message,
-        conversationId
+        conversationId,
       );
       return c.json(result);
     } catch (error) {
@@ -294,7 +295,7 @@ export function createApiRoutes(getContext: () => ApiContext) {
     if (!ctx.agentService) {
       return c.json(
         { error: "NEAR AI not connected. Configure NEAR_AI_API_KEY." },
-        503
+        503,
       );
     }
 
@@ -315,7 +316,7 @@ export function createApiRoutes(getContext: () => ApiContext) {
           const generator = ctx.agentService!.processMessageStream(
             ctx.nearAccountId!,
             message,
-            conversationId
+            conversationId,
           );
 
           for await (const event of generator) {
@@ -411,7 +412,7 @@ export function createApiRoutes(getContext: () => ApiContext) {
       const body = await c.req.parseBody();
 
       // Validate file is present
-      if (!body || typeof body !== 'object') {
+      if (!body || typeof body !== "object") {
         return c.json({ error: "Invalid request body" }, 400);
       }
 
@@ -432,7 +433,7 @@ export function createApiRoutes(getContext: () => ApiContext) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${c.env.NFT_STORAGE_API_KEY || ""}`,
+          Authorization: `Bearer ${c.env.NFT_STORAGE_API_KEY || ""}`,
         },
         body: JSON.stringify({
           name: fileEntry.name,
@@ -445,7 +446,10 @@ export function createApiRoutes(getContext: () => ApiContext) {
       if (!response.ok) {
         const errorText = await response.text();
         console.error("[IPFS] Upload failed:", response.status, errorText);
-        return c.json({ error: `IPFS upload failed: ${response.statusText}` }, 502);
+        return c.json(
+          { error: `IPFS upload failed: ${response.statusText}` },
+          502,
+        );
       }
 
       const result = await response.json();
@@ -493,11 +497,14 @@ export function createApiRoutes(getContext: () => ApiContext) {
 
       const result = await ctx.socialService.prepareFollowTransaction(
         ctx.nearAccountId,
-        targetAccountId
+        targetAccountId,
       );
 
       if (!result.success) {
-        return c.json({ error: result.error || "Failed to prepare transaction" }, 500);
+        return c.json(
+          { error: result.error || "Failed to prepare transaction" },
+          500,
+        );
       }
 
       return c.json({
@@ -530,11 +537,14 @@ export function createApiRoutes(getContext: () => ApiContext) {
 
       const result = await ctx.socialService.prepareUnfollowTransaction(
         ctx.nearAccountId,
-        targetAccountId
+        targetAccountId,
       );
 
       if (!result.success) {
-        return c.json({ error: result.error || "Failed to prepare transaction" }, 500);
+        return c.json(
+          { error: result.error || "Failed to prepare transaction" },
+          500,
+        );
       }
 
       return c.json({
@@ -567,11 +577,16 @@ export function createApiRoutes(getContext: () => ApiContext) {
     const offset = Number(c.req.query("offset") || "0");
     const afterAccount = c.req.query("after_account"); // cursor for pagination
 
-    console.log(`[API] GET /social/followers - account_id: ${accountId}, limit: ${limit}, offset: ${offset}, after_account: ${afterAccount || 'none'}`);
+    console.log(
+      `[API] GET /social/followers - account_id: ${accountId}, limit: ${limit}, offset: ${offset}, after_account: ${afterAccount || "none"}`,
+    );
 
     // Can't use after_account with offset > 0
     if (afterAccount && offset > 0) {
-      return c.json({ error: "after_account cannot be combined with offset > 0" }, 400);
+      return c.json(
+        { error: "after_account cannot be combined with offset > 0" },
+        400,
+      );
     }
 
     try {
@@ -579,7 +594,7 @@ export function createApiRoutes(getContext: () => ApiContext) {
         accountId,
         limit,
         offset,
-        afterAccount || undefined
+        afterAccount || undefined,
       );
 
       // Extract just account IDs to match FastData spec
@@ -594,7 +609,10 @@ export function createApiRoutes(getContext: () => ApiContext) {
         },
       };
 
-      console.log(`[API] GET /social/followers - Response:`, JSON.stringify(response, null, 2));
+      console.log(
+        `[API] GET /social/followers - Response:`,
+        JSON.stringify(response, null, 2),
+      );
 
       return c.json(response);
     } catch (error) {
@@ -623,11 +641,16 @@ export function createApiRoutes(getContext: () => ApiContext) {
     const offset = Number(c.req.query("offset") || "0");
     const afterAccount = c.req.query("after_account"); // cursor for pagination
 
-    console.log(`[API] GET /social/following - account_id: ${accountId}, limit: ${limit}, offset: ${offset}, after_account: ${afterAccount || 'none'}`);
+    console.log(
+      `[API] GET /social/following - account_id: ${accountId}, limit: ${limit}, offset: ${offset}, after_account: ${afterAccount || "none"}`,
+    );
 
     // Can't use after_account with offset > 0
     if (afterAccount && offset > 0) {
-      return c.json({ error: "after_account cannot be combined with offset > 0" }, 400);
+      return c.json(
+        { error: "after_account cannot be combined with offset > 0" },
+        400,
+      );
     }
 
     try {
@@ -635,7 +658,7 @@ export function createApiRoutes(getContext: () => ApiContext) {
         accountId,
         limit,
         offset,
-        afterAccount || undefined
+        afterAccount || undefined,
       );
 
       // Extract just account IDs to match FastData spec
@@ -650,14 +673,12 @@ export function createApiRoutes(getContext: () => ApiContext) {
         },
       };
 
-      console.log(`[API] GET /social/following - Response:`, JSON.stringify(response, null, 2));
+      console.log(
+        `[API] GET /social/following - Response:`,
+        JSON.stringify(response, null, 2),
+      );
 
       return c.json(response);
-    } catch (error) {
-      console.error("[API] Get following error:", error);
-      return c.json({ error: "Failed to fetch following" }, 500);
-    }
-  });
     } catch (error) {
       console.error("[API] Get following error:", error);
       return c.json({ error: "Failed to fetch following" }, 500);
@@ -675,15 +696,552 @@ export function createApiRoutes(getContext: () => ApiContext) {
     const targetAccountId = c.req.query("target_account_id");
 
     if (!accountId || !targetAccountId) {
-      return c.json({ error: "account_id and target_account_id are required" }, 400);
+      return c.json(
+        { error: "account_id and target_account_id are required" },
+        400,
+      );
     }
 
     try {
-      const isFollowing = await ctx.socialService.isFollowing(accountId, targetAccountId);
+      const isFollowing = await ctx.socialService.isFollowing(
+        accountId,
+        targetAccountId,
+      );
       return c.json({ isFollowing });
     } catch (error) {
       console.error("[API] Check following error:", error);
       return c.json({ error: "Failed to check follow status" }, 500);
+    }
+  });
+
+  // ===========================================================================
+  // PROJECTS (FastData KV-based)
+  // ===========================================================================
+
+  // FastData config
+  const FASTDATA_CONTRACT = "contextual.near";
+  const FASTDATA_METHOD = "__fastdata_kv";
+  const PROJECTS_PREFIX = "projects";
+
+  // RPC endpoints for round-robin
+  const RPC_ENDPOINTS = [
+    "https://rpc.mainnet.near.org",
+    "https://near.lava.build",
+    "https://near.blockpi.network/v1/rpc/public",
+    "https://near.drpc.org",
+  ];
+  let rpcIndex = 0;
+
+  function getNextRpcUrl() {
+    const url = RPC_ENDPOINTS[rpcIndex];
+    rpcIndex = (rpcIndex + 1) % RPC_ENDPOINTS.length;
+    return url;
+  }
+
+  // ===========================================================================
+  // PROJECTS (Public read via FastData API)
+  // ===========================================================================
+
+  // Get projects list - simple working version
+  api.get("/projects", async (c) => {
+    const queryParams = c.req.query();
+    const accountId = queryParams.accountId || queryParams.account_id;
+
+    console.log("[API] GET /projects - All queryParams:", queryParams);
+    console.log("[API] GET /projects - accountId:", accountId);
+
+    if (!accountId) {
+      return c.json(
+        {
+          error:
+            "accountId query parameter is required (use ?accountId=your.near)",
+        },
+        400,
+      );
+    }
+
+    const limit = Math.min(Number(queryParams.limit || "50"), 100);
+    const offset = Number(queryParams.offset || "0");
+    const status = queryParams.status as
+      | "active"
+      | "completed"
+      | "archived"
+      | undefined;
+
+    console.log(
+      `[API] GET /projects - accountId: ${accountId}, limit: ${limit}, offset: ${offset}, status: ${status || "all"}`,
+    );
+
+    try {
+      // Build FastData API URL
+      const apiUrl = new URL("https://fastdata.up.railway.app/v1/kv/query");
+      apiUrl.searchParams.set("accountId", accountId);
+      apiUrl.searchParams.set("contractId", FASTDATA_CONTRACT);
+      apiUrl.searchParams.set("key_prefix", `${PROJECTS_PREFIX}/`);
+      apiUrl.searchParams.set("value_format", "json");
+
+      console.log(`[API] FastData URL: ${apiUrl.toString()}`);
+
+      // Fetch from FastData
+      const response = await fetch(apiUrl.toString(), {
+        headers: { "User-Agent": "near-agent-worker/1.0" },
+      });
+
+      console.log(`[API] FastData response status: ${response.status}`);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[API] FastData error response: ${errorText}`);
+        return c.json({ error: `FastData API error: ${response.status}` }, 502);
+      }
+
+      const data = await response.json();
+      console.log(
+        `[API] FastData response keys count: ${data.data?.length || 0}`,
+      );
+
+      // Return empty result if no data
+      if (!data.data || !Array.isArray(data.data)) {
+        return c.json({
+          projects: [],
+          pagination: { limit, offset, hasMore: false },
+        });
+      }
+
+      // Group by project ID
+      const projectsMap = new Map<string, Record<string, string>>();
+
+      for (const entry of data.data) {
+        const key = entry.key;
+        if (!key.startsWith(`${PROJECTS_PREFIX}/`)) continue;
+
+        const parts = key.split("/");
+        if (parts.length < 3) continue;
+
+        const projectId = parts[1];
+        if (!projectsMap.has(projectId)) {
+          projectsMap.set(projectId, {});
+        }
+
+        const field = parts.slice(2).join("/");
+        let value = entry.value;
+
+        // Try to parse JSON values
+        try {
+          if (
+            value.startsWith('"') ||
+            value.startsWith("{") ||
+            value.startsWith("[")
+          ) {
+            value = JSON.parse(value);
+          }
+        } catch {
+          // Keep as string if JSON parse fails
+        }
+
+        projectsMap.get(projectId)![field] = value;
+      }
+
+      console.log(`[API] Unique projects found: ${projectsMap.size}`);
+
+      // Build projects array
+      let projects: Array<{
+        id: string;
+        nearAccountId: string;
+        name: string;
+        description: string | null;
+        status: string;
+        createdAt: string;
+        updatedAt: string;
+      }> = [];
+
+      for (const [projectId, fields] of projectsMap.entries()) {
+        const name = fields.name;
+        const description = fields.description || null;
+        const projectStatus = fields.status;
+        const createdAt = fields.created;
+        const updatedAt = fields.updated;
+
+        // Only include valid projects
+        if (name && projectStatus && createdAt && updatedAt) {
+          projects.push({
+            id: projectId,
+            nearAccountId: accountId,
+            name: String(name),
+            description: description !== null ? String(description) : null,
+            status: String(projectStatus),
+            createdAt: String(createdAt),
+            updatedAt: String(updatedAt),
+          });
+        }
+      }
+
+      console.log(`[API] Valid projects: ${projects.length}`);
+
+      // Filter by status
+      if (status) {
+        const before = projects.length;
+        projects = projects.filter((p) => p.status === status);
+        console.log(
+          `[API] After status filter (${status}): ${projects.length} (was ${before})`,
+        );
+      }
+
+      // Sort by updatedAt (newest first)
+      projects.sort((a, b) => {
+        return (
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        );
+      });
+
+      // Pagination
+      const total = projects.length;
+      const paginatedProjects = projects.slice(offset, offset + limit);
+      const hasMore = offset + limit < total;
+
+      console.log(
+        `[API] Returning ${paginatedProjects.length} projects (hasMore: ${hasMore})`,
+      );
+
+      return c.json({
+        projects: paginatedProjects,
+        pagination: { limit, offset, hasMore, total },
+      });
+    } catch (error) {
+      console.error("[API] Projects endpoint error:", error);
+      return c.json(
+        {
+          error: "Internal server error",
+          details: error instanceof Error ? error.message : String(error),
+        },
+        500,
+      );
+    }
+  });
+
+  // Get a single project
+  api.get("/projects/:projectId", async (c) => {
+    const ctx = getContext();
+    if (!ctx.nearAccountId) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+
+    const projectId = c.req.param("projectId");
+
+    try {
+      const projectsService = new ProjectsService(ctx.db, {
+        network: "mainnet",
+      });
+      const project = await projectsService.getProject(
+        ctx.nearAccountId,
+        projectId,
+      );
+
+      if (!project) {
+        return c.json({ error: "Project not found" }, 404);
+      }
+
+      return c.json({
+        id: project.id,
+        nearAccountId: ctx.nearAccountId,
+        name: project.name,
+        description: project.description || null,
+        status: project.status,
+        createdAt: project.createdAt,
+        updatedAt: project.updatedAt,
+      });
+    } catch (error) {
+      console.error("[API] Get project error:", error);
+      return c.json({ error: "Failed to fetch project" }, 500);
+    }
+  });
+
+  // Create project (prepare transaction for client-side signing)
+  api.post("/projects/create", async (c) => {
+    const ctx = getContext();
+    if (!ctx.nearAccountId) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+
+    try {
+      const body = await c.req.json();
+      const {
+        name,
+        description,
+        status = "active",
+      }: {
+        name?: string;
+        description?: string;
+        status?: "active" | "completed" | "archived";
+      } = body;
+
+      if (!name || typeof name !== "string") {
+        return c.json({ error: "name is required" }, 400);
+      }
+
+      // Generate unique project ID
+      const projectId = `${ctx.nearAccountId}-${Date.now()}`;
+
+      // Prepare transaction for client-side signing
+      const projectsService = new ProjectsService(ctx.db, {
+        network: "mainnet",
+      });
+      const transaction = await projectsService.prepareCreateTransaction(
+        ctx.nearAccountId,
+        projectId,
+        name,
+        description || "",
+        status,
+      );
+
+      if (!transaction) {
+        return c.json({ error: "Failed to prepare transaction" }, 500);
+      }
+
+      return c.json({
+        id: projectId,
+        nearAccountId: ctx.nearAccountId,
+        name,
+        description: description || null,
+        status,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        transaction,
+      });
+    } catch (error) {
+      console.error("[API] Create project error:", error);
+      return c.json({ error: "Failed to create project" }, 500);
+    }
+  });
+
+  // Update project (prepare transaction for client-side signing)
+  api.put("/projects/:projectId", async (c) => {
+    const ctx = getContext();
+    if (!ctx.nearAccountId) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+
+    const projectId = c.req.param("projectId");
+
+    try {
+      const body = await c.req.json();
+      const {
+        name,
+        description,
+        status,
+      }: {
+        name?: string;
+        description?: string;
+        status?: "active" | "completed" | "archived";
+      } = body;
+
+      // Prepare transaction for client-side signing
+      const projectsService = new ProjectsService(ctx.db, {
+        network: "mainnet",
+      });
+      const transaction = await projectsService.prepareUpdateTransaction(
+        ctx.nearAccountId,
+        projectId,
+        name,
+        description,
+        status,
+      );
+
+      if (!transaction) {
+        return c.json({ error: "Failed to prepare transaction" }, 500);
+      }
+
+      return c.json({
+        id: projectId,
+        nearAccountId: ctx.nearAccountId,
+        name,
+        description: description || null,
+        status,
+        updatedAt: new Date().toISOString(),
+        transaction,
+      });
+    } catch (error) {
+      console.error("[API] Update project error:", error);
+      return c.json({ error: "Failed to update project" }, 500);
+    }
+  });
+
+  // Delete project (prepare transaction for client-side signing)
+  api.delete("/projects/:projectId", async (c) => {
+    const ctx = getContext();
+    if (!ctx.nearAccountId) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+
+    const projectId = c.req.param("projectId");
+
+    try {
+      // Prepare transaction for client-side signing
+      const projectsService = new ProjectsService(ctx.db, {
+        network: "mainnet",
+      });
+      const transaction = await projectsService.prepareDeleteTransaction(
+        ctx.nearAccountId,
+        projectId,
+      );
+
+      if (!transaction) {
+        return c.json({ error: "Failed to prepare transaction" }, 500);
+      }
+
+      return c.json({
+        success: true,
+        transaction,
+      });
+    } catch (error) {
+      console.error("[API] Delete project error:", error);
+      return c.json({ error: "Failed to delete project" }, 500);
+    }
+  });
+
+  // Get project KV entries
+  api.get("/projects/:projectId/kv", async (c) => {
+    const ctx = getContext();
+    if (!ctx.nearAccountId) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+
+    const projectId = c.req.param("projectId");
+    const limit = Math.min(Number(c.req.query("limit") || "50"), 100);
+
+    try {
+      const projectsService = new ProjectsService(ctx.db, {
+        network: "mainnet",
+      });
+      const entries = await projectsService.getKvEntries(
+        ctx.nearAccountId,
+        projectId,
+        limit,
+      );
+
+      return c.json({
+        entries: entries.map((e) => ({
+          projectId: e.projectId,
+          key: e.key,
+          value: e.value,
+          createdAt: e.createdAt,
+          updatedAt: e.updatedAt,
+        })),
+      });
+    } catch (error) {
+      console.error("[API] Get project KV error:", error);
+      return c.json({ error: "Failed to fetch project KV" }, 500);
+    }
+  });
+
+  // Get projects for an account (public endpoint)
+  api.get("/accounts/:accountId/projects", async (c) => {
+    const accountId = c.req.param("accountId");
+    const status = c.req.query("status") as
+      | "active"
+      | "completed"
+      | "archived"
+      | undefined;
+    const limit = Math.min(Number(c.req.query("limit") || "50"), 100);
+    const offset = Number(c.req.query("offset") || "0");
+
+    try {
+      // Query FastData API (not NEAR RPC directly)
+      const apiUrl = new URL("https://fastdata.up.railway.app/v1/kv/query");
+      apiUrl.searchParams.set("accountId", accountId);
+      apiUrl.searchParams.set("contractId", FASTDATA_CONTRACT);
+      apiUrl.searchParams.set("key_prefix", `${PROJECTS_PREFIX}/`);
+      apiUrl.searchParams.set("value_format", "json");
+
+      const response = await fetch(apiUrl.toString());
+      if (!response.ok) {
+        console.error("[API] FastData API failed:", response.status);
+        return c.json({ error: "Failed to fetch projects" }, 500);
+      }
+
+      const json: unknown = await response.json();
+      const apiResponse = json as {
+        data?: Array<{ key: string; value: string }>;
+      };
+
+      if (!apiResponse.data) {
+        return c.json({
+          projects: [],
+          pagination: { limit, offset, hasMore: false },
+        });
+      }
+
+      // Group keys by project ID
+      const projectGroups = new Map<string, Record<string, string>>();
+      for (const entry of apiResponse.data) {
+        const key = entry.key;
+        if (!key.startsWith(`${PROJECTS_PREFIX}/`)) continue;
+
+        const parts = key.split("/");
+        if (parts.length < 3) continue;
+
+        const projectId = parts[1];
+        if (!projectGroups.has(projectId)) {
+          projectGroups.set(projectId, {});
+        }
+
+        const field = parts.slice(2).join("/");
+        // Parse JSON value (it comes as stringified JSON)
+        const value = entry.value.startsWith('"')
+          ? JSON.parse(entry.value)
+          : entry.value;
+
+        projectGroups.get(projectId)![field] = value;
+      }
+
+      // Parse projects
+      let projects: any[] = [];
+      for (const [projectId, fields] of projectGroups.entries()) {
+        const name = fields["name"];
+        const description = fields["description"];
+        const projectStatus = fields["status"];
+        const createdAt = fields["created"];
+        const updatedAt = fields["updated"];
+
+        if (name && projectStatus && createdAt && updatedAt) {
+          projects.push({
+            id: projectId,
+            nearAccountId: accountId,
+            name,
+            description: description || null,
+            status: projectStatus,
+            createdAt,
+            updatedAt,
+          });
+        }
+      }
+
+      // Filter by status if specified
+      if (status) {
+        projects = projects.filter((p: any) => p.status === status);
+      }
+
+      // Sort by updated date (newest first)
+      projects.sort(
+        (a: any, b: any) =>
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+      );
+
+      // Apply pagination
+      const hasMore = offset + limit < projects.length;
+      const paginatedProjects = projects.slice(offset, offset + limit);
+
+      return c.json({
+        projects: paginatedProjects,
+        pagination: {
+          limit,
+          offset,
+          hasMore,
+        },
+      });
+    } catch (error) {
+      console.error("[API] Get account projects error:", error);
+      return c.json({ error: "Failed to fetch projects" }, 500);
     }
   });
 

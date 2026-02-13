@@ -64,12 +64,12 @@ export function BuilderDetails({ builder }: BuilderDetailsProps) {
     async function fetchProjects() {
       setIsLoadingProjects(true);
       try {
-        // For own profile, use authenticated endpoint; for others, use public endpoint
-        const endpoint = isOwnProfile
-          ? `/api/projects?account_id=${builder.accountId}&limit=100` // Get own projects (authenticated)
-          : `/api/accounts/${builder.accountId}/projects`; // Get builder's projects (public)
-
-        const response = await fetch(endpoint);
+        // Use the public projects endpoint (works for any account)
+        const params = new URLSearchParams({
+          accountId: builder.accountId,
+          limit: "50",
+        });
+        const response = await fetch(`/api/projects?${params}`);
         if (response.ok) {
           const data = await response.json();
           setProjects(data.projects || []);
@@ -83,7 +83,7 @@ export function BuilderDetails({ builder }: BuilderDetailsProps) {
     }
 
     fetchProjects();
-  }, [builder.accountId, isOwnProfile]);
+  }, [builder.accountId]);
 
   return (
     <div className="flex-1 min-h-0 border border-primary/30 bg-background overflow-y-auto">
