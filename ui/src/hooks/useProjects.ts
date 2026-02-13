@@ -39,7 +39,10 @@ export interface ProjectKvData {
 // API HELPERS (Direct HTTP calls, NOT oRPC)
 // =============================================================================
 
-async function fetchApi(endpoint: string, options?: RequestInit): Promise<Response> {
+async function fetchApi(
+  endpoint: string,
+  options?: RequestInit,
+): Promise<Response> {
   const response = await fetch(`/api${endpoint}`, {
     ...options,
     credentials: "include",
@@ -52,14 +55,19 @@ async function fetchApi(endpoint: string, options?: RequestInit): Promise<Respon
   console.log(`[fetchApi] ${endpoint} - Status: ${response.status}`);
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: "Request failed" }));
+    const error = await response
+      .json()
+      .catch(() => ({ error: "Request failed" }));
     console.error(`[fetchApi] Error:`, error);
     throw new Error(error.error || "Request failed");
   }
 
   // Log response for debugging
   const clone = response.clone();
-  clone.json().then(data => console.log(`[fetchApi] Response:`, data)).catch(() => {});
+  clone
+    .json()
+    .then((data) => console.log(`[fetchApi] Response:`, data))
+    .catch(() => {});
 
   return response;
 }
@@ -71,20 +79,38 @@ async function fetchApi(endpoint: string, options?: RequestInit): Promise<Respon
 /**
  * Get projects list for current user
  */
-export function useProjects(status?: "active" | "completed" | "archived", limit = 50, offset = 0) {
+export function useProjects(
+  status?: "active" | "completed" | "archived",
+  limit = 50,
+  offset = 0,
+  accountId?: string | undefined,
+) {
+  // Get accountId from better-near-auth (same source as profile page)
+  const nearState = authClient.useNearState();
+  const effectiveAccountId = accountId || nearState?.accountId;
+
   return useQuery({
-    queryKey: ["projects", status, limit, offset],
+    queryKey: ["projects", status, limit, offset, effectiveAccountId],
     queryFn: async () => {
-      const params = new URLSearchParams({
-        ...(status ? { status } : {}),
-        limit: String(limit),
-        offset: String(offset),
-      });
+      if (!effectiveAccountId) {
+        throw new Error("No account ID found - please login");
+      }
+
+      const params = new URLSearchParams();
+      if (status) params.set("status", status);
+      params.set("account_id", effectiveAccountId);
+      params.set("limit", String(limit));
+      params.set("offset", String(offset));
+
+      console.log(
+        `[useProjects] Fetching projects for accountId: ${effectiveAccountId}`,
+      );
       const response = await fetchApi(`/projects?${params}`);
-      return await response.json() as ProjectsResponse;
+      return (await response.json()) as ProjectsResponse;
     },
     staleTime: 30 * 1000, // 30 seconds
     gcTime: 5 * 60 * 1000,
+    enabled: !!effectiveAccountId,
   });
 }
 
@@ -96,7 +122,7 @@ export function useProject(projectId: string) {
     queryKey: ["project", projectId],
     queryFn: async () => {
       const response = await fetchApi(`/projects/${projectId}`);
-      return await response.json() as Project;
+      return (await response.json()) as Project;
     },
     enabled: !!projectId,
     staleTime: 30 * 1000,
@@ -111,7 +137,11 @@ export function useCreateProject() {
   const queryClient = useQueryClient();
 
   const createMutation = useMutation({
-    mutationFn: async (data: { name: string; description?: string; status?: "active" | "completed" | "archived" }) => {
+    mutationFn: async (data: {
+      name: string;
+      description?: string;
+      status?: "active" | "completed" | "archived";
+    }) => {
       // Get transaction from API
       const result = await fetchApi("/projects/create", {
         method: "POST",
@@ -123,7 +153,7 @@ export function useCreateProject() {
         throw new Error(error.error || "Failed to create project");
       }
 
-      const projectData = await result.json() as Project;
+      const projectData = (await result.json()) as Project;
 
       if (!projectData.transaction) {
         throw new Error("No transaction returned");
@@ -153,7 +183,7 @@ export function useCreateProject() {
           {
             gas: projectData.transaction.gas,
             attachedDeposit: "0.01 NEAR", // Deposit for FastData storage
-          }
+          },
         )
         .send();
 
@@ -169,7 +199,7 @@ export function useCreateProject() {
     onError: (error) => {
       console.error("Create project error:", error);
       toast.error(
-        error instanceof Error ? error.message : "Failed to create project"
+        error instanceof Error ? error.message : "Failed to create project",
       );
     },
   });
@@ -187,7 +217,17 @@ export function useUpdateProject() {
   const queryClient = useQueryClient();
 
   const updateMutation = useMutation({
-    mutationFn: async ({ projectId, data }: { projectId: string; data: { name?: string; description?: string; status?: "active" | "completed" | "archived" } }) => {
+    mutationFn: async ({
+      projectId,
+      data,
+    }: {
+      projectId: string;
+      data: {
+        name?: string;
+        description?: string;
+        status?: "active" | "completed" | "archived";
+      };
+    }) => {
       // Get transaction from API
       const result = await fetchApi(`/projects/${projectId}`, {
         method: "PUT",
@@ -199,7 +239,7 @@ export function useUpdateProject() {
         throw new Error(error.error || "Failed to update project");
       }
 
-      const projectData = await result.json() as Project;
+      const projectData = (await result.json()) as Project;
 
       if (!projectData.transaction) {
         throw new Error("No transaction returned");
@@ -228,7 +268,7 @@ export function useUpdateProject() {
           {
             gas: projectData.transaction.gas,
             attachedDeposit: "0.01 NEAR", // Deposit for FastData storage
-          }
+          },
         )
         .send();
 
@@ -239,13 +279,15 @@ export function useUpdateProject() {
       // Invalidate queries after indexer delay
       setTimeout(async () => {
         await queryClient.invalidateQueries({ queryKey: ["projects"] });
-        await queryClient.invalidateQueries({ queryKey: ["project", variables.projectId] });
+        await queryClient.invalidateQueries({
+          queryKey: ["project", variables.projectId],
+        });
       }, 2000);
     },
     onError: (error) => {
       console.error("Update project error:", error);
       toast.error(
-        error instanceof Error ? error.message : "Failed to update project"
+        error instanceof Error ? error.message : "Failed to update project",
       );
     },
   });
@@ -303,7 +345,7 @@ export function useDeleteProject() {
           {
             gas: data.transaction.gas,
             attachedDeposit: "0.01 NEAR", // Deposit for FastData storage
-          }
+          },
         )
         .send();
 
@@ -319,7 +361,7 @@ export function useDeleteProject() {
     onError: (error) => {
       console.error("Delete project error:", error);
       toast.error(
-        error instanceof Error ? error.message : "Failed to delete project"
+        error instanceof Error ? error.message : "Failed to delete project",
       );
     },
   });
@@ -341,7 +383,7 @@ export function useProjectKv(projectId: string, limit = 50) {
         limit: String(limit),
       });
       const response = await fetchApi(`/projects/${projectId}/kv?${params}`);
-      return await response.json() as { entries: ProjectKvData[] };
+      return (await response.json()) as { entries: ProjectKvData[] };
     },
     enabled: !!projectId,
     staleTime: 30 * 1000,

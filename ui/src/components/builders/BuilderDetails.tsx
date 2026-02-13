@@ -15,6 +15,7 @@ import type { Builder } from "@/types/builders";
 import { useLegionFollowers, useLegionFollowing } from "@/hooks/useLegionGraph";
 import { authClient } from "@/lib/auth-client";
 import { useProfiles } from "@/integrations/near-social-js";
+import { useProjects, type Project } from "@/hooks/useProjects";
 import {
   Github,
   Twitter,
@@ -25,7 +26,8 @@ import {
   Linkedin,
   Instagram,
   Youtube,
-  ExternalLink
+  ExternalLink,
+  Plus,
 } from "lucide-react";
 
 interface BuilderDetailsProps {
@@ -51,6 +53,38 @@ export function BuilderDetails({ builder }: BuilderDetailsProps) {
   const followersCount = followersData.data?.accounts?.length ?? 0;
   const followingCount = followingData.data?.accounts?.length ?? 0;
 
+  // Fetch projects for this builder
+  const isOwnProfile = currentAccountId === builder.accountId;
+
+  // Fetch projects from worker API for any builder
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [isLoadingProjects, setIsLoadingProjects] = useState(false);
+
+  useEffect(() => {
+    async function fetchProjects() {
+      setIsLoadingProjects(true);
+      try {
+        // For own profile, use authenticated endpoint; for others, use public endpoint
+        const endpoint = isOwnProfile
+          ? `/api/projects?account_id=${builder.accountId}&limit=100` // Get own projects (authenticated)
+          : `/api/accounts/${builder.accountId}/projects`; // Get builder's projects (public)
+
+        const response = await fetch(endpoint);
+        if (response.ok) {
+          const data = await response.json();
+          setProjects(data.projects || []);
+        }
+      } catch (error) {
+        console.error("[BuilderDetails] Error fetching projects:", error);
+        setProjects([]);
+      } finally {
+        setIsLoadingProjects(false);
+      }
+    }
+
+    fetchProjects();
+  }, [builder.accountId, isOwnProfile]);
+
   return (
     <div className="flex-1 min-h-0 border border-primary/30 bg-background overflow-y-auto">
       {/* Background Image Banner */}
@@ -65,7 +99,9 @@ export function BuilderDetails({ builder }: BuilderDetailsProps) {
         </div>
       )}
 
-      <div className={`p-4 sm:p-6 space-y-6 ${builder.backgroundImage ? "-mt-16 sm:-mt-20 relative" : ""}`}>
+      <div
+        className={`p-4 sm:p-6 space-y-6 ${builder.backgroundImage ? "-mt-16 sm:-mt-20 relative" : ""}`}
+      >
         {/* Header */}
         <BuilderHeader builder={builder} />
 
@@ -74,8 +110,12 @@ export function BuilderDetails({ builder }: BuilderDetailsProps) {
           <LegionStatsInline
             followersCount={followersCount}
             followingCount={followingCount}
-            onFollowersClick={() => setTab(tab === "followers" ? "none" : "followers")}
-            onFollowingClick={() => setTab(tab === "following" ? "none" : "following")}
+            onFollowersClick={() =>
+              setTab(tab === "followers" ? "none" : "followers")
+            }
+            onFollowingClick={() =>
+              setTab(tab === "following" ? "none" : "following")
+            }
             activeTab={tab}
           />
           {currentAccountId && currentAccountId !== builder.accountId && (
@@ -112,10 +152,16 @@ export function BuilderDetails({ builder }: BuilderDetailsProps) {
         <BuilderAbout description={builder.description} />
 
         {/* Projects */}
-        <BuilderProjects projects={builder.projects} />
+        <BuilderProjects
+          projects={projects}
+          isOwnProfile={isOwnProfile}
+          isLoading={isLoadingProjects}
+        />
 
         {/* NFT Holdings Grid */}
-        {(builder.holdings && builder.holdings.length > 0) && <NFTGrid holdings={builder.holdings} accountId={builder.accountId} />}
+        {builder.holdings && builder.holdings.length > 0 && (
+          <NFTGrid holdings={builder.holdings} accountId={builder.accountId} />
+        )}
 
         {/* Socials */}
         {builder.socials && <BuilderSocials socials={builder.socials} />}
@@ -139,7 +185,9 @@ function BuilderHeader({ builder }: { builder: Builder }) {
             <h2 className="text-xl sm:text-xl font-bold text-foreground">
               {builder.displayName}
             </h2>
-            <p className="font-mono text-primary text-sm sm:text-sm">{builder.accountId}</p>
+            <p className="font-mono text-primary text-sm sm:text-sm">
+              {builder.accountId}
+            </p>
           </div>
         </div>
         <span className="inline-block text-xs bg-primary/25 text-primary px-3 py-1.5 font-mono font-medium">
@@ -174,8 +222,8 @@ function BuilderContact({ builder }: { builder: Builder }) {
 
 function BuilderSkills({ tags }: { tags: string[] }) {
   // Filter out default NEAR tags
-  const filteredTags = tags.filter(tag =>
-    !["NEAR Expert", "Developer", "Community Leader"].includes(tag)
+  const filteredTags = tags.filter(
+    (tag) => !["NEAR Expert", "Developer", "Community Leader"].includes(tag),
   );
 
   if (filteredTags.length === 0) {
@@ -214,10 +262,37 @@ function BuilderAbout({ description }: { description: string }) {
 
 function BuilderProjects({
   projects,
+  isOwnProfile,
+  isLoading,
 }: {
-  projects: { name: string; description: string; status: string }[];
+  projects: Project[];
+  isOwnProfile: boolean;
+  isLoading?: boolean;
 }) {
   const [expandedProject, setExpandedProject] = useState<string | null>(null);
+
+  // Show loading skeleton
+  if (isLoading) {
+    return (
+      <div className="space-y-3">
+        <h3 className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
+          Building
+        </h3>
+        <div className="space-y-3">
+          <div className="p-4 border border-border/50 bg-muted/30 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="h-5 w-32 bg-muted/50 rounded animate-pulse" />
+              <div className="h-4 w-16 bg-muted/50 rounded animate-pulse" />
+            </div>
+          </div>
+          <div className="p-4 border border-border/50 bg-muted/30 space-y-2">
+            <div className="h-5 w-40 bg-muted/50 rounded animate-pulse" />
+            <div className="h-4 w-16 bg-muted/50 rounded animate-pulse" />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (projects.length === 0) {
     return null;
@@ -225,17 +300,30 @@ function BuilderProjects({
 
   return (
     <div className="space-y-3">
-      <h3 className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
-        Building
-      </h3>
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
+          Building
+        </h3>
+        {isOwnProfile && (
+          <button
+            onClick={() => {
+              /* TODO: Open create project modal */
+            }}
+            className="text-xs flex items-center gap-1.5 text-primary hover:text-primary/80 transition-colors font-mono"
+          >
+            <Plus className="size-3.5" />
+            Add Project
+          </button>
+        )}
+      </div>
       <div className="space-y-3">
         {projects.map((project) => {
-          const isExpanded = expandedProject === project.name;
+          const isExpanded = expandedProject === project.id;
           return (
             <div
-              key={project.name}
+              key={project.id}
               className="p-4 border border-border/50 bg-muted/30 space-y-2 cursor-pointer hover:border-primary/30 transition-colors"
-              onClick={() => setExpandedProject(isExpanded ? null : project.name)}
+              onClick={() => setExpandedProject(isExpanded ? null : project.id)}
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="font-mono text-foreground font-semibold text-base">
@@ -248,7 +336,7 @@ function BuilderProjects({
                   </span>
                 </div>
               </div>
-              {isExpanded && (
+              {isExpanded && project.description && (
                 <div className="pt-2 border-t border-border/30 mt-2">
                   <div className="text-sm text-muted-foreground">
                     <Markdown content={project.description} />
@@ -274,17 +362,15 @@ function ProjectStatus({ status }: { status: string }) {
           : "bg-muted text-muted-foreground border-border";
 
   return (
-    <span className={`text-[10px] px-2 py-0.5 font-mono font-medium border ${statusClass}`}>
+    <span
+      className={`text-[10px] px-2 py-0.5 font-mono font-medium border ${statusClass}`}
+    >
       {status}
     </span>
   );
 }
 
-function BuilderSocials({
-  socials,
-}: {
-  socials: Record<string, string>;
-}) {
+function BuilderSocials({ socials }: { socials: Record<string, string> }) {
   const linkEntries = Object.entries(socials || {})
     .filter(([_, url]) => url && typeof url === "string")
     .map(([platform, url]) => [platform, url.trim() as string]);
@@ -296,14 +382,25 @@ function BuilderSocials({
     const lowerPlatform = platform.toLowerCase();
 
     if (lowerPlatform.includes("github")) return <Github className="size-4" />;
-    if (lowerPlatform.includes("twitter") || lowerPlatform.includes("x.com")) return <Twitter className="size-4" />;
+    if (lowerPlatform.includes("twitter") || lowerPlatform.includes("x.com"))
+      return <Twitter className="size-4" />;
     if (lowerPlatform.includes("telegram")) return <Send className="size-4" />;
-    if (lowerPlatform.includes("discord")) return <MessageCircle className="size-4" />;
-    if (lowerPlatform.includes("youtube")) return <Youtube className="size-4" />;
-    if (lowerPlatform.includes("linkedin")) return <Linkedin className="size-4" />;
-    if (lowerPlatform.includes("instagram")) return <Instagram className="size-4" />;
-    if (lowerPlatform.includes("website") || lowerPlatform.includes("web")) return <Globe className="size-4" />;
-    if (lowerPlatform.includes("video") || lowerPlatform.includes("zoom") || lowerPlatform.includes("meet")) return <Video className="size-4" />;
+    if (lowerPlatform.includes("discord"))
+      return <MessageCircle className="size-4" />;
+    if (lowerPlatform.includes("youtube"))
+      return <Youtube className="size-4" />;
+    if (lowerPlatform.includes("linkedin"))
+      return <Linkedin className="size-4" />;
+    if (lowerPlatform.includes("instagram"))
+      return <Instagram className="size-4" />;
+    if (lowerPlatform.includes("website") || lowerPlatform.includes("web"))
+      return <Globe className="size-4" />;
+    if (
+      lowerPlatform.includes("video") ||
+      lowerPlatform.includes("zoom") ||
+      lowerPlatform.includes("meet")
+    )
+      return <Video className="size-4" />;
 
     return <ExternalLink className="size-4" />;
   };
@@ -341,12 +438,18 @@ function BuilderSocials({
       }
     }
     if (lowerPlatform.includes("discord")) {
-      if (!cleanUrl.includes("discord.gg") && !cleanUrl.includes("discord.com")) {
+      if (
+        !cleanUrl.includes("discord.gg") &&
+        !cleanUrl.includes("discord.com")
+      ) {
         return `https://discord.gg/${cleanUrl}`;
       }
     }
     if (lowerPlatform.includes("youtube")) {
-      if (!cleanUrl.includes("youtube.com/") && !cleanUrl.includes("youtu.be/")) {
+      if (
+        !cleanUrl.includes("youtube.com/") &&
+        !cleanUrl.includes("youtu.be/")
+      ) {
         return `https://youtube.com/@${cleanUrl}`;
       }
     }
@@ -382,15 +485,26 @@ function BuilderSocials({
   );
 }
 
-function NFTGrid({ holdings, accountId }: { holdings: Array<{ contractId: string; quantity: number }>; accountId: string }) {
-  const [nftImages, setNftImages] = useState<Array<{ contractId: string; tokens: Array<{ tokenId: string; imageUrl: string; title: string }> }> | null>(null);
+function NFTGrid({
+  holdings,
+  accountId,
+}: {
+  holdings: Array<{ contractId: string; quantity: number }>;
+  accountId: string;
+}) {
+  const [nftImages, setNftImages] = useState<Array<{
+    contractId: string;
+    tokens: Array<{ tokenId: string; imageUrl: string; title: string }>;
+  }> | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (holdings.length === 0) return;
 
     // Check if user has nearlegion.nfts.tg holdings
-    const hasNearLegion = holdings.some(h => h.contractId === 'nearlegion.nfts.tg');
+    const hasNearLegion = holdings.some(
+      (h) => h.contractId === "nearlegion.nfts.tg",
+    );
     if (!hasNearLegion) return;
 
     setIsLoading(true);
@@ -400,7 +514,7 @@ function NFTGrid({ holdings, accountId }: { holdings: Array<{ contractId: string
         setNftImages(data.images);
       })
       .catch((error) => {
-        console.error('[NFTGrid] Error fetching images:', error);
+        console.error("[NFTGrid] Error fetching images:", error);
       })
       .finally(() => {
         setIsLoading(false);
@@ -411,7 +525,9 @@ function NFTGrid({ holdings, accountId }: { holdings: Array<{ contractId: string
     return null;
   }
 
-  const hasNearLegion = holdings.some(h => h.contractId === 'nearlegion.nfts.tg');
+  const hasNearLegion = holdings.some(
+    (h) => h.contractId === "nearlegion.nfts.tg",
+  );
 
   return (
     <div className="space-y-4">
@@ -423,62 +539,75 @@ function NFTGrid({ holdings, accountId }: { holdings: Array<{ contractId: string
       {hasNearLegion && (
         <div className="space-y-2">
           {isLoading ? (
-            <div className="text-xs text-muted-foreground">Loading NFT images...</div>
+            <div className="text-xs text-muted-foreground">
+              Loading NFT images...
+            </div>
           ) : nftImages && nftImages.length > 0 ? (
-            nftImages.map((contract) => (
-              contract.contractId === 'nearlegion.nfts.tg' && contract.tokens.length > 0 && (
-                <div key={contract.contractId} className="space-y-2">
-                  <div className="text-xs text-muted-foreground/80">
-                    Legion Collection ({contract.tokens.length} items)
+            nftImages.map(
+              (contract) =>
+                contract.contractId === "nearlegion.nfts.tg" &&
+                contract.tokens.length > 0 && (
+                  <div key={contract.contractId} className="space-y-2">
+                    <div className="text-xs text-muted-foreground/80">
+                      Legion Collection ({contract.tokens.length} items)
+                    </div>
+                    <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2">
+                      {contract.tokens.slice(0, 20).map((token) => (
+                        <div
+                          key={token.tokenId}
+                          className="aspect-square rounded-lg bg-muted/30 border border-primary/30 overflow-hidden relative group"
+                        >
+                          <img
+                            src={token.imageUrl}
+                            alt={`Legion NFT #${token.tokenId}`}
+                            className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                            loading="lazy"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src =
+                                `https://api.dicebear.com/7.x/avataaars/svg?seed=${token.tokenId}`;
+                            }}
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2">
-                    {contract.tokens.slice(0, 20).map((token) => (
-                      <div
-                        key={token.tokenId}
-                        className="aspect-square rounded-lg bg-muted/30 border border-primary/30 overflow-hidden relative group"
-                      >
-                        <img
-                          src={token.imageUrl}
-                          alt={`Legion NFT #${token.tokenId}`}
-                          className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                          loading="lazy"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${token.tokenId}`;
-                          }}
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )
-            ))
+                ),
+            )
           ) : (
-            <div className="text-xs text-muted-foreground">No NFT images available</div>
+            <div className="text-xs text-muted-foreground">
+              No NFT images available
+            </div>
           )}
         </div>
       )}
 
       {/* Other holdings without images - just show count */}
       {holdings
-        .filter(h => h.contractId !== 'nearlegion.nfts.tg')
+        .filter((h) => h.contractId !== "nearlegion.nfts.tg")
         .map((holding) => {
           const contractName = holding.contractId
-            .replace('.nearlegion.near', '')
-            .replace('.nfts.tg', '')
-            .replace('near.', '');
+            .replace(".nearlegion.near", "")
+            .replace(".nfts.tg", "")
+            .replace("near.", "");
 
-          const isAscendant = holding.contractId === 'ascendant.nearlegion.near';
-          const isInitiate = holding.contractId === 'initiate.nearlegion.near';
+          const isAscendant =
+            holding.contractId === "ascendant.nearlegion.near";
+          const isInitiate = holding.contractId === "initiate.nearlegion.near";
 
           return (
-            <div key={holding.contractId} className="flex items-center justify-between p-3 bg-muted/20 border border-primary/20 rounded-lg">
+            <div
+              key={holding.contractId}
+              className="flex items-center justify-between p-3 bg-muted/20 border border-primary/20 rounded-lg"
+            >
               <div className="flex items-center gap-3">
                 {isAscendant && <span className="text-lg">🏆</span>}
                 {isInitiate && <span className="text-lg">🌱</span>}
                 <div>
                   <span className="text-sm font-medium">{contractName}</span>
-                  <span className="text-xs text-muted-foreground ml-2">×{holding.quantity}</span>
+                  <span className="text-xs text-muted-foreground ml-2">
+                    ×{holding.quantity}
+                  </span>
                 </div>
               </div>
               <a
@@ -508,7 +637,13 @@ interface LegionStatsInlineProps {
   activeTab: "none" | "followers" | "following";
 }
 
-function LegionStatsInline({ followersCount, followingCount, onFollowersClick, onFollowingClick, activeTab }: LegionStatsInlineProps) {
+function LegionStatsInline({
+  followersCount,
+  followingCount,
+  onFollowersClick,
+  onFollowingClick,
+  activeTab,
+}: LegionStatsInlineProps) {
   const isFollowersActive = activeTab === "followers";
   const isFollowingActive = activeTab === "following";
 
@@ -545,7 +680,13 @@ interface LegionSocialListProps {
   onClose: () => void;
 }
 
-function LegionSocialList({ accountId, type, followersData, followingData, onClose }: LegionSocialListProps) {
+function LegionSocialList({
+  accountId,
+  type,
+  followersData,
+  followingData,
+  onClose,
+}: LegionSocialListProps) {
   // Use passed data (already fetched for counts)
   const { data, isLoading, isError } =
     type === "followers" ? followersData : followingData;
@@ -579,7 +720,9 @@ function LegionSocialList({ accountId, type, followersData, followingData, onClo
   if (isError) {
     return (
       <div className="p-6 text-center">
-        <p className="text-sm text-muted-foreground mb-2">Failed to load {type}</p>
+        <p className="text-sm text-muted-foreground mb-2">
+          Failed to load {type}
+        </p>
         <button
           onClick={() => window.location.reload()}
           className="text-xs text-primary hover:underline"
