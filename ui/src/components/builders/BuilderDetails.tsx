@@ -56,34 +56,15 @@ export function BuilderDetails({ builder }: BuilderDetailsProps) {
   // Fetch projects for this builder
   const isOwnProfile = currentAccountId === builder.accountId;
 
-  // Fetch projects from worker API for any builder
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [isLoadingProjects, setIsLoadingProjects] = useState(false);
+  // Use the useProjects hook for proper React Query caching
+  const { data: projectsData, isLoading: isLoadingProjects } = useProjects(
+    undefined,
+    50,
+    0,
+    builder.accountId
+  );
 
-  useEffect(() => {
-    async function fetchProjects() {
-      setIsLoadingProjects(true);
-      try {
-        // Use the public projects endpoint (works for any account)
-        const params = new URLSearchParams({
-          accountId: builder.accountId,
-          limit: "50",
-        });
-        const response = await fetch(`/api/projects?${params}`);
-        if (response.ok) {
-          const data = await response.json();
-          setProjects(data.projects || []);
-        }
-      } catch (error) {
-        console.error("[BuilderDetails] Error fetching projects:", error);
-        setProjects([]);
-      } finally {
-        setIsLoadingProjects(false);
-      }
-    }
-
-    fetchProjects();
-  }, [builder.accountId]);
+  const projects = projectsData?.projects ?? [];
 
   return (
     <div className="flex-1 min-h-0 border border-primary/30 bg-background overflow-y-auto">
@@ -250,6 +231,10 @@ function BuilderSkills({ tags }: { tags: string[] }) {
 }
 
 function BuilderAbout({ description }: { description: string }) {
+  if (!description || description.trim() === "") {
+    return null;
+  }
+
   return (
     <div className="space-y-3">
       <h3 className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
@@ -271,29 +256,12 @@ function BuilderProjects({
 }) {
   const [expandedProject, setExpandedProject] = useState<string | null>(null);
 
-  // Show loading skeleton
+  // Don't render anything while loading initial data
   if (isLoading) {
-    return (
-      <div className="space-y-3">
-        <h3 className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
-          Building
-        </h3>
-        <div className="space-y-3">
-          <div className="p-4 border border-border/50 bg-muted/30 space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <div className="h-5 w-32 bg-muted/50 rounded animate-pulse" />
-              <div className="h-4 w-16 bg-muted/50 rounded animate-pulse" />
-            </div>
-          </div>
-          <div className="p-4 border border-border/50 bg-muted/30 space-y-2">
-            <div className="h-5 w-40 bg-muted/50 rounded animate-pulse" />
-            <div className="h-4 w-16 bg-muted/50 rounded animate-pulse" />
-          </div>
-        </div>
-      </div>
-    );
+    return null;
   }
 
+  // Don't render section if no projects
   if (projects.length === 0) {
     return null;
   }

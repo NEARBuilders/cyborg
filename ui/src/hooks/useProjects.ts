@@ -12,6 +12,7 @@ export interface Project {
   name: string;
   description: string | null;
   status: "active" | "completed" | "archived";
+  coverImageUrl?: string | null;
   createdAt: string;
   updatedAt: string;
   transaction?: any;
@@ -108,8 +109,8 @@ export function useProjects(
       const response = await fetchApi(`/projects?${params}`);
       return (await response.json()) as ProjectsResponse;
     },
-    staleTime: 30 * 1000, // 30 seconds
-    gcTime: 5 * 60 * 1000,
+    staleTime: 5 * 60 * 1000, // 5 minutes - prevent refetches while navigating
+    gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     enabled: !!effectiveAccountId,
   });
 }

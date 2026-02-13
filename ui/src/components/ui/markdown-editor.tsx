@@ -87,7 +87,8 @@ export const MarkdownEditor = forwardRef<HTMLTextAreaElement, MarkdownEditorProp
     const cursorPos = e.target.selectionStart;
     const textBeforeCursor = newValue.substring(0, cursorPos);
     const lastLineStart = textBeforeCursor.lastIndexOf("\n") + 1;
-    const lastLine = textBeforeCursor.substring(lastLineStart);
+    // Fix: Get the current line up to the cursor position, not after it
+    const lastLine = textBeforeCursor.substring(lastLineStart, cursorPos);
 
     console.log("Slash check:", lastLine, lastLine.startsWith("/"));
 

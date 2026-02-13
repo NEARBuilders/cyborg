@@ -1,18 +1,24 @@
 import { Skeleton } from "./skeleton";
-import { Users, UserCheck } from "lucide-react";
+import { Users, UserCheck, Code2 } from "lucide-react";
 import { useLegionStats } from "@/hooks/useLegionGraph";
 import { Link } from "@tanstack/react-router";
+import { useProjects } from "@/hooks/useProjects";
 
 interface SocialStatsProps {
   accountId: string;
   className?: string;
+  showProjectsLink?: boolean;
 }
 
-export function SocialStats({ accountId, className = "" }: SocialStatsProps) {
+export function SocialStats({ accountId, className = "", showProjectsLink = false }: SocialStatsProps) {
   const { data: stats, isLoading } = useLegionStats(accountId);
 
   const followersCount = stats?.followers || 0;
   const followingCount = stats?.following || 0;
+
+  // Fetch projects count for this account
+  const { data: projectsData } = useProjects(undefined, 50, 0, accountId);
+  const projectsCount = projectsData?.projects.length || 0;
 
   if (isLoading) {
     return (
@@ -44,6 +50,18 @@ export function SocialStats({ accountId, className = "" }: SocialStatsProps) {
         <span className="font-semibold text-foreground">{followingCount}</span>
         <span>Following</span>
       </Link>
+
+      {showProjectsLink && (
+        <Link
+          to={`/profile/${accountId}`}
+          search={{ tab: "projects" }}
+          className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <Code2 className="size-4" />
+          <span className="font-semibold text-foreground">{projectsCount}</span>
+          <span>Projects</span>
+        </Link>
+      )}
     </div>
   );
 }

@@ -193,8 +193,8 @@ export function BuilderCard({ builder }: BuilderCardProps) {
 
       {/* Body */}
       <div className="p-3 space-y-3">
-        {/* Description */}
-        {builder.description && (
+        {/* Description - only render if there's actual content */}
+        {builder.description && builder.description.trim() !== "" && (
           <div className="text-sm text-muted-foreground line-clamp-3">
             <Markdown content={builder.description} />
           </div>

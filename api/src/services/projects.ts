@@ -12,6 +12,7 @@ export interface ProjectData {
   name: string;
   description?: string;
   status: "active" | "completed" | "archived";
+  coverImageUrl?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -164,6 +165,11 @@ export class ProjectsService {
     } else {
       args[`${prefix}/description`] = null; // Delete if empty
     }
+    if (data.coverImageUrl) {
+      args[`${prefix}/cover_image_url`] = data.coverImageUrl;
+    } else {
+      args[`${prefix}/cover_image_url`] = null; // Delete if empty
+    }
     args[`${prefix}/status`] = data.status;
     args[`${prefix}/created`] = data.createdAt;
     args[`${prefix}/updated`] = data.updatedAt;
@@ -296,6 +302,7 @@ export class ProjectsService {
     const name = state[`${prefix}/name`];
     const description = state[`${prefix}/description`];
     const status = state[`${prefix}/status`];
+    const coverImageUrl = state[`${prefix}/cover_image_url`];
     const createdAt = state[`${prefix}/created`];
     const updatedAt = state[`${prefix}/updated`];
 
@@ -308,6 +315,7 @@ export class ProjectsService {
       name,
       description: description || undefined,
       status: status as "active" | "completed" | "archived",
+      coverImageUrl: coverImageUrl || undefined,
       createdAt,
       updatedAt,
     };

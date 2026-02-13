@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useRouterState } from "@tanstack/react-router";
 import { Social } from "near-social-js";
@@ -12,7 +12,7 @@ import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import { Markdown } from "../../../components/ui/markdown";
 import { MarkdownEditor } from "../../../components/ui/markdown-editor";
-import { EditModal, ProjectEditModal } from "../../../components/ui/edit-modal";
+import { EditModal } from "../../../components/ui/edit-modal";
 import { SocialLinksModal } from "../../../components/ui/social-links-modal";
 import { Skeleton } from "../../../components/ui/skeleton";
 import { Settings, ArrowLeft } from "lucide-react";
@@ -38,6 +38,19 @@ import {
   useLegionFollowers,
   useLegionFollowing,
 } from "../../../hooks/useLegionGraph";
+import {
+  useProjects,
+  useDeleteProject,
+  useCreateProject,
+  type Project,
+} from "../../../hooks/useProjects";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "../../../components/ui/dialog";
 
 const PROFILE_KEY = "builder-profile";
 
@@ -46,7 +59,6 @@ interface BuilderProfileData {
   description?: string;
   role?: string;
   tags?: string[];
-  projects?: { name: string; description: string; status: string }[];
   socials?: Record<string, string>;
 }
 
@@ -67,6 +79,7 @@ export const Route = createFileRoute("/_layout/profile/$accountId")({
   validateSearch: (search: Record<string, unknown>) => {
     return {
       from: (search.from as string | undefined) ?? undefined,
+      tab: (search.tab as "followers" | "following" | "projects" | undefined) ?? undefined,
     };
   },
   loader: async ({ params }) => {
@@ -145,8 +158,38 @@ function ProfilePage() {
   const chatState = routerState.location.state as unknown as
     | ChatState
     | undefined;
+  const navigate = Route.useNavigate();
 
   const showBackToChat = search.from === "chat";
+
+  // Map URL tab to socialTab state
+  const urlTabToSocialTab = (tab: typeof search.tab): "none" | "followers" | "following" | "projects" => {
+    if (tab === "followers") return "followers";
+    if (tab === "following") return "following";
+    if (tab === "projects") return "projects";
+    return "none";
+  };
+
+  // Social tab state (followers/following/projects - social media style)
+  const [socialTab, setSocialTab] = useState<"none" | "followers" | "following" | "projects">(() =>
+    urlTabToSocialTab(search.tab)
+  );
+
+  // Update URL when socialTab changes
+  const handleSetSocialTab = useCallback((tab: "none" | "followers" | "following" | "projects") => {
+    setSocialTab(tab);
+    // Update URL search params
+    if (tab === "none") {
+      navigate({ search: { from: search.from } });
+    } else {
+      navigate({ search: { ...search, tab: tab } });
+    }
+  }, [navigate, search.from, search.tab]);
+
+  // Sync socialTab with URL changes
+  useEffect(() => {
+    setSocialTab(urlTabToSocialTab(search.tab));
+  }, [search.tab]);
 
   // Log when we receive chat state
   console.log("🟡 ProfilePage - Received state:", {
@@ -177,34 +220,9 @@ function ProfilePage() {
     (currentAccountId === accountId ||
       normalizeAccountId(currentAccountId) === normalizeAccountId(accountId));
 
-  // Fetch projects for this account (from API, like builder details page)
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [isLoadingProjects, setIsLoadingProjects] = useState(false);
-
-  useEffect(() => {
-    async function fetchProjects() {
-      setIsLoadingProjects(true);
-      try {
-        // Use the public projects endpoint (works for any account)
-        const params = new URLSearchParams({
-          accountId: accountId,
-          limit: "50",
-        });
-        const response = await fetch(`/api/projects?${params}`);
-        if (response.ok) {
-          const data = await response.json();
-          setProjects(data.projects || []);
-        }
-      } catch (error) {
-        console.error("[ProfilePage] Error fetching projects:", error);
-        setProjects([]);
-      } finally {
-        setIsLoadingProjects(false);
-      }
-    }
-
-    fetchProjects();
-  }, [accountId]);
+  // Fetch projects for this account using useProjects hook (same as /projects page)
+  const { data: projectsData, isLoading: isLoadingProjects, error: projectsError } = useProjects(undefined, 50, 0, accountId);
+  const projects = projectsData?.projects ?? [];
 
   const [isEditing, setIsEditing] = useState(false);
 
@@ -216,23 +234,21 @@ function ProfilePage() {
   // Modal states
   const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
   const [isSocialLinksModalOpen, setIsSocialLinksModalOpen] = useState(false);
-  const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [isTagsModalOpen, setIsTagsModalOpen] = useState(false);
-  const [editingProjectIndex, setEditingProjectIndex] = useState<number | null>(
-    null,
-  );
   const [isSavingSocialLinks, setIsSavingSocialLinks] = useState(false);
   const [isSavingTags, setIsSavingTags] = useState(false);
-  const [isSavingProject, setIsSavingProject] = useState(false);
 
-  // Social tab state (followers/following - social media style)
-  const [socialTab, setSocialTab] = useState<
-    "none" | "followers" | "following"
-  >("none");
+  // Status filter for projects (when viewing profile's projects tab)
+  const [projectStatusFilter, setProjectStatusFilter] = useState<"all" | "active" | "completed" | "archived">("all");
 
   // Reset social tab when navigating to different profile
   useEffect(() => {
     setSocialTab("none");
+    // Clear tab from URL
+    if (search.tab) {
+      navigate({ search: { from: search.from } });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accountId]);
 
   const [editFormData, setEditFormData] = useState<BuilderProfileData>({
@@ -240,7 +256,6 @@ function ProfilePage() {
     description: "",
     role: "",
     tags: [],
-    projects: [],
     socials: {},
   });
 
@@ -314,6 +329,26 @@ function ProfilePage() {
   };
 
   const canPoke = !!currentAccountId && !isOwnProfile;
+
+  // Delete project mutation (for own profile only)
+  const { delete: deleteProject, isPending: isDeletingProject } = useDeleteProject();
+
+  // Create project mutation (for own profile only)
+  const { create: createProject, isPending: isCreatingProject } = useCreateProject();
+
+  // Create project modal state
+  const [isCreateProjectModalOpen, setIsCreateProjectModalOpen] = useState(false);
+  const [newProjectData, setNewProjectData] = useState<{
+    name: string;
+    description: string;
+    coverImageUrl: string;
+    status: "active" | "completed" | "archived";
+  }>({
+    name: "",
+    description: "",
+    coverImageUrl: "",
+    status: "active",
+  });
 
   return (
     <div className="flex-1 border border-primary/30 bg-background h-full overflow-y-auto relative">
@@ -418,7 +453,7 @@ function ProfilePage() {
 
         {/* Social Stats & Follow Button */}
         <div className="flex items-center justify-between gap-4">
-          <SocialStats accountId={accountId} />
+          <SocialStats accountId={accountId} showProjectsLink={true} />
           {!isOwnProfile && (
             <LegionFollowButton
               accountId={accountId}
@@ -427,13 +462,13 @@ function ProfilePage() {
           )}
         </div>
 
-        {/* Social Media Style: Followers/Following Tabs */}
+        {/* Social Media Style: Followers/Following/Projects Tabs */}
         {socialTab !== "none" && (
           <div className="space-y-4">
             <div className="flex items-center gap-4 border-b border-border/50">
               <button
-                onClick={() => setSocialTab("followers")}
-                className={`px-4 py-2 text-sm font-medium transition-colors relative ${
+                onClick={() => handleSetSocialTab("followers")}
+                className={`px-4 py-2 text-base font-medium transition-colors relative ${
                   socialTab === "followers"
                     ? "text-foreground"
                     : "text-muted-foreground hover:text-foreground"
@@ -445,8 +480,8 @@ function ProfilePage() {
                 )}
               </button>
               <button
-                onClick={() => setSocialTab("following")}
-                className={`px-4 py-2 text-sm font-medium transition-colors relative ${
+                onClick={() => handleSetSocialTab("following")}
+                className={`px-4 py-2 text-base font-medium transition-colors relative ${
                   socialTab === "following"
                     ? "text-foreground"
                     : "text-muted-foreground hover:text-foreground"
@@ -458,14 +493,44 @@ function ProfilePage() {
                 )}
               </button>
               <button
-                onClick={() => setSocialTab("none")}
+                onClick={() => handleSetSocialTab("projects")}
+                className={`px-4 py-2 text-base font-medium transition-colors relative ${
+                  socialTab === "projects"
+                    ? "text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Projects
+                {socialTab === "projects" && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                )}
+              </button>
+              <button
+                onClick={() => handleSetSocialTab("none")}
                 className="ml-auto text-sm text-muted-foreground hover:text-foreground"
               >
                 ✕
               </button>
             </div>
 
-            <SocialList accountId={accountId} type={socialTab} />
+            {socialTab === "projects" ? (
+              <ProfileProjects
+                projects={projects}
+                isLoadingProjects={isLoadingProjects}
+                statusFilter={projectStatusFilter}
+                onStatusFilterChange={setProjectStatusFilter}
+                isOwnProfile={isOwnProfile}
+                onDeleteProject={isOwnProfile ? async (projectId) => {
+                  if (confirm("Are you sure you want to delete this project?")) {
+                    await deleteProject(projectId);
+                  }
+                } : undefined}
+                isCreatingProject={isCreatingProject}
+                onCreateProject={() => setIsCreateProjectModalOpen(true)}
+              />
+            ) : (
+              <SocialList accountId={accountId} type={socialTab} />
+            )}
           </div>
         )}
 
@@ -476,7 +541,6 @@ function ProfilePage() {
               description,
               role,
               tags,
-              projects,
               socials,
             }}
             onSave={() => {
@@ -506,21 +570,6 @@ function ProfilePage() {
               onEdit={() => setIsTagsModalOpen(true)}
             />
 
-            {/* Projects */}
-            <ProfileProjects
-              projects={projects}
-              isLoadingProjects={isLoadingProjects}
-              isOwnProfile={isOwnProfile}
-              onEditProject={(index) => {
-                setEditingProjectIndex(index);
-                setIsProjectModalOpen(true);
-              }}
-              onAddProject={() => {
-                setEditingProjectIndex(null);
-                setIsProjectModalOpen(true);
-              }}
-            />
-
             {/* Socials */}
             <ProfileSocials
               socials={socials}
@@ -543,14 +592,14 @@ function ProfilePage() {
                 {currentAccountId && !isOwnProfile && (
                   <>
                     <Button
-                      onClick={() => setSocialTab("followers")}
+                      onClick={() => handleSetSocialTab("followers")}
                       variant="outline"
                       size="sm"
                     >
                       View Followers
                     </Button>
                     <Button
-                      onClick={() => setSocialTab("following")}
+                      onClick={() => handleSetSocialTab("following")}
                       variant="outline"
                       size="sm"
                     >
@@ -716,111 +765,6 @@ function ProfilePage() {
           </div>
         </div>
       </EditModal>
-
-      {/* Project Edit Modal */}
-      <ProjectEditModal
-        isOpen={isProjectModalOpen}
-        onClose={() => setIsProjectModalOpen(false)}
-        initialProject={
-          editingProjectIndex !== null
-            ? projects[editingProjectIndex]
-            : { name: "", description: "", status: "Active" }
-        }
-        isSaving={isSavingProject}
-        onSave={async (project) => {
-          setIsSavingProject(true);
-          try {
-            const nearAuth = authClient.near;
-            if (!nearAuth) {
-              throw new Error("No NEAR wallet connected");
-            }
-
-            const walletAccountId = nearAuth.getAccountId();
-            if (!walletAccountId) {
-              throw new Error("Please connect your NEAR wallet first");
-            }
-
-            // Create a URL-safe slug from project name
-            const slug = project.name
-              .toLowerCase()
-              .replace(/[^a-z0-9]+/g, "-")
-              .replace(/^-|-$/g, "");
-
-            // Build __fastdata_kv structure for projects
-            const fastDataKvData: Record<string, string> = {
-              [`profile/projects/${slug}/name`]: project.name,
-              [`profile/projects/${slug}/description`]: project.description,
-              [`profile/projects/${slug}/status`]: project.status,
-            };
-
-            // Add index/notify to help indexer and notify followers
-            const notifyPayload = {
-              type:
-                editingProjectIndex !== null
-                  ? "project_updated"
-                  : "project_added",
-              accountId: walletAccountId,
-              projectSlug: slug,
-              projectName: project.name,
-            };
-            fastDataKvData["index/notify"] = JSON.stringify(notifyPayload);
-
-            toast.info("Saving project... please approve transaction");
-
-            // Use __fastdata_kv on contextual.near
-            const near = nearAuth.getNearClient();
-            await near
-              .transaction(walletAccountId)
-              .functionCall(
-                "contextual.near",
-                "__fastdata_kv",
-                {
-                  data: fastDataKvData,
-                },
-                {
-                  gas: "300 Tgas",
-                  attachedDeposit: "0 NEAR",
-                },
-              )
-              .send();
-
-            console.log("Project saved successfully to blockchain");
-
-            // Update local state with the edited/added project
-            const updatedProjects =
-              editingProjectIndex !== null
-                ? [
-                    ...projects.slice(0, editingProjectIndex),
-                    project,
-                    ...projects.slice(editingProjectIndex + 1),
-                  ]
-                : [...projects, project];
-
-            setLocalProfile({
-              displayName,
-              description,
-              role,
-              tags,
-              projects: updatedProjects,
-              socials,
-            });
-
-            setIsProjectModalOpen(false);
-            toast.success(
-              editingProjectIndex !== null
-                ? "Project updated on blockchain!"
-                : "Project added to blockchain!",
-            );
-          } catch (error) {
-            console.error("Save project error:", error);
-            toast.error(
-              error instanceof Error ? error.message : "Failed to save project",
-            );
-          } finally {
-            setIsSavingProject(false);
-          }
-        }}
-      />
 
       {/* Social Links Edit Modal */}
       <SocialLinksModal
@@ -1010,6 +954,115 @@ function ProfilePage() {
           }}
         />
       </EditModal>
+
+      {/* Create Project Modal */}
+      <Dialog
+        open={isCreateProjectModalOpen}
+        onOpenChange={setIsCreateProjectModalOpen}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Create New Project</DialogTitle>
+            <DialogDescription>
+              Add a new project to your profile. You'll need to approve a transaction to save it.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              createProject(newProjectData, {
+                onSuccess: () => {
+                  setIsCreateProjectModalOpen(false);
+                  setNewProjectData({ name: "", description: "", coverImageUrl: "", status: "active" });
+                },
+              });
+            }}
+            className="space-y-4 pt-4"
+          >
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">
+                Project Name *
+              </label>
+              <Input
+                value={newProjectData.name}
+                onChange={(e) =>
+                  setNewProjectData({ ...newProjectData, name: e.target.value })
+                }
+                placeholder="My Awesome Project"
+                required
+                className="h-9"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">
+                Description
+              </label>
+              <MarkdownEditor
+                value={newProjectData.description}
+                onChange={(value) =>
+                  setNewProjectData({ ...newProjectData, description: value })
+                }
+                placeholder="Tell us about your project... Type / for commands"
+                rows={8}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">
+                Cover Image URL
+              </label>
+              <Input
+                type="url"
+                value={newProjectData.coverImageUrl}
+                onChange={(e) =>
+                  setNewProjectData({ ...newProjectData, coverImageUrl: e.target.value })
+                }
+                placeholder="https://example.com/banner.png"
+                className="h-9"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">
+                Status
+              </label>
+              <select
+                value={newProjectData.status}
+                onChange={(e) =>
+                  setNewProjectData({
+                    ...newProjectData,
+                    status: e.target.value as "active" | "completed" | "archived",
+                  })
+                }
+                className="w-full h-9 px-3 py-1 text-sm bg-background border border-border/50 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="active">Active</option>
+                <option value="completed">Completed</option>
+                <option value="archived">Archived</option>
+              </select>
+            </div>
+
+            <div className="flex gap-3 pt-4">
+              <button
+                type="submit"
+                disabled={isCreatingProject || !newProjectData.name.trim()}
+                className="flex-1 h-9 px-6 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isCreatingProject ? "Creating..." : "Create Project"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsCreateProjectModalOpen(false)}
+                disabled={isCreatingProject}
+                className="h-9 px-6 border border-border/50 rounded-md text-sm font-medium hover:bg-muted/50 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1317,7 +1370,7 @@ function ProfileSkills({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
+        <h3 className="text-lg font-semibold text-foreground">
           Skills
         </h3>
         {isOwnProfile && onEdit && (
@@ -1347,7 +1400,7 @@ function ProfileSkills({
 function ProfileAbout({ description }: { description: string }) {
   return (
     <div className="space-y-3">
-      <h3 className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
+      <h3 className="text-lg font-semibold text-foreground">
         About
       </h3>
       <Markdown content={description} />
@@ -1357,78 +1410,182 @@ function ProfileAbout({ description }: { description: string }) {
 
 function ProfileProjects({
   projects,
+  isLoadingProjects,
+  statusFilter,
+  onStatusFilterChange,
   isOwnProfile,
-  onEditProject,
-  onAddProject,
+  onDeleteProject,
+  isCreatingProject,
+  onCreateProject,
 }: {
-  projects: { name: string; description: string; status: string }[];
+  projects: Project[];
+  isLoadingProjects: boolean;
+  statusFilter: "all" | "active" | "completed" | "archived";
+  onStatusFilterChange: (filter: "all" | "active" | "completed" | "archived") => void;
   isOwnProfile?: boolean;
-  onEditProject?: (index: number) => void;
-  onAddProject?: () => void;
+  onDeleteProject?: (projectId: string) => void;
+  isCreatingProject?: boolean;
+  onCreateProject?: () => void;
 }) {
-  const [expandedProject, setExpandedProject] = useState<string | null>(null);
+  // Filter projects client-side based on status
+  const filteredProjects = projects.filter(project => {
+    if (statusFilter === "all") return true;
+    return project.status === statusFilter;
+  });
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
-          Building
+    <div className="space-y-4">
+      {/* Header with Status Filter and Create button */}
+      <div className="flex items-center justify-between pb-2 border-b border-border/50">
+        <h3 className="text-xl font-semibold text-foreground">
+          Projects
         </h3>
-        {isOwnProfile && onAddProject && (
-          <button
-            type="button"
-            onClick={onAddProject}
-            className="text-xs text-primary hover:text-primary/80 font-mono underline underline-offset-4"
-          >
-            + Add Project
-          </button>
-        )}
-      </div>
-      <div className="space-y-3">
-        {projects.map((project, index) => {
-          const isExpanded = expandedProject === project.name;
-          return (
-            <div
-              key={project.name}
-              className="group p-4 border border-border/50 bg-muted/30 space-y-2 cursor-pointer hover:border-primary/30 transition-colors"
-              onClick={() =>
-                setExpandedProject(isExpanded ? null : project.name)
-              }
+        <div className="flex items-center gap-3">
+          <div className="flex gap-2">
+            <button
+              onClick={() => onStatusFilterChange("all")}
+              className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
+                statusFilter === "all"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+              }`}
             >
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-mono text-foreground font-semibold text-base">
-                  {project.name}
-                </span>
-                <div className="flex items-center gap-2">
-                  <ProjectStatus status={project.status} />
-                  <span className="text-muted-foreground text-xs">
-                    {isExpanded ? "▼" : "▶"}
-                  </span>
-                  {isOwnProfile && onEditProject && (
+              All
+            </button>
+            <button
+              onClick={() => onStatusFilterChange("active")}
+              className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
+                statusFilter === "active"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+              }`}
+            >
+              Active
+            </button>
+            <button
+              onClick={() => onStatusFilterChange("completed")}
+              className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
+                statusFilter === "completed"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+              }`}
+            >
+              Completed
+            </button>
+            <button
+              onClick={() => onStatusFilterChange("archived")}
+              className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
+                statusFilter === "archived"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+              }`}
+            >
+              Archived
+            </button>
+          </div>
+          {isOwnProfile && (
+            <button
+              onClick={() => onCreateProject?.()}
+              disabled={isCreatingProject}
+              className="bg-primary text-primary-foreground px-3 py-1.5 rounded-md text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+            >
+              {isCreatingProject ? "Creating..." : "Create Project"}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Projects List */}
+      {isLoadingProjects ? (
+        <div className="text-center py-8">
+          <p className="text-sm text-muted-foreground">Loading projects...</p>
+        </div>
+      ) : filteredProjects.length === 0 ? (
+        <div className="text-center py-8 bg-muted/20 rounded-lg border border-border/50">
+          <p className="text-sm text-muted-foreground mb-3">No projects found</p>
+          {isOwnProfile && (
+            <button
+              onClick={() => onCreateProject?.()}
+              className="text-primary hover:underline text-xs"
+            >
+              Create your first project →
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="grid gap-3">
+          {filteredProjects.map((project) => (
+            <div
+              key={project.id}
+              className="p-3 sm:p-4 bg-card rounded-lg border border-border/50 hover:border-border transition-colors overflow-hidden"
+            >
+              {/* Cover Image Banner */}
+              {project.coverImageUrl ? (
+                <div className="aspect-video w-full overflow-hidden">
+                  <img
+                    src={project.coverImageUrl}
+                    alt={project.name}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      // Hide image on error
+                      (e.currentTarget as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                </div>
+              ) : (
+                <div className="aspect-video w-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
+                  <span className="text-4xl text-primary/40">📦</span>
+                </div>
+              )}
+              <div className="flex items-start justify-between gap-3 pt-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h3 className="font-medium text-sm">{project.name}</h3>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${
+                      project.status === "active"
+                        ? "bg-green-500/10 text-green-600 dark:text-green-400"
+                        : project.status === "completed"
+                        ? "bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                        : "bg-muted text-muted-foreground"
+                    }`}>
+                      {project.status}
+                    </span>
+                  </div>
+                  {project.description && (
+                    <p className="text-sm text-muted-foreground line-clamp-2">
+                      {project.description}
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    Updated {new Date(project.updatedAt).toLocaleDateString()}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Link
+                    to="/projects/$id"
+                    params={{ id: project.id }}
+                    className="px-2.5 py-1.5 text-xs bg-muted hover:bg-muted/80 rounded-md transition-colors"
+                  >
+                    View
+                  </Link>
+                  {isOwnProfile && onDeleteProject && (
                     <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onEditProject(index);
+                      onClick={() => {
+                        if (confirm("Are you sure you want to delete this project?")) {
+                          onDeleteProject(project.id);
+                        }
                       }}
-                      className="opacity-0 group-hover:opacity-100 text-xs text-primary hover:text-primary/80 transition-opacity"
+                      className="px-2.5 py-1.5 text-xs bg-destructive/10 text-destructive hover:bg-destructive/20 rounded-md transition-colors"
                     >
-                      Edit
+                      Delete
                     </button>
                   )}
                 </div>
               </div>
-              {isExpanded && (
-                <div className="pt-2 border-t border-border/30 mt-2">
-                  <div className="text-sm text-muted-foreground">
-                    <Markdown content={project.description} />
-                  </div>
-                </div>
-              )}
             </div>
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1472,7 +1629,7 @@ function ProfileSocials({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
+        <h3 className="text-lg font-semibold text-foreground">
           Connect
         </h3>
         {isOwnProfile && onEdit && (
@@ -1524,11 +1681,6 @@ function ProfileEditForm({
 }) {
   const [formData, setFormData] = useState<BuilderProfileData>(initialData);
   const [newTag, setNewTag] = useState("");
-  const [newProject, setNewProject] = useState({
-    name: "",
-    description: "",
-    status: "Active",
-  });
 
   const saveMutation = useMutation({
     mutationFn: async (data: BuilderProfileData) => {
@@ -1569,28 +1721,11 @@ function ProfileEditForm({
     }));
   };
 
-  const handleAddProject = () => {
-    if (newProject.name.trim() && newProject.description.trim()) {
-      setFormData((prev) => ({
-        ...prev,
-        projects: [...(prev.projects || []), newProject],
-      }));
-      setNewProject({ name: "", description: "", status: "Active" });
-    }
-  };
-
-  const handleRemoveProject = (index: number) => {
-    setFormData((prev) => ({
-      ...prev,
-      projects: prev.projects?.filter((_, i) => i !== index) || [],
-    }));
-  };
-
   return (
     <div className="space-y-8">
       {/* Basic Info */}
       <div className="space-y-4">
-        <h4 className="text-sm font-medium text-foreground">Basic Info</h4>
+        <h3 className="text-lg font-semibold text-foreground">Basic Info</h3>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <label className="text-xs text-muted-foreground">
@@ -1628,7 +1763,7 @@ function ProfileEditForm({
 
       {/* Description */}
       <div className="space-y-2">
-        <label className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
+        <label className="text-lg font-semibold text-foreground">
           About
         </label>
         <MarkdownEditor
@@ -1643,7 +1778,7 @@ function ProfileEditForm({
 
       {/* Skills/Tags */}
       <div className="space-y-4">
-        <h4 className="text-sm font-medium text-foreground">Skills</h4>
+        <h3 className="text-lg font-semibold text-foreground">Skills</h3>
         <div className="flex flex-wrap gap-2">
           {formData.tags
             ?.filter(
@@ -1690,100 +1825,9 @@ function ProfileEditForm({
       {/* Divider */}
       <div className="border-b border-border/50" />
 
-      {/* Projects */}
-      <div className="space-y-4">
-        <h4 className="text-sm font-medium text-foreground">Projects</h4>
-        <div className="space-y-2">
-          {formData.projects?.map((project, index) => (
-            <div
-              key={index}
-              className="p-3 border border-border/50 bg-muted/20 space-y-2 rounded-lg"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-mono text-foreground font-semibold text-sm">
-                  {project.name}
-                </span>
-                <div className="flex items-center gap-2">
-                  <ProjectStatus status={project.status} />
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveProject(index)}
-                    className="text-xs text-muted-foreground hover:text-destructive"
-                  >
-                    ✕
-                  </button>
-                </div>
-              </div>
-              <p className="text-sm text-muted-foreground line-clamp-2">
-                {project.description}
-              </p>
-            </div>
-          ))}
-        </div>
-
-        {/* Add Project Form */}
-        <div className="p-4 border border-dashed border-border/50 space-y-4 rounded-lg bg-muted/10">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            Add New Project
-          </p>
-          <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground">
-              Project name
-            </label>
-            <Input
-              value={newProject.name}
-              onChange={(e) =>
-                setNewProject((prev) => ({ ...prev, name: e.target.value }))
-              }
-              placeholder="My awesome project"
-              className="h-9"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground">Description</label>
-            <MarkdownEditor
-              value={newProject.description}
-              onChange={(value) =>
-                setNewProject((prev) => ({ ...prev, description: value }))
-              }
-              placeholder="What are you building?"
-              rows={3}
-              minimal
-            />
-          </div>
-
-          <div className="flex items-center gap-2">
-            <select
-              value={newProject.status}
-              onChange={(e) =>
-                setNewProject((prev) => ({ ...prev, status: e.target.value }))
-              }
-              className="flex-1 h-9 px-2.5 bg-muted/10 border border-border/40 text-sm font-mono outline-none focus-visible:border-primary/40 rounded-md"
-            >
-              <option value="Active">Active</option>
-              <option value="In Development">In Development</option>
-              <option value="Beta">Beta</option>
-              <option value="Completed">Completed</option>
-            </select>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleAddProject}
-              className="h-9"
-            >
-              Add Project
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* Divider */}
-      <div className="border-b border-border/50" />
-
       {/* Socials */}
       <div className="space-y-4">
-        <h4 className="text-sm font-medium text-foreground">Social Links</h4>
+        <h3 className="text-lg font-semibold text-foreground">Social Links</h3>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <label className="text-xs text-muted-foreground">Website</label>

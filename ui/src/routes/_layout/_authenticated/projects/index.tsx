@@ -1,20 +1,32 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useProjects, useDeleteProject } from "@/hooks/useProjects";
 import { useState } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { authClient } from "@/lib/auth-client";
 
 export const Route = createFileRoute("/_layout/_authenticated/projects/")({
   component: ProjectsList,
+  pendingComponent: () => <ProjectsListSkeleton />,
+  beforeLoad: async () => {
+    const nearState = authClient.useNearState();
+    if (nearState?.accountId) {
+      throw redirect({
+        to: `/profile/${nearState.accountId}?tab=projects`,
+      });
+    }
+  },
 });
 
 function ProjectsList() {
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "completed" | "archived">("all");
 
-  // Fetch projects
-  const { data, isLoading, error } = useProjects(
-    statusFilter === "all" ? undefined : statusFilter
-  );
+  const { data, isLoading, error } = useProjects(undefined);
 
-  // Delete project mutation
+  const filteredProjects = data?.projects.filter(project => {
+    if (statusFilter === "all") return true;
+    return project.status === statusFilter;
+  }) ?? [];
+
   const { delete: deleteProject, isPending: isDeleting } = useDeleteProject();
 
   const handleDelete = async (projectId: string) => {
@@ -24,67 +36,69 @@ function ProjectsList() {
 
   return (
     <div className="space-y-8 max-w-5xl">
-      {/* Header */}
-      <div className="flex items-center justify-between pb-4 border-b border-border/50">
+      <div className="space-y-4">
         <div>
           <h1 className="text-2xl font-semibold">Projects</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Manage your projects and their data
           </p>
         </div>
-        <Link
-          to="/projects/create"
-          className="bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 transition-colors"
-        >
-          Create Project
-        </Link>
+
+        <p className="text-sm text-muted-foreground">
+          Manage your projects from your{" "}
+          <Link
+            to="/profile"
+            search={{ tab: "projects" }}
+            className="text-primary hover:underline"
+          >
+            profile page
+          </Link>
+        </p>
+
+        <div className="flex gap-2">
+          <button
+            onClick={() => setStatusFilter("all")}
+            className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+              statusFilter === "all"
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:bg-muted/80"
+            }`}
+          >
+            All
+          </button>
+          <button
+            onClick={() => setStatusFilter("active")}
+            className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+              statusFilter === "active"
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:bg-muted/80"
+            }`}
+          >
+            Active
+          </button>
+          <button
+            onClick={() => setStatusFilter("completed")}
+            className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+              statusFilter === "completed"
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:bg-muted/80"
+            }`}
+          >
+            Completed
+          </button>
+          <button
+            onClick={() => setStatusFilter("archived")}
+            className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+              statusFilter === "archived"
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:bg-muted/80"
+            }`}
+          >
+            Archived
+          </button>
+        </div>
       </div>
 
-      {/* Status Filter */}
-      <div className="flex gap-2">
-        <button
-          onClick={() => setStatusFilter("all")}
-          className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-            statusFilter === "all"
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted text-muted-foreground hover:bg-muted/80"
-          }`}
-        >
-          All
-        </button>
-        <button
-          onClick={() => setStatusFilter("active")}
-          className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-            statusFilter === "active"
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted text-muted-foreground hover:bg-muted/80"
-          }`}
-        >
-          Active
-        </button>
-        <button
-          onClick={() => setStatusFilter("completed")}
-          className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-            statusFilter === "completed"
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted text-muted-foreground hover:bg-muted/80"
-          }`}
-        >
-          Completed
-        </button>
-        <button
-          onClick={() => setStatusFilter("archived")}
-          className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-            statusFilter === "archived"
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted text-muted-foreground hover:bg-muted/80"
-          }`}
-        >
-          Archived
-        </button>
-      </div>
-
-      {/* Projects List */}
       {isLoading ? (
         <div className="text-center py-12">
           <p className="text-muted-foreground">Loading projects...</p>
@@ -95,7 +109,7 @@ function ProjectsList() {
             Error loading projects
           </p>
         </div>
-      ) : data?.projects.length === 0 ? (
+      ) : filteredProjects.length === 0 ? (
         <div className="text-center py-12 bg-muted/20 rounded-lg border border-border/50">
           <p className="text-muted-foreground mb-4">No projects yet</p>
           <Link
@@ -107,12 +121,30 @@ function ProjectsList() {
         </div>
       ) : (
         <div className="grid gap-4">
-          {data?.projects.map((project) => (
+          {filteredProjects.map((project) => (
             <div
               key={project.id}
-              className="p-4 bg-card rounded-lg border border-border/50 hover:border-border transition-colors"
+              className="overflow-hidden bg-card rounded-lg border border-border/50 hover:border-border transition-colors"
             >
-              <div className="flex items-start justify-between gap-4">
+              {/* Cover Image Banner */}
+              {project.coverImageUrl ? (
+                <div className="aspect-video w-full overflow-hidden">
+                  <img
+                    src={project.coverImageUrl}
+                    alt={project.name}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      // Hide image on error
+                      (e.currentTarget as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                </div>
+              ) : (
+                <div className="aspect-video w-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
+                  <span className="text-4xl text-primary/40">📦</span>
+                </div>
+              )}
+              <div className="flex items-start justify-between gap-4 p-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <h3 className="font-medium">{project.name}</h3>
@@ -156,6 +188,27 @@ function ProjectsList() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function ProjectsListSkeleton() {
+  return (
+    <div className="space-y-8 max-w-5xl">
+      <div className="space-y-4">
+        <Skeleton className="h-8 w-32" />
+        <Skeleton className="h-4 w-64" />
+        <div className="flex gap-2">
+          <Skeleton className="h-8 w-16" />
+          <Skeleton className="h-8 w-16" />
+          <Skeleton className="h-8 w-16" />
+        </div>
+      </div>
+      <div className="grid gap-4">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Skeleton key={i} className="h-32 w-full" />
+        ))}
+      </div>
     </div>
   );
 }
