@@ -112,30 +112,43 @@ function LoginPage() {
   const handleSignInResponse = async (response: any) => {
     addDebug(`Sign-in response received`);
     // better-auth doesn't return user in response - cookie is set instead
-    // Use the wallet accountId from nearState
-    const accountId = nearState?.accountId;
+    // Get accountId directly from auth client (more reliable than nearState)
+    const accountId = authClient.near.getAccountId();
 
     if (accountId) {
       addDebug(`Account ID from wallet: ${accountId}`);
 
-      // Wait a bit for cookie to be processed, then check session
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Wait and retry for session to be available (with retry logic)
+      const maxRetries = 5;
+      const retryDelay = 1000; // 1 second between retries
+      let sessionData = null;
 
-      const sessionData = await authClient.getSession();
-      addDebug(`Session check: ${!!sessionData?.user}`);
-      addDebug(`Session user: ${sessionData?.user?.name || "none"}`);
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        addDebug(`Session check attempt ${attempt}/${maxRetries}...`);
+        sessionData = await authClient.getSession();
+        addDebug(`Session check: ${!!sessionData?.user}`);
+        addDebug(`Session user: ${sessionData?.user?.name || "none"}`);
 
-      if (sessionData?.user) {
-        addDebug(`✓ Sign-in successful!`);
-        toast.success(`Signed in as: ${accountId}`);
-        // Invalidate router to trigger session refresh across app
-        await router.invalidate();
-      } else {
-        addDebug(`⚠ Sign-in completed but session not found`);
-        toast.success(`Signed in as: ${accountId}`);
-        // Still proceed - might be a timing issue
-        await router.invalidate();
+        if (sessionData?.user) {
+          addDebug(`✓ Sign-in successful!`);
+          toast.success(`Signed in as: ${accountId}`);
+          // Invalidate router to trigger session refresh across app
+          await router.invalidate();
+          setIsSigningIn(false);
+          return;
+        }
+
+        // Wait before retrying (except on last attempt)
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+        }
       }
+
+      // If we get here, session was never found
+      addDebug(`⚠ Sign-in completed but session not found after ${maxRetries} attempts`);
+      toast.success(`Signed in as: ${accountId}`);
+      // Still proceed - might resolve on next page load
+      await router.invalidate();
       setIsSigningIn(false);
     } else {
       addDebug(`No account ID found`);
@@ -180,7 +193,7 @@ function LoginPage() {
   // Sign in with already connected wallet (single signature)
   const handleSignInOnly = async () => {
     setIsSigningIn(true);
-    const accountId = nearState?.accountId;
+    const accountId = authClient.near.getAccountId();
     addDebug(`Starting sign-in for: ${accountId}`);
     addDebug(`Recipient: ${recipient}`);
 
