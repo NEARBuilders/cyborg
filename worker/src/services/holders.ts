@@ -8,7 +8,7 @@
 
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { Database } from "../db";
-import { ascendantHolders, legionHolders } from "../db/schema";
+import { ascendantHolders, legionHolders, LEGION_CONTRACTS } from "../db/schema";
 
 interface HoldersData {
   holders: Array<{
@@ -162,12 +162,6 @@ export async function isAscendantHolder(
 // =============================================================================
 // LEGION CONTRACTS FOR REAL-TIME VERIFICATION
 // =============================================================================
-
-const LEGION_CONTRACTS = [
-  "nearlegion.nfts.tg",
-  "ascendant.nearlegion.near",
-  "initiate.nearlegion.near",
-];
 
 const RPC_URL = "https://rpc.mainnet.near.org";
 

@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect, useImperativeHandle, forwardRef } from "react";
-import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/ui/markdown";
 
 interface MarkdownEditorProps {
@@ -27,7 +26,7 @@ export const MarkdownEditor = forwardRef<HTMLTextAreaElement, MarkdownEditorProp
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Expose textarea ref to parent
-  useImperativeHandle(ref, () => textareaRef.current);
+  useImperativeHandle(ref, () => textareaRef.current!);
 
   // Sync local value with external value
   useEffect(() => {
@@ -57,26 +56,6 @@ export const MarkdownEditor = forwardRef<HTMLTextAreaElement, MarkdownEditorProp
     { icon: "➖", label: "Divider", description: "Visual divider", insert: "\n---\n" },
     { icon: "⚠️", label: "Callout", description: "Highlight important info", insert: "> ⚠️ " },
   ];
-
-  const insertText = (before: string, after: string = "", placeholderText: string = "") => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const text = localValue;
-    const selectedText = text.substring(start, end) || placeholderText;
-
-    const newValue = text.substring(0, start) + before + selectedText + after + text.substring(end);
-    setLocalValue(newValue);
-    onChange(newValue);
-
-    setTimeout(() => {
-      textarea.focus();
-      const newPosition = start + before.length + selectedText.length;
-      textarea.setSelectionRange(newPosition, newPosition);
-    }, 0);
-  };
 
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newValue = e.target.value;

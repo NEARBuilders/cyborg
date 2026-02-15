@@ -21,6 +21,7 @@ import { Route as LayoutAuthenticatedSettingsRouteImport } from './routes/_layou
 import { Route as LayoutAuthenticatedAdminRouteImport } from './routes/_layout/_authenticated/_admin'
 import { Route as LayoutAuthenticatedProjectsIndexRouteImport } from './routes/_layout/_authenticated/projects/index'
 import { Route as LayoutAuthenticatedChatIndexRouteImport } from './routes/_layout/_authenticated/chat/index'
+import { Route as LayoutProjectAddressProjectRouteImport } from './routes/_layout/project/$address/$project'
 import { Route as LayoutAuthenticatedProjectsCreateRouteImport } from './routes/_layout/_authenticated/projects/create'
 import { Route as LayoutAuthenticatedProjectsIdRouteImport } from './routes/_layout/_authenticated/projects/$id'
 import { Route as LayoutAuthenticatedKeysKeyRouteImport } from './routes/_layout/_authenticated/keys/$key'
@@ -87,6 +88,12 @@ const LayoutAuthenticatedChatIndexRoute =
     path: '/chat/',
     getParentRoute: () => LayoutAuthenticatedRoute,
   } as any)
+const LayoutProjectAddressProjectRoute =
+  LayoutProjectAddressProjectRouteImport.update({
+    id: '/project/$address/$project',
+    path: '/project/$address/$project',
+    getParentRoute: () => LayoutRoute,
+  } as any)
 const LayoutAuthenticatedProjectsCreateRoute =
   LayoutAuthenticatedProjectsCreateRouteImport.update({
     id: '/projects/create',
@@ -124,6 +131,7 @@ export interface FileRoutesByFullPath {
   '/keys/$key': typeof LayoutAuthenticatedKeysKeyRoute
   '/projects/$id': typeof LayoutAuthenticatedProjectsIdRoute
   '/projects/create': typeof LayoutAuthenticatedProjectsCreateRoute
+  '/project/$address/$project': typeof LayoutProjectAddressProjectRoute
   '/chat/': typeof LayoutAuthenticatedChatIndexRoute
   '/projects/': typeof LayoutAuthenticatedProjectsIndexRoute
 }
@@ -139,6 +147,7 @@ export interface FileRoutesByTo {
   '/keys/$key': typeof LayoutAuthenticatedKeysKeyRoute
   '/projects/$id': typeof LayoutAuthenticatedProjectsIdRoute
   '/projects/create': typeof LayoutAuthenticatedProjectsCreateRoute
+  '/project/$address/$project': typeof LayoutProjectAddressProjectRoute
   '/chat': typeof LayoutAuthenticatedChatIndexRoute
   '/projects': typeof LayoutAuthenticatedProjectsIndexRoute
 }
@@ -158,6 +167,7 @@ export interface FileRoutesById {
   '/_layout/_authenticated/keys/$key': typeof LayoutAuthenticatedKeysKeyRoute
   '/_layout/_authenticated/projects/$id': typeof LayoutAuthenticatedProjectsIdRoute
   '/_layout/_authenticated/projects/create': typeof LayoutAuthenticatedProjectsCreateRoute
+  '/_layout/project/$address/$project': typeof LayoutProjectAddressProjectRoute
   '/_layout/_authenticated/chat/': typeof LayoutAuthenticatedChatIndexRoute
   '/_layout/_authenticated/projects/': typeof LayoutAuthenticatedProjectsIndexRoute
 }
@@ -175,6 +185,7 @@ export interface FileRouteTypes {
     | '/keys/$key'
     | '/projects/$id'
     | '/projects/create'
+    | '/project/$address/$project'
     | '/chat/'
     | '/projects/'
   fileRoutesByTo: FileRoutesByTo
@@ -190,6 +201,7 @@ export interface FileRouteTypes {
     | '/keys/$key'
     | '/projects/$id'
     | '/projects/create'
+    | '/project/$address/$project'
     | '/chat'
     | '/projects'
   id:
@@ -208,6 +220,7 @@ export interface FileRouteTypes {
     | '/_layout/_authenticated/keys/$key'
     | '/_layout/_authenticated/projects/$id'
     | '/_layout/_authenticated/projects/create'
+    | '/_layout/project/$address/$project'
     | '/_layout/_authenticated/chat/'
     | '/_layout/_authenticated/projects/'
   fileRoutesById: FileRoutesById
@@ -303,6 +316,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutAuthenticatedChatIndexRouteImport
       parentRoute: typeof LayoutAuthenticatedRoute
     }
+    '/_layout/project/$address/$project': {
+      id: '/_layout/project/$address/$project'
+      path: '/project/$address/$project'
+      fullPath: '/project/$address/$project'
+      preLoaderRoute: typeof LayoutProjectAddressProjectRouteImport
+      parentRoute: typeof LayoutRoute
+    }
     '/_layout/_authenticated/projects/create': {
       id: '/_layout/_authenticated/projects/create'
       path: '/projects/create'
@@ -391,6 +411,7 @@ interface LayoutRouteChildren {
   LayoutLoginRoute: typeof LayoutLoginRoute
   LayoutIndexRoute: typeof LayoutIndexRoute
   LayoutProfileAccountIdRoute: typeof LayoutProfileAccountIdRoute
+  LayoutProjectAddressProjectRoute: typeof LayoutProjectAddressProjectRoute
 }
 
 const LayoutRouteChildren: LayoutRouteChildren = {
@@ -399,6 +420,7 @@ const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutLoginRoute: LayoutLoginRoute,
   LayoutIndexRoute: LayoutIndexRoute,
   LayoutProfileAccountIdRoute: LayoutProfileAccountIdRoute,
+  LayoutProjectAddressProjectRoute: LayoutProjectAddressProjectRoute,
 }
 
 const LayoutRouteWithChildren =

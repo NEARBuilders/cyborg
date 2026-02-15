@@ -190,7 +190,7 @@ export function useCreateProject() {
 
       return { projectId: projectData.id, txHash: tx.transaction.hash };
     },
-    onSuccess: async (data) => {
+    onSuccess: async (_data) => {
       toast.success("Project created successfully!");
       // Invalidate queries after indexer delay
       setTimeout(async () => {
@@ -227,9 +227,11 @@ export function useUpdateProject() {
         name?: string;
         description?: string;
         status?: "active" | "completed" | "archived";
+        coverImageUrl?: string;
       };
     }) => {
       // Get transaction from API
+      // For KV storage, update sends all fields like create
       const result = await fetchApi(`/projects/${projectId}`, {
         method: "PUT",
         body: JSON.stringify(data),
@@ -275,7 +277,7 @@ export function useUpdateProject() {
 
       return { txHash: tx.transaction.hash };
     },
-    onSuccess: async (data, variables) => {
+    onSuccess: async (_data, variables) => {
       toast.success("Project updated successfully!");
       // Invalidate queries after indexer delay
       setTimeout(async () => {
@@ -376,18 +378,25 @@ export function useDeleteProject() {
 /**
  * Get project KV entries
  */
-export function useProjectKv(projectId: string, limit = 50) {
+export function useProjectKv(projectId: string | undefined, limit = 50) {
   return useQuery({
     queryKey: ["project-kv", projectId, limit],
     queryFn: async () => {
+      if (!projectId) {
+        throw new Error("Project ID is required");
+      }
       const params = new URLSearchParams({
         limit: String(limit),
       });
       const response = await fetchApi(`/projects/${projectId}/kv?${params}`);
       return (await response.json()) as { entries: ProjectKvData[] };
     },
-    enabled: !!projectId,
+    enabled: Boolean(projectId && projectId.length > 0),
     staleTime: 30 * 1000,
     gcTime: 5 * 60 * 1000,
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
   });
 }

@@ -7,7 +7,10 @@ export const sessionQueryOptions = queryOptions({
     const { data: session } = await authClient.getSession();
     return session;
   },
-  staleTime: 0,
+  staleTime: 1000 * 60 * 5, // 5 minutes - prevent constant refetching
   gcTime: 1000 * 60 * 10,
   enabled: typeof window !== 'undefined',
+  refetchOnWindowFocus: false,
+  refetchOnMount: false,
+  refetchOnReconnect: false,
 });

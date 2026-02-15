@@ -23,6 +23,7 @@ import { createApiRoutes } from "./routes/api";
 import { CacheService } from "./services/cache";
 import { handleBuildersRequest } from "./services/builders";
 import { getAscendantHolders, getHolderTypes } from "./services/holders";
+import { scheduled, syncLegionHolders } from "./scheduled";
 
 // =============================================================================
 // APP SETUP
@@ -38,6 +39,7 @@ const app = new Hono<{ Bindings: Env }>();
 const ALLOWED_ORIGINS = [
   "http://localhost:3000",
   "http://localhost:3002",
+  "http://localhost:5173", // Privacy app (Vite default)
   "http://localhost:8787",
   "https://near-agent.pages.dev",
   "https://demo.near-agent.pages.dev",
@@ -2014,19 +2016,27 @@ app.post("/api/projects/create", async (c) => {
 // API ROUTES (from routes/api.ts)
 // =============================================================================
 
-const apiRoutes = createApiRoutes(() => {
-  const db = createDatabase(c.env.DB);
+const apiRoutes = createApiRoutes(async (c) => {
+  const env = c.env;
+
+  // Initialize database first
+  const db = createDatabase(env.DB);
+
+  // Initialize auth and get session (pass db to query account table)
+  const auth = createAuth(env);
+  const sessionContext = await getSessionFromRequest(auth, c.req.raw, db);
+
   const nearService = new NearService(db, {
-    rpcUrl: c.env.NEAR_RPC_URL,
-    contractId: c.env.NEAR_LEGION_CONTRACT,
-    initiateContractId: c.env.NEAR_INITIATE_CONTRACT,
+    rpcUrl: env.NEAR_RPC_URL,
+    contractId: env.NEAR_LEGION_CONTRACT,
+    initiateContractId: env.NEAR_INITIATE_CONTRACT,
   });
   const agentService = createAgentService(
     db,
     {
-      apiKey: c.env.NEAR_AI_API_KEY,
-      baseUrl: c.env.NEAR_AI_BASE_URL,
-      model: c.env.NEAR_AI_MODEL,
+      apiKey: env.NEAR_AI_API_KEY,
+      baseUrl: env.NEAR_AI_BASE_URL,
+      model: env.NEAR_AI_MODEL,
     },
     nearService,
   );
@@ -2037,6 +2047,8 @@ const apiRoutes = createApiRoutes(() => {
     agentService,
     nearService,
     socialService,
+    nearAccountId: sessionContext?.nearAccountId,
+    role: sessionContext?.role,
   };
 });
 
@@ -2045,6 +2057,40 @@ app.route("/api", apiRoutes);
 // =============================================================================
 // STATIC ASSETS (serve UI from same domain as auth)
 // =============================================================================
+
+// =============================================================================
+// TEST ENDPOINT (for testing scheduled sync) - MUST be before catch-all
+// =============================================================================
+app.get("/api/test-sync", async (c) => {
+  const db = createDatabase(c.env.DB);
+
+  try {
+    console.log("[TEST-SYNC] Triggering manual sync via test endpoint");
+    const result = (await syncLegionHolders(db)) as any;
+
+    return c.json({
+      success: result.success,
+      synced: result.synced,
+      timestamp: new Date().toISOString(),
+      contracts:
+        result.debug?.contracts?.map((c: any) => ({
+          name: c.name,
+          holders: c.holders,
+          error: c.error,
+        })) || [],
+      errors: result.debug?.errors || [],
+    });
+  } catch (error) {
+    console.error("[TEST-SYNC] Error:", error);
+    return c.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    );
+  }
+});
 
 // Serve static assets from the ASSETS binding
 app.get("*", async (c) => {
@@ -2081,3 +2127,53 @@ app.get("*", async (c) => {
 // =============================================================================
 
 export default app;
+
+// Export scheduled handler for Cloudflare Workers Cron
+export { scheduled };
+
+// =============================================================================
+// MANUAL SYNC ENDPOINT (for testing and manual triggering)
+// =============================================================================
+
+/**
+ * Manual trigger endpoint for NFT holder sync
+ * POST /api/admin/sync-holders
+ * Requires authentication and admin role
+ */
+app.post("/api/admin/sync-holders", async (c) => {
+  const auth = createAuth(c.env);
+  const db = createDatabase(c.env.DB);
+  const sessionContext = await getSessionFromRequest(auth, c.req.raw, db);
+
+  if (!sessionContext?.nearAccountId) {
+    return c.json({ error: "Authentication required" }, 401);
+  }
+
+  // Only allow admins to manually trigger sync
+  if (sessionContext.role !== "admin") {
+    return c.json({ error: "Admin access required" }, 403);
+  }
+
+  try {
+    console.log(
+      `[SYNC] Manual sync triggered by ${sessionContext.nearAccountId}`,
+    );
+    const result = await syncLegionHolders(db);
+
+    return c.json({
+      success: true,
+      message: "NFT holder sync completed",
+      synced: result.synced,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("[SYNC] Manual sync error:", error);
+    return c.json(
+      {
+        error: "Sync failed",
+        details: error instanceof Error ? error.message : String(error),
+      },
+      500,
+    );
+  }
+});

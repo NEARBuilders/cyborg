@@ -168,6 +168,7 @@ export function BuilderCard({ builder }: BuilderCardProps) {
             <Link
               to="/profile/$accountId"
               params={{ accountId: builder.accountId }}
+              search={{ from: undefined, tab: undefined }}
               className="shrink-0"
               onPointerEnter={() => {
                 // Prefetch profile data on hover (intent-based loading)

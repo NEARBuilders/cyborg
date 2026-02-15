@@ -3,7 +3,7 @@ import { RPCLink } from '@orpc/client/fetch';
 import type { ContractRouterClient } from '@orpc/contract';
 import { QueryCache, QueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import type { contract } from '../../../api/src/contract';
+import type { contract } from '@/api/src/contract';
 
 export type ApiContract = typeof contract;
 export type ApiClient = ContractRouterClient<ApiContract>;

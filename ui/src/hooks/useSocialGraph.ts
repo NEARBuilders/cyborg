@@ -65,7 +65,7 @@ async function fetchApi(endpoint: string, options?: RequestInit) {
  */
 export function useFollowers(accountId: string | undefined, limit = 50, offset = 0) {
   return useQuery({
-    queryKey: socialKeys.followers(accountId || "").concat(limit, offset),
+    queryKey: socialKeys.followers(accountId || "").concat(String(limit), String(offset)),
     queryFn: async () => {
       if (!accountId) throw new Error("Account ID required");
       const params = new URLSearchParams({
@@ -86,7 +86,7 @@ export function useFollowers(accountId: string | undefined, limit = 50, offset =
  */
 export function useFollowing(accountId: string | undefined, limit = 50, offset = 0) {
   return useQuery({
-    queryKey: socialKeys.following(accountId || "").concat(limit, offset),
+    queryKey: socialKeys.following(accountId || "").concat(String(limit), String(offset)),
     queryFn: async () => {
       if (!accountId) throw new Error("Account ID required");
       const params = new URLSearchParams({
@@ -168,7 +168,7 @@ export function useFollowUnfollow() {
           },
           {
             gas: result.transaction.gas,
-            attachedDeposit: "0", // No deposit for FastData
+            attachedDeposit: "0 NEAR", // No deposit for FastData
           }
         )
         .send();
@@ -249,7 +249,7 @@ export function useFollowUnfollow() {
           },
           {
             gas: result.transaction.gas,
-            attachedDeposit: "0", // No deposit for FastData
+            attachedDeposit: "0 NEAR", // No deposit for FastData
           }
         )
         .send();

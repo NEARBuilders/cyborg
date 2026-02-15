@@ -10,7 +10,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Markdown } from "@/components/ui/markdown";
 import { NearEmailChat, isValidNearAddress } from "@/components/email";
 import { LegionFollowButton } from "@/components/ui/legion-follow-button";
-import { LegionStats } from "@/components/ui/legion-stats";
 import type { Builder } from "@/types/builders";
 import { useLegionFollowers, useLegionFollowing } from "@/hooks/useLegionGraph";
 import { authClient } from "@/lib/auth-client";
@@ -27,7 +26,7 @@ import {
   Instagram,
   Youtube,
   ExternalLink,
-  Plus,
+  FolderKanban,
 } from "lucide-react";
 
 interface BuilderDetailsProps {
@@ -38,8 +37,8 @@ export function BuilderDetails({ builder }: BuilderDetailsProps) {
   const nearState = authClient.useNearState();
   const currentAccountId = nearState?.accountId;
 
-  // Tab state (followers/following)
-  const [tab, setTab] = useState<"none" | "followers" | "following">("none");
+  // Tab state (followers/following/projects)
+  const [tab, setTab] = useState<"none" | "followers" | "following" | "projects">("none");
 
   // Reset tab when changing profiles
   useEffect(() => {
@@ -53,9 +52,6 @@ export function BuilderDetails({ builder }: BuilderDetailsProps) {
   const followersCount = followersData.data?.accounts?.length ?? 0;
   const followingCount = followingData.data?.accounts?.length ?? 0;
 
-  // Fetch projects for this builder
-  const isOwnProfile = currentAccountId === builder.accountId;
-
   // Use the useProjects hook for proper React Query caching
   const { data: projectsData, isLoading: isLoadingProjects } = useProjects(
     undefined,
@@ -65,6 +61,7 @@ export function BuilderDetails({ builder }: BuilderDetailsProps) {
   );
 
   const projects = projectsData?.projects ?? [];
+  const projectsCount = projects.length;
 
   return (
     <div className="flex-1 min-h-0 border border-primary/30 bg-background overflow-y-auto">
@@ -91,11 +88,15 @@ export function BuilderDetails({ builder }: BuilderDetailsProps) {
           <LegionStatsInline
             followersCount={followersCount}
             followingCount={followingCount}
+            projectsCount={projectsCount}
             onFollowersClick={() =>
               setTab(tab === "followers" ? "none" : "followers")
             }
             onFollowingClick={() =>
               setTab(tab === "following" ? "none" : "following")
+            }
+            onProjectsClick={() =>
+              setTab(tab === "projects" ? "none" : "projects")
             }
             activeTab={tab}
           />
@@ -110,16 +111,24 @@ export function BuilderDetails({ builder }: BuilderDetailsProps) {
           )}
         </div>
 
-        {/* Followers/Following List - only shown when tab is clicked, uses cached data */}
+        {/* Followers/Following/Projects List - only shown when tab is clicked, uses cached data */}
         {tab !== "none" && (
           <div className="space-y-4 p-3 bg-muted/20 border border-border/50 rounded-lg animate-in fade-in slide-in-from-top-2 duration-200">
-            <LegionSocialList
-              accountId={builder.accountId}
-              type={tab}
-              followersData={followersData}
-              followingData={followingData}
-              onClose={() => setTab("none")}
-            />
+            {tab === "projects" ? (
+              <BuilderProjectsList
+                projects={projects}
+                isLoading={isLoadingProjects}
+                accountId={builder.accountId}
+                onClose={() => setTab("none")}
+              />
+            ) : (
+              <LegionSocialList
+                type={tab}
+                followersData={followersData}
+                followingData={followingData}
+                onClose={() => setTab("none")}
+              />
+            )}
           </div>
         )}
 
@@ -131,13 +140,6 @@ export function BuilderDetails({ builder }: BuilderDetailsProps) {
 
         {/* About */}
         <BuilderAbout description={builder.description} />
-
-        {/* Projects */}
-        <BuilderProjects
-          projects={projects}
-          isOwnProfile={isOwnProfile}
-          isLoading={isLoadingProjects}
-        />
 
         {/* NFT Holdings Grid */}
         {builder.holdings && builder.holdings.length > 0 && (
@@ -245,80 +247,6 @@ function BuilderAbout({ description }: { description: string }) {
   );
 }
 
-function BuilderProjects({
-  projects,
-  isOwnProfile,
-  isLoading,
-}: {
-  projects: Project[];
-  isOwnProfile: boolean;
-  isLoading?: boolean;
-}) {
-  const [expandedProject, setExpandedProject] = useState<string | null>(null);
-
-  // Don't render anything while loading initial data
-  if (isLoading) {
-    return null;
-  }
-
-  // Don't render section if no projects
-  if (projects.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
-          Building
-        </h3>
-        {isOwnProfile && (
-          <button
-            onClick={() => {
-              /* TODO: Open create project modal */
-            }}
-            className="text-xs flex items-center gap-1.5 text-primary hover:text-primary/80 transition-colors font-mono"
-          >
-            <Plus className="size-3.5" />
-            Add Project
-          </button>
-        )}
-      </div>
-      <div className="space-y-3">
-        {projects.map((project) => {
-          const isExpanded = expandedProject === project.id;
-          return (
-            <div
-              key={project.id}
-              className="p-4 border border-border/50 bg-muted/30 space-y-2 cursor-pointer hover:border-primary/30 transition-colors"
-              onClick={() => setExpandedProject(isExpanded ? null : project.id)}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-mono text-foreground font-semibold text-base">
-                  {project.name}
-                </span>
-                <div className="flex items-center gap-2">
-                  <ProjectStatus status={project.status} />
-                  <span className="text-muted-foreground text-xs">
-                    {isExpanded ? "▼" : "▶"}
-                  </span>
-                </div>
-              </div>
-              {isExpanded && project.description && (
-                <div className="pt-2 border-t border-border/30 mt-2">
-                  <div className="text-sm text-muted-foreground">
-                    <Markdown content={project.description} />
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 function ProjectStatus({ status }: { status: string }) {
   const statusClass =
     status === "Active"
@@ -389,21 +317,25 @@ function BuilderSocials({ socials }: { socials: Record<string, string> }) {
       if (!cleanUrl.includes("/") && !cleanUrl.includes(".")) {
         return `https://github.com/${cleanUrl}`;
       }
+      return `https://${cleanUrl}`;
     }
     if (lowerPlatform.includes("twitter") || lowerPlatform.includes("x.com")) {
       if (!cleanUrl.includes("/") && !cleanUrl.includes(".")) {
         return `https://twitter.com/${cleanUrl}`;
       }
+      return `https://${cleanUrl}`;
     }
     if (lowerPlatform.includes("linkedin")) {
       if (!cleanUrl.includes("linkedin.com/")) {
         return `https://linkedin.com/in/${cleanUrl}`;
       }
+      return `https://${cleanUrl}`;
     }
     if (lowerPlatform.includes("telegram")) {
       if (!cleanUrl.includes("t.me/")) {
         return `https://t.me/${cleanUrl}`;
       }
+      return `https://${cleanUrl}`;
     }
     if (lowerPlatform.includes("discord")) {
       if (
@@ -412,6 +344,7 @@ function BuilderSocials({ socials }: { socials: Record<string, string> }) {
       ) {
         return `https://discord.gg/${cleanUrl}`;
       }
+      return `https://${cleanUrl}`;
     }
     if (lowerPlatform.includes("youtube")) {
       if (
@@ -420,6 +353,7 @@ function BuilderSocials({ socials }: { socials: Record<string, string> }) {
       ) {
         return `https://youtube.com/@${cleanUrl}`;
       }
+      return `https://${cleanUrl}`;
     }
 
     // Default: add https:// if not present
@@ -600,23 +534,28 @@ function NFTGrid({
 interface LegionStatsInlineProps {
   followersCount: number;
   followingCount: number;
+  projectsCount: number;
   onFollowersClick: () => void;
   onFollowingClick: () => void;
-  activeTab: "none" | "followers" | "following";
+  onProjectsClick: () => void;
+  activeTab: "none" | "followers" | "following" | "projects";
 }
 
 function LegionStatsInline({
   followersCount,
   followingCount,
+  projectsCount,
   onFollowersClick,
   onFollowingClick,
+  onProjectsClick,
   activeTab,
 }: LegionStatsInlineProps) {
   const isFollowersActive = activeTab === "followers";
   const isFollowingActive = activeTab === "following";
+  const isProjectsActive = activeTab === "projects";
 
   return (
-    <div className="flex items-center gap-4 text-sm">
+    <div className="flex items-center gap-3 sm:gap-4 text-sm">
       <button
         onClick={onFollowersClick}
         className={`hover:text-primary transition-colors cursor-pointer ${isFollowersActive ? "text-primary font-semibold" : ""}`}
@@ -632,6 +571,14 @@ function LegionStatsInline({
         <span>{followingCount || (isFollowingActive ? "0" : "")}</span>
         <span className="text-muted-foreground ml-1">following</span>
       </button>
+      <span className="text-muted-foreground">·</span>
+      <button
+        onClick={onProjectsClick}
+        className={`hover:text-primary transition-colors cursor-pointer ${isProjectsActive ? "text-primary font-semibold" : ""}`}
+      >
+        <span>{projectsCount || (isProjectsActive ? "0" : "")}</span>
+        <span className="text-muted-foreground ml-1">projects</span>
+      </button>
     </div>
   );
 }
@@ -641,7 +588,6 @@ function LegionStatsInline({
 // =============================================================================
 
 interface LegionSocialListProps {
-  accountId: string;
   type: "followers" | "following";
   followersData: ReturnType<typeof useLegionFollowers>;
   followingData: ReturnType<typeof useLegionFollowing>;
@@ -649,7 +595,6 @@ interface LegionSocialListProps {
 }
 
 function LegionSocialList({
-  accountId,
   type,
   followersData,
   followingData,
@@ -664,10 +609,6 @@ function LegionSocialList({
   // Fetch profiles for all accounts to get proper names and images
   const accountIds = items || [];
   const { profiles } = useProfiles(accountIds);
-
-  // Get counts for both tabs
-  const followersCount = followersData.data?.accounts?.length ?? 0;
-  const followingCount = followingData.data?.accounts?.length ?? 0;
 
   if (isLoading) {
     return (
@@ -754,6 +695,109 @@ function LegionSocialList({
             </Link>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// BUILDER PROJECTS LIST COMPONENT
+// =============================================================================
+
+interface BuilderProjectsListProps {
+  projects: Project[];
+  isLoading: boolean;
+  accountId: string;
+  onClose: () => void;
+}
+
+function BuilderProjectsList({
+  projects,
+  isLoading,
+  accountId,
+  onClose,
+}: BuilderProjectsListProps) {
+  if (isLoading) {
+    return (
+      <div className="p-3 space-y-2">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3 px-3 py-2">
+            <Skeleton className="size-10 rounded-lg bg-muted/30" />
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-4 w-32 bg-muted/30" />
+              <Skeleton className="h-3 w-48 bg-muted/30" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (!projects || projects.length === 0) {
+    return (
+      <div className="p-8 text-center">
+        <button
+          onClick={onClose}
+          className="absolute top-2 right-2 p-1 text-muted-foreground hover:text-foreground transition-colors rounded hover:bg-muted/50 z-10"
+          aria-label="Close"
+        >
+          ✕
+        </button>
+        <div className="space-y-3">
+          <span className="text-4xl">📦</span>
+          <p className="text-sm text-muted-foreground">
+            No projects yet
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      {/* Close button */}
+      <button
+        onClick={onClose}
+        className="absolute top-2 right-2 p-1 text-muted-foreground hover:text-foreground transition-colors rounded hover:bg-muted/50 z-10"
+        aria-label="Close"
+      >
+        ✕
+      </button>
+      <div className="divide-y divide-border/50">
+        {projects.map((project, index) => (
+          <Link
+            key={project.id}
+            to="/project/$address/$project"
+            params={{
+              address: accountId,
+              project: project.name,
+            }}
+            state={{ from: "builders" } as any}
+            className="flex items-start gap-4 px-4 py-3 hover:bg-muted/50 transition-colors block animate-in fade-in slide-in-from-left-2 duration-200"
+            style={{ animationDelay: `${Math.min(index * 30, 200)}ms` }}
+          >
+            {/* Project Icon */}
+            <div className="size-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+              <FolderKanban className="size-5 text-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-foreground truncate">
+                {project.name}
+              </p>
+              {project.description && (
+                <p className="text-sm text-muted-foreground truncate line-clamp-2">
+                  {project.description}
+                </p>
+              )}
+              <div className="flex items-center gap-3 mt-1">
+                <ProjectStatus status={project.status} />
+                <span className="text-xs text-muted-foreground">
+                  {new Date(project.createdAt).toLocaleDateString()}
+                </span>
+              </div>
+            </div>
+          </Link>
+        ))}
       </div>
     </div>
   );

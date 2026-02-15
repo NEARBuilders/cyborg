@@ -371,7 +371,7 @@ export function ProfileSheet({ isOpen, onClose, accountId, chatState }: ProfileS
                 <Link
                   to="/profile/$accountId"
                   params={{ accountId: profile.accountId }}
-                  search={{ from: 'chat' }}
+                  search={{ from: 'chat', tab: undefined }}
                   state={chatState as any}
                 >
                   Full Profile

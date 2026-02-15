@@ -7,50 +7,51 @@ import {
   Avatar,
   AvatarFallback,
   AvatarImage,
-} from "../../../components/ui/avatar";
-import { Button } from "../../../components/ui/button";
-import { Input } from "../../../components/ui/input";
-import { Markdown } from "../../../components/ui/markdown";
-import { MarkdownEditor } from "../../../components/ui/markdown-editor";
-import { EditModal } from "../../../components/ui/edit-modal";
-import { SocialLinksModal } from "../../../components/ui/social-links-modal";
-import { Skeleton } from "../../../components/ui/skeleton";
+} from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Markdown } from "@/components/ui/markdown";
+import { MarkdownEditor } from "@/components/ui/markdown-editor";
+import { EditModal } from "@/components/ui/edit-modal";
+import { SocialLinksModal } from "@/components/ui/social-links-modal";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Settings, ArrowLeft } from "lucide-react";
 import {
   useProfile,
   usePoke,
   useProfiles,
-} from "../../../integrations/near-social-js";
+} from "@/integrations/near-social-js";
 import {
   useUserRank,
   useHolderTypes,
   type RankData,
   type HolderTypesData,
-} from "../../../hooks";
-import { authClient } from "../../../lib/auth-client";
-import { sessionQueryOptions } from "../../../lib/session";
-import { apiClient } from "../../../utils/orpc";
+} from "@/hooks";
+import { authClient } from "@/lib/auth-client";
+import { sessionQueryOptions } from "@/lib/session";
+import { apiClient } from "@/utils/orpc";
 import { Near } from "near-kit";
-import { FollowButton } from "../../../components/ui/follow-button";
-import { LegionFollowButton } from "../../../components/ui/legion-follow-button";
-import { SocialStats } from "../../../components/ui/social-stats";
+import { FollowButton } from "@/components/ui/follow-button";
+import { LegionFollowButton } from "@/components/ui/legion-follow-button";
+import { SocialStats } from "@/components/ui/social-stats";
 import {
   useLegionFollowers,
   useLegionFollowing,
-} from "../../../hooks/useLegionGraph";
+} from "@/hooks/useLegionGraph";
 import {
   useProjects,
   useDeleteProject,
   useCreateProject,
+  useUpdateProject,
   type Project,
-} from "../../../hooks/useProjects";
+} from "@/hooks/useProjects";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
-} from "../../../components/ui/dialog";
+} from "@/components/ui/dialog";
 
 const PROFILE_KEY = "builder-profile";
 
@@ -336,9 +337,27 @@ function ProfilePage() {
   // Create project mutation (for own profile only)
   const { create: createProject, isPending: isCreatingProject } = useCreateProject();
 
+  // Update project mutation (for own profile only)
+  const { update: updateProject, isPending: isUpdatingProject } = useUpdateProject();
+
   // Create project modal state
   const [isCreateProjectModalOpen, setIsCreateProjectModalOpen] = useState(false);
   const [newProjectData, setNewProjectData] = useState<{
+    name: string;
+    description: string;
+    coverImageUrl: string;
+    status: "active" | "completed" | "archived";
+  }>({
+    name: "",
+    description: "",
+    coverImageUrl: "",
+    status: "active",
+  });
+
+  // Edit project modal state
+  const [isEditProjectModalOpen, setIsEditProjectModalOpen] = useState(false);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [editProjectData, setEditProjectData] = useState<{
     name: string;
     description: string;
     coverImageUrl: string;
@@ -525,8 +544,19 @@ function ProfilePage() {
                     await deleteProject(projectId);
                   }
                 } : undefined}
+                onEditProject={isOwnProfile ? (project) => {
+                  setEditingProject(project);
+                  setEditProjectData({
+                    name: project.name,
+                    description: project.description || "",
+                    coverImageUrl: project.coverImageUrl || "",
+                    status: project.status,
+                  });
+                  setIsEditProjectModalOpen(true);
+                } : undefined}
                 isCreatingProject={isCreatingProject}
                 onCreateProject={() => setIsCreateProjectModalOpen(true)}
+                accountId={accountId}
               />
             ) : (
               <SocialList accountId={accountId} type={socialTab} />
@@ -1063,6 +1093,127 @@ function ProfilePage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Edit Project Modal */}
+      <Dialog
+        open={isEditProjectModalOpen}
+        onOpenChange={setIsEditProjectModalOpen}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Project</DialogTitle>
+            <DialogDescription>
+              Update project details. You'll need to approve a transaction to save changes.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!editingProject) return;
+              updateProject(
+                {
+                  projectId: editingProject.id,
+                  data: {
+                    name: editProjectData.name,
+                    description: editProjectData.description,
+                    status: editProjectData.status,
+                    coverImageUrl: editProjectData.coverImageUrl,
+                  },
+                },
+                {
+                  onSuccess: () => {
+                    setIsEditProjectModalOpen(false);
+                    setEditingProject(null);
+                  },
+                },
+              );
+            }}
+            className="space-y-4 pt-4"
+          >
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">
+                Project Name *
+              </label>
+              <Input
+                value={editProjectData.name}
+                onChange={(e) =>
+                  setEditProjectData((prev) => ({ ...prev, name: e.target.value }))
+                }
+                placeholder="My Awesome Project"
+                required
+                className="h-9"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">
+                Description
+              </label>
+              <MarkdownEditor
+                value={editProjectData.description}
+                onChange={(value) =>
+                  setEditProjectData((prev) => ({ ...prev, description: value }))
+                }
+                placeholder="Tell us about your project... Type / for commands"
+                rows={8}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">
+                Cover Image URL
+              </label>
+              <Input
+                type="url"
+                value={editProjectData.coverImageUrl}
+                onChange={(e) =>
+                  setEditProjectData((prev) => ({ ...prev, coverImageUrl: e.target.value }))
+                }
+                placeholder="https://example.com/banner.png"
+                className="h-9"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">
+                Status
+              </label>
+              <select
+                value={editProjectData.status}
+                onChange={(e) =>
+                  setEditProjectData({
+                    ...editProjectData,
+                    status: e.target.value as "active" | "completed" | "archived",
+                  })
+                }
+                className="w-full h-9 px-3 py-1 text-sm bg-background border border-border/50 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="active">Active</option>
+                <option value="completed">Completed</option>
+                <option value="archived">Archived</option>
+              </select>
+            </div>
+
+            <div className="flex gap-3 pt-4">
+              <button
+                type="submit"
+                disabled={isUpdatingProject || !editProjectData.name.trim()}
+                className="flex-1 h-9 px-6 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isUpdatingProject ? "Saving..." : "Save Changes"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsEditProjectModalOpen(false)}
+                disabled={isUpdatingProject}
+                className="h-9 px-6 border border-border/50 rounded-md text-sm font-medium hover:bg-muted/50 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1415,8 +1566,10 @@ function ProfileProjects({
   onStatusFilterChange,
   isOwnProfile,
   onDeleteProject,
+  onEditProject,
   isCreatingProject,
   onCreateProject,
+  accountId,
 }: {
   projects: Project[];
   isLoadingProjects: boolean;
@@ -1424,8 +1577,10 @@ function ProfileProjects({
   onStatusFilterChange: (filter: "all" | "active" | "completed" | "archived") => void;
   isOwnProfile?: boolean;
   onDeleteProject?: (projectId: string) => void;
+  onEditProject?: (project: Project) => void;
   isCreatingProject?: boolean;
   onCreateProject?: () => void;
+  accountId: string;
 }) {
   // Filter projects client-side based on status
   const filteredProjects = projects.filter(project => {
@@ -1513,19 +1668,24 @@ function ProfileProjects({
           )}
         </div>
       ) : (
-        <div className="grid gap-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {filteredProjects.map((project) => (
-            <div
+            <Link
               key={project.id}
-              className="p-3 sm:p-4 bg-card rounded-lg border border-border/50 hover:border-border transition-colors overflow-hidden"
+              to="/project/$address/$project"
+              params={{
+                address: accountId,
+                project: project.name,
+              }}
+              className="group relative bg-card rounded-lg border border-border/50 hover:border-border transition-colors overflow-hidden flex flex-col"
             >
-              {/* Cover Image Banner */}
+              {/* Cover Image Banner - smaller like GitHub */}
               {project.coverImageUrl ? (
-                <div className="aspect-video w-full overflow-hidden">
+                <div className="aspect-[2/1] w-full overflow-hidden bg-muted/20">
                   <img
                     src={project.coverImageUrl}
                     alt={project.name}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                     onError={(e) => {
                       // Hide image on error
                       (e.currentTarget as HTMLImageElement).style.display = 'none';
@@ -1533,56 +1693,74 @@ function ProfileProjects({
                   />
                 </div>
               ) : (
-                <div className="aspect-video w-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
-                  <span className="text-4xl text-primary/40">📦</span>
+                <div className="aspect-[2/1] w-full bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
+                  <span className="text-3xl text-primary/30">📦</span>
                 </div>
               )}
-              <div className="flex items-start justify-between gap-3 pt-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="font-medium text-sm">{project.name}</h3>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${
-                      project.status === "active"
-                        ? "bg-green-500/10 text-green-600 dark:text-green-400"
-                        : project.status === "completed"
-                        ? "bg-blue-500/10 text-blue-600 dark:text-blue-400"
-                        : "bg-muted text-muted-foreground"
-                    }`}>
-                      {project.status}
-                    </span>
-                  </div>
-                  {project.description && (
-                    <p className="text-sm text-muted-foreground line-clamp-2">
-                      {project.description}
-                    </p>
-                  )}
-                  <p className="text-xs text-muted-foreground mt-1.5">
+
+              {/* Content */}
+              <div className="p-3 flex-1 flex flex-col">
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <h3 className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors line-clamp-1">
+                    {project.name}
+                  </h3>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${
+                    project.status === "active"
+                      ? "bg-green-500/10 text-green-600 dark:text-green-400"
+                      : project.status === "completed"
+                      ? "bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                      : "bg-muted text-muted-foreground"
+                  }`}>
+                    {project.status}
+                  </span>
+                </div>
+
+                {/* Description - trimmed */}
+                {project.description && (
+                  <p className="text-xs text-muted-foreground line-clamp-2 mb-2 flex-1">
+                    {project.description}
+                  </p>
+                )}
+
+                {/* Footer with updated date */}
+                <div className="flex items-center justify-between pt-2 border-t border-border/50">
+                  <p className="text-[10px] text-muted-foreground">
                     Updated {new Date(project.updatedAt).toLocaleDateString()}
                   </p>
-                </div>
-                <div className="flex gap-2">
-                  <Link
-                    to="/projects/$id"
-                    params={{ id: project.id }}
-                    className="px-2.5 py-1.5 text-xs bg-muted hover:bg-muted/80 rounded-md transition-colors"
-                  >
-                    View
-                  </Link>
-                  {isOwnProfile && onDeleteProject && (
-                    <button
-                      onClick={() => {
-                        if (confirm("Are you sure you want to delete this project?")) {
-                          onDeleteProject(project.id);
-                        }
-                      }}
-                      className="px-2.5 py-1.5 text-xs bg-destructive/10 text-destructive hover:bg-destructive/20 rounded-md transition-colors"
-                    >
-                      Delete
-                    </button>
+                  {/* Action buttons - stop propagation to prevent navigation */}
+                  {isOwnProfile && (
+                    <div className="flex gap-2">
+                      {onEditProject && (
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onEditProject(project);
+                          }}
+                          className="text-[10px] text-primary hover:text-primary/80 px-2 py-1 rounded hover:bg-primary/10 transition-colors"
+                        >
+                          Edit
+                        </button>
+                      )}
+                      {onDeleteProject && (
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (confirm("Are you sure you want to delete this project?")) {
+                              onDeleteProject(project.id);
+                            }
+                          }}
+                          className="text-[10px] text-destructive hover:text-destructive/80 px-2 py-1 rounded hover:bg-destructive/10 transition-colors"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
-            </div>
+            </Link>
           ))}
         </div>
       )}
@@ -1626,6 +1804,58 @@ function ProfileSocials({
 
   if (!hasLinks && !isOwnProfile) return null;
 
+  // Build proper URL based on platform
+  const buildUrl = (platform: string, url: string): string => {
+    const lowerPlatform = platform.toLowerCase();
+    const cleanUrl = url.trim();
+
+    // If already has protocol, return as is
+    if (cleanUrl.match(/^https?:\/\//i)) {
+      return cleanUrl;
+    }
+
+    // Platform-specific URL construction
+    if (lowerPlatform.includes("github")) {
+      if (!cleanUrl.includes("/") && !cleanUrl.includes(".")) {
+        return `https://github.com/${cleanUrl}`;
+      }
+      return `https://${cleanUrl}`;
+    }
+    if (lowerPlatform.includes("twitter") || lowerPlatform.includes("x.com")) {
+      if (!cleanUrl.includes("/") && !cleanUrl.includes(".")) {
+        return `https://twitter.com/${cleanUrl}`;
+      }
+      return `https://${cleanUrl}`;
+    }
+    if (lowerPlatform.includes("linkedin")) {
+      if (!cleanUrl.includes("linkedin.com/")) {
+        return `https://linkedin.com/in/${cleanUrl}`;
+      }
+      return `https://${cleanUrl}`;
+    }
+    if (lowerPlatform.includes("telegram")) {
+      if (!cleanUrl.includes("t.me/")) {
+        return `https://t.me/${cleanUrl}`;
+      }
+      return `https://${cleanUrl}`;
+    }
+    if (lowerPlatform.includes("discord")) {
+      if (!cleanUrl.includes("discord.gg") && !cleanUrl.includes("discord.com")) {
+        return `https://discord.gg/${cleanUrl}`;
+      }
+      return `https://${cleanUrl}`;
+    }
+    if (lowerPlatform.includes("youtube")) {
+      if (!cleanUrl.includes("youtube.com/") && !cleanUrl.includes("youtu.be/")) {
+        return `https://youtube.com/@${cleanUrl}`;
+      }
+      return `https://${cleanUrl}`;
+    }
+
+    // Default: add https:// if not present
+    return `https://${cleanUrl}`;
+  };
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -1645,8 +1875,7 @@ function ProfileSocials({
       {hasLinks ? (
         <div className="flex flex-wrap gap-4">
           {linkEntries.map(([platform, url]) => {
-            // Ensure URL has protocol
-            const href = url.startsWith("http") ? url : `https://${url}`;
+            const href = buildUrl(platform, url);
 
             return (
               <a

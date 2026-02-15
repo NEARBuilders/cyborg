@@ -52,7 +52,7 @@ interface ApiContext {
 // ROUTE FACTORY
 // =============================================================================
 
-export function createApiRoutes(getContext: () => ApiContext) {
+export function createApiRoutes(getContext: (c: any) => ApiContext | Promise<ApiContext>) {
   const api = new Hono();
 
   // ===========================================================================
@@ -66,8 +66,8 @@ export function createApiRoutes(getContext: () => ApiContext) {
     });
   });
 
-  api.get("/protected", (c) => {
-    const ctx = getContext();
+  api.get("/protected", async (c) => {
+    const ctx = await getContext(c);
     if (!ctx.nearAccountId) {
       return c.json({ error: "Authentication required" }, 401);
     }
@@ -84,7 +84,7 @@ export function createApiRoutes(getContext: () => ApiContext) {
   // ===========================================================================
 
   api.get("/admin/stats", async (c) => {
-    const ctx = getContext();
+    const ctx = await getContext(c);
     if (!ctx.nearAccountId) {
       return c.json({ error: "Authentication required" }, 401);
     }
@@ -116,7 +116,7 @@ export function createApiRoutes(getContext: () => ApiContext) {
   // ===========================================================================
 
   api.get("/user/rank/:accountId", async (c) => {
-    const ctx = getContext();
+    const ctx = await getContext(c);
     if (!ctx.nearAccountId) {
       return c.json({ error: "Authentication required" }, 401);
     }
@@ -160,7 +160,7 @@ export function createApiRoutes(getContext: () => ApiContext) {
   // ===========================================================================
 
   api.get("/kv/:key", async (c) => {
-    const ctx = getContext();
+    const ctx = await getContext(c);
     if (!ctx.nearAccountId) {
       return c.json({ error: "Authentication required" }, 401);
     }
@@ -191,7 +191,7 @@ export function createApiRoutes(getContext: () => ApiContext) {
   });
 
   api.post("/kv/:key", async (c) => {
-    const ctx = getContext();
+    const ctx = await getContext(c);
     if (!ctx.nearAccountId) {
       return c.json({ error: "Authentication required" }, 401);
     }
@@ -253,7 +253,7 @@ export function createApiRoutes(getContext: () => ApiContext) {
   // ===========================================================================
 
   api.post("/chat", async (c) => {
-    const ctx = getContext();
+    const ctx = await getContext(c);
     if (!ctx.nearAccountId) {
       return c.json({ error: "Authentication required" }, 401);
     }
@@ -287,7 +287,7 @@ export function createApiRoutes(getContext: () => ApiContext) {
   });
 
   api.post("/chat/stream", async (c) => {
-    const ctx = getContext();
+    const ctx = await getContext(c);
     if (!ctx.nearAccountId) {
       return c.json({ error: "Authentication required" }, 401);
     }
@@ -343,7 +343,7 @@ export function createApiRoutes(getContext: () => ApiContext) {
   });
 
   api.get("/conversations/:id", async (c) => {
-    const ctx = getContext();
+    const ctx = await getContext(c);
     if (!ctx.nearAccountId) {
       return c.json({ error: "Authentication required" }, 401);
     }
@@ -479,7 +479,7 @@ export function createApiRoutes(getContext: () => ApiContext) {
 
   // Follow user (prepare transaction for client-side signing)
   api.post("/social/follow", async (c) => {
-    const ctx = getContext();
+    const ctx = await getContext(c);
     if (!ctx.nearAccountId) {
       return c.json({ error: "Authentication required" }, 401);
     }
@@ -519,7 +519,7 @@ export function createApiRoutes(getContext: () => ApiContext) {
 
   // Unfollow user (prepare transaction for client-side signing)
   api.post("/social/unfollow", async (c) => {
-    const ctx = getContext();
+    const ctx = await getContext(c);
     if (!ctx.nearAccountId) {
       return c.json({ error: "Authentication required" }, 401);
     }
@@ -559,7 +559,7 @@ export function createApiRoutes(getContext: () => ApiContext) {
 
   // Get followers list (FastData API spec: GET /social/followers?account_id=xxx)
   api.get("/social/followers", async (c) => {
-    const ctx = getContext();
+    const ctx = await getContext(c);
     if (!ctx.socialService) {
       return c.json({
         accounts: [],
@@ -623,7 +623,7 @@ export function createApiRoutes(getContext: () => ApiContext) {
 
   // Get following list (FastData API spec: GET /social/following?account_id=xxx)
   api.get("/social/following", async (c) => {
-    const ctx = getContext();
+    const ctx = await getContext(c);
     if (!ctx.socialService) {
       return c.json({
         accounts: [],
@@ -687,7 +687,7 @@ export function createApiRoutes(getContext: () => ApiContext) {
 
   // Check if following (convenience endpoint, not in FastData spec)
   api.get("/social/is-following", async (c) => {
-    const ctx = getContext();
+    const ctx = await getContext(c);
     if (!ctx.socialService) {
       return c.json({ isFollowing: false });
     }
@@ -921,7 +921,7 @@ export function createApiRoutes(getContext: () => ApiContext) {
 
   // Get a single project
   api.get("/projects/:projectId", async (c) => {
-    const ctx = getContext();
+    const ctx = await getContext(c);
     if (!ctx.nearAccountId) {
       return c.json({ error: "Authentication required" }, 401);
     }
@@ -956,11 +956,11 @@ export function createApiRoutes(getContext: () => ApiContext) {
     }
   });
 
-  // Create project (prepare transaction for client-side signing)
+  // create project (prepare transaction for client-side signing)
   api.post("/projects/create", async (c) => {
-    const ctx = getContext();
+    const ctx = await getContext(c);
     if (!ctx.nearAccountId) {
-      return c.json({ error: "Authentication required" }, 401);
+      return c.json({ error: "authentication required" }, 401);
     }
 
     try {
@@ -969,34 +969,50 @@ export function createApiRoutes(getContext: () => ApiContext) {
         name,
         description,
         status = "active",
+        coverImageUrl,
       }: {
         name?: string;
         description?: string;
         status?: "active" | "completed" | "archived";
+        coverImageUrl?: string;
       } = body;
 
       if (!name || typeof name !== "string") {
         return c.json({ error: "name is required" }, 400);
       }
 
-      // Generate unique project ID
+      // generate unique project id
       const projectId = `${ctx.nearAccountId}-${Date.now()}`;
 
-      // Prepare transaction for client-side signing
-      const projectsService = new ProjectsService(ctx.db, {
-        network: "mainnet",
-      });
-      const transaction = await projectsService.prepareCreateTransaction(
-        ctx.nearAccountId,
-        projectId,
-        name,
-        description || "",
-        status,
-      );
+      // Build flat args object matching the FastData contract format
+      const now = new Date().toISOString();
 
-      if (!transaction) {
-        return c.json({ error: "Failed to prepare transaction" }, 500);
-      }
+      const transaction = {
+        contractId: "contextual.near",
+        methodName: "__fastdata_kv",
+        args: {
+          account_id: ctx.nearAccountId,
+          [`projects/${projectId}/name`]: name,
+          ...(description
+            ? { [`projects/${projectId}/description`]: description }
+            : {}),
+          [`projects/${projectId}/status`]: status,
+          [`projects/${projectId}/created`]: now,
+          [`projects/${projectId}/updated`]: now,
+          ...(coverImageUrl !== undefined
+            ? { [`projects/${projectId}/coverImageUrl`]: coverImageUrl }
+            : {}),
+          [`index/project/${projectId}`]: JSON.stringify({
+            type: "project",
+            accountId: ctx.nearAccountId,
+            name,
+            status,
+            createdAt: now,
+          }),
+        },
+        gas: "300000000000000",
+        deposit: "0.01 NEAR",
+      };
 
       return c.json({
         id: projectId,
@@ -1004,21 +1020,22 @@ export function createApiRoutes(getContext: () => ApiContext) {
         name,
         description: description || null,
         status,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        coverImageUrl: coverImageUrl || null,
+        createdAt: now,
+        updatedAt: now,
         transaction,
       });
     } catch (error) {
-      console.error("[API] Create project error:", error);
-      return c.json({ error: "Failed to create project" }, 500);
+      console.error("[api] create project error:", error);
+      return c.json({ error: "failed to create project" }, 500);
     }
   });
 
-  // Update project (prepare transaction for client-side signing)
+  // update project (prepare transaction for client-side signing)
   api.put("/projects/:projectId", async (c) => {
-    const ctx = getContext();
+    const ctx = await getContext(c);
     if (!ctx.nearAccountId) {
-      return c.json({ error: "Authentication required" }, 401);
+      return c.json({ error: "authentication required" }, 401);
     }
 
     const projectId = c.req.param("projectId");
@@ -1029,46 +1046,67 @@ export function createApiRoutes(getContext: () => ApiContext) {
         name,
         description,
         status,
+        coverImageUrl,
       }: {
         name?: string;
         description?: string;
         status?: "active" | "completed" | "archived";
+        coverImageUrl?: string;
       } = body;
 
-      // Prepare transaction for client-side signing
-      const projectsService = new ProjectsService(ctx.db, {
-        network: "mainnet",
-      });
-      const transaction = await projectsService.prepareUpdateTransaction(
-        ctx.nearAccountId,
-        projectId,
-        name,
-        description,
-        status,
-      );
-
-      if (!transaction) {
-        return c.json({ error: "Failed to prepare transaction" }, 500);
+      if (!name || typeof name !== "string") {
+        return c.json({ error: "name is required" }, 400);
       }
+
+      // Build flat args object matching the FastData contract format
+      const now = new Date().toISOString();
+      const projectStatus = status || "active";
+
+      const transaction = {
+        contractId: "contextual.near",
+        methodName: "__fastdata_kv",
+        args: {
+          account_id: ctx.nearAccountId,
+          [`projects/${projectId}/name`]: name,
+          ...(description
+            ? { [`projects/${projectId}/description`]: description }
+            : {}),
+          [`projects/${projectId}/status`]: projectStatus,
+          [`projects/${projectId}/updated`]: now,
+          ...(coverImageUrl !== undefined
+            ? { [`projects/${projectId}/coverImageUrl`]: coverImageUrl }
+            : {}),
+          [`index/project/${projectId}`]: JSON.stringify({
+            type: "project",
+            accountId: ctx.nearAccountId,
+            name,
+            status: projectStatus,
+            createdAt: now,
+          }),
+        },
+        gas: "300000000000000",
+        deposit: "0.01 NEAR",
+      };
 
       return c.json({
         id: projectId,
         nearAccountId: ctx.nearAccountId,
         name,
         description: description || null,
-        status,
-        updatedAt: new Date().toISOString(),
+        status: projectStatus,
+        coverImageUrl: coverImageUrl || null,
+        updatedAt: now,
         transaction,
       });
     } catch (error) {
-      console.error("[API] Update project error:", error);
-      return c.json({ error: "Failed to update project" }, 500);
+      console.error("[api] update project error:", error);
+      return c.json({ error: "failed to update project" }, 500);
     }
   });
 
   // Delete project (prepare transaction for client-side signing)
   api.delete("/projects/:projectId", async (c) => {
-    const ctx = getContext();
+    const ctx = await getContext(c);
     if (!ctx.nearAccountId) {
       return c.json({ error: "Authentication required" }, 401);
     }
@@ -1101,13 +1139,20 @@ export function createApiRoutes(getContext: () => ApiContext) {
 
   // Get project KV entries
   api.get("/projects/:projectId/kv", async (c) => {
-    const ctx = getContext();
+    const ctx = await getContext(c);
     if (!ctx.nearAccountId) {
       return c.json({ error: "Authentication required" }, 401);
     }
 
     const projectId = c.req.param("projectId");
     const limit = Math.min(Number(c.req.query("limit") || "50"), 100);
+
+    console.log(
+      "[API] Fetching KV entries for project:",
+      projectId,
+      "limit:",
+      limit,
+    );
 
     try {
       const projectsService = new ProjectsService(ctx.db, {
@@ -1118,6 +1163,8 @@ export function createApiRoutes(getContext: () => ApiContext) {
         projectId,
         limit,
       );
+
+      console.log("[API] Found", entries.length, "KV entries");
 
       return c.json({
         entries: entries.map((e) => ({
@@ -1130,7 +1177,17 @@ export function createApiRoutes(getContext: () => ApiContext) {
       });
     } catch (error) {
       console.error("[API] Get project KV error:", error);
-      return c.json({ error: "Failed to fetch project KV" }, 500);
+      console.error(
+        "[API] Error stack:",
+        error instanceof Error ? error.stack : String(error),
+      );
+      return c.json(
+        {
+          error: "Failed to fetch project KV",
+          details: error instanceof Error ? error.message : String(error),
+        },
+        500,
+      );
     }
   });
 
@@ -1242,6 +1299,102 @@ export function createApiRoutes(getContext: () => ApiContext) {
     } catch (error) {
       console.error("[API] Get account projects error:", error);
       return c.json({ error: "Failed to fetch projects" }, 500);
+    }
+  });
+
+  // Get a project by name for an account (public endpoint)
+  api.get("/accounts/:accountId/projects/by-name/:projectName", async (c) => {
+    const accountId = c.req.param("accountId");
+    const projectName = decodeURIComponent(c.req.param("projectName"));
+
+    console.log(
+      `[API] Fetching project by name: ${projectName} for ${accountId}`,
+    );
+
+    try {
+      // Query FastData API with projects prefix
+      const apiUrl = new URL("https://fastdata.up.railway.app/v1/kv/query");
+      apiUrl.searchParams.set("accountId", accountId);
+      apiUrl.searchParams.set("contractId", FASTDATA_CONTRACT);
+      apiUrl.searchParams.set("key_prefix", `${PROJECTS_PREFIX}/`);
+      apiUrl.searchParams.set("value_format", "json");
+
+      const response = await fetch(apiUrl.toString());
+      if (!response.ok) {
+        console.error("[API] FastData API failed:", response.status);
+        return c.json({ error: "Failed to fetch project" }, 500);
+      }
+
+      const json: unknown = await response.json();
+      const apiResponse = json as {
+        data?: Array<{ key: string; value: string }>;
+      };
+
+      if (!apiResponse.data) {
+        return c.json({ error: "Project not found" }, 404);
+      }
+
+      // Group keys by project ID
+      const projectGroups = new Map<string, Record<string, string>>();
+      for (const entry of apiResponse.data) {
+        const key = entry.key;
+        if (!key.startsWith(`${PROJECTS_PREFIX}/`)) continue;
+
+        const parts = key.split("/");
+        if (parts.length < 3) continue;
+
+        const projectId = parts[1];
+        if (!projectGroups.has(projectId)) {
+          projectGroups.set(projectId, {});
+        }
+
+        const field = parts.slice(2).join("/");
+        // Parse JSON value (it comes as stringified JSON)
+        const value = entry.value.startsWith('"')
+          ? JSON.parse(entry.value)
+          : entry.value;
+
+        projectGroups.get(projectId)![field] = value;
+      }
+
+      // Find project by name (case-insensitive match)
+      let foundProject: any = null;
+      for (const [projectId, fields] of projectGroups.entries()) {
+        const name = fields["name"];
+        if (name && name.toLowerCase() === projectName.toLowerCase()) {
+          const description = fields["description"];
+          const projectStatus = fields["status"];
+          const createdAt = fields["created"];
+          const updatedAt = fields["updated"];
+          const coverImageUrl = fields["coverImageUrl"];
+
+          if (projectStatus && createdAt && updatedAt) {
+            foundProject = {
+              id: projectId,
+              nearAccountId: accountId,
+              name,
+              description: description || null,
+              coverImageUrl: coverImageUrl || null,
+              status: projectStatus,
+              createdAt,
+              updatedAt,
+            };
+            break;
+          }
+        }
+      }
+
+      if (!foundProject) {
+        return c.json({ error: "Project not found" }, 404);
+      }
+
+      console.log(
+        `[API] Found project: ${foundProject.id} - ${foundProject.name}`,
+      );
+      return c.json(foundProject);
+    } catch (error) {
+      console.error("[API] Get project by name error:", error);
+      return c.json({ error: "Failed to fetch project" }, 500);
     }
   });
 

@@ -32,8 +32,9 @@ export function SocialStats({ accountId, className = "", showProjectsLink = fals
   return (
     <div className={`flex items-center gap-4 ${className}`}>
       <Link
-        to={`/profile/${accountId}`}
-        search={{ tab: "followers" }}
+        to="/profile/$accountId"
+        params={{ accountId }}
+        search={{ from: undefined, tab: "followers" }}
         className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         <Users className="size-4" />
@@ -42,8 +43,9 @@ export function SocialStats({ accountId, className = "", showProjectsLink = fals
       </Link>
 
       <Link
-        to={`/profile/${accountId}`}
-        search={{ tab: "following" }}
+        to="/profile/$accountId"
+        params={{ accountId }}
+        search={{ from: undefined, tab: "following" }}
         className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         <UserCheck className="size-4" />
@@ -53,8 +55,9 @@ export function SocialStats({ accountId, className = "", showProjectsLink = fals
 
       {showProjectsLink && (
         <Link
-          to={`/profile/${accountId}`}
-          search={{ tab: "projects" }}
+          to="/profile/$accountId"
+          params={{ accountId }}
+          search={{ from: undefined, tab: "projects" }}
           className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <Code2 className="size-4" />

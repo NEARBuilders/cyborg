@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { apiClient } from "../../../../utils/orpc";
+import { apiClient } from "@/utils/orpc";
 
 export type KvValueResult = Awaited<ReturnType<typeof apiClient.getValue>>;
 

@@ -92,7 +92,9 @@ function Layout() {
                 )}
                 {accountId && (
                   <Link
-                    to={`/profile/${accountId}`}
+                    to="/profile/$accountId"
+                    params={{ accountId }}
+                    search={{ from: undefined, tab: undefined }}
                     className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
                   >
                     profile
@@ -238,7 +240,9 @@ function Layout() {
             {accountId && (
               <>
                 <Link
-                  to={`/profile/${accountId}`}
+                  to="/profile/$accountId"
+                  params={{ accountId }}
+                  search={{ from: undefined, tab: undefined }}
                   className="block px-4 py-3 text-base font-medium text-foreground hover:bg-muted/50 rounded-lg transition-colors"
                   onClick={() => setMobileMenuOpen(false)}
                 >

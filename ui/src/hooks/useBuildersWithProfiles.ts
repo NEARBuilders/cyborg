@@ -8,28 +8,7 @@ import { useBuilders } from "./useBuilders";
 import { useProfiles } from "@/integrations/near-social-js";
 import type { Builder } from "@/types/builders";
 
-export interface EnhancedBuilder extends Builder {
-  nearSocialProfile?: {
-    name?: string;
-    description?: string;
-    image?: {
-      ipfs_cid?: string;
-      url?: string;
-    };
-    backgroundImage?: {
-      ipfs_cid?: string;
-      url?: string;
-    };
-    linktree?: {
-      github?: string;
-      twitter?: string;
-      website?: string;
-      telegram?: string;
-      [key: string]: string | undefined;
-    };
-    tags?: Record<string, string>;
-  } | null;
-}
+export type EnhancedBuilder = Builder;
 
 export function useBuildersWithProfiles() {
   const buildersResult = useBuilders();

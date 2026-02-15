@@ -313,15 +313,17 @@ export class ProjectsService {
         if (parts.length < 4) continue;
 
         const kvKey = parts.slice(3).join("/");
-        const timestamp = value;
 
-        if (timestamp) {
+        // Use the actual value from KV store, and set created/updated to now
+        const now = new Date().toISOString();
+
+        if (value !== null && value !== undefined) {
           entries.push({
             projectId,
             key: kvKey,
-            value: timestamp,
-            createdAt: timestamp,
-            updatedAt: timestamp,
+            value: value,
+            createdAt: now,
+            updatedAt: now,
           });
         }
 

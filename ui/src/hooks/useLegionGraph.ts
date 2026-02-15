@@ -65,7 +65,7 @@ async function fetchApi(endpoint: string, options?: RequestInit) {
  */
 export function useLegionFollowers(accountId: string | undefined, limit = 50, offset = 0, options?: { bypassCache?: boolean }) {
   return useQuery({
-    queryKey: legionKeys.followers(accountId || "").concat(limit, offset, options?.bypassCache ? 'bypass' : 'cached'),
+    queryKey: legionKeys.followers(accountId || "").concat(String(limit), String(offset), options?.bypassCache ? 'bypass' : 'cached'),
     queryFn: async () => {
       if (!accountId) throw new Error("Account ID required");
       // Use worker API as proxy to avoid CORS - FastData API spec uses query params
@@ -89,7 +89,7 @@ export function useLegionFollowers(accountId: string | undefined, limit = 50, of
  */
 export function useLegionFollowing(accountId: string | undefined, limit = 50, offset = 0, options?: { bypassCache?: boolean }) {
   return useQuery({
-    queryKey: legionKeys.following(accountId || "").concat(limit, offset, options?.bypassCache ? 'bypass' : 'cached'),
+    queryKey: legionKeys.following(accountId || "").concat(String(limit), String(offset), options?.bypassCache ? 'bypass' : 'cached'),
     queryFn: async () => {
       if (!accountId) throw new Error("Account ID required");
       // Use worker API as proxy to avoid CORS - FastData API spec uses query params
@@ -215,7 +215,7 @@ export function useLegionFollowUnfollow() {
       queryClient.setQueryData(isFollowingQueryKey, { isFollowing: true });
 
       // Optimistically update following list
-      const followingQueryKey = legionKeys.following(currentAccountId).concat(50, 0);
+      const followingQueryKey = legionKeys.following(currentAccountId).concat("50", "0");
       const previousFollowing = queryClient.getQueryData(followingQueryKey);
       queryClient.setQueryData(followingQueryKey, (old: LegionSocialListResponse | undefined) => ({
         accounts: [...(old?.accounts || []), targetAccountId],
@@ -233,7 +233,7 @@ export function useLegionFollowUnfollow() {
 
       return { previousIsFollowing, previousFollowing, previousStats, currentAccountId, targetAccountId };
     },
-    onError: (error, variables, context) => {
+    onError: (error, _variables, context) => {
       console.error("[Follow] Error:", error);
       toast.error(
         error instanceof Error ? error.message : "Failed to follow"
@@ -254,7 +254,7 @@ export function useLegionFollowUnfollow() {
         // Rollback following list
         if (previousFollowing !== undefined && currentAccountId) {
           queryClient.setQueryData(
-            legionKeys.following(currentAccountId).concat(50, 0),
+            legionKeys.following(currentAccountId).concat("50", "0"),
             previousFollowing
           );
         }
@@ -300,7 +300,7 @@ export function useLegionFollowUnfollow() {
       setTimeout(async () => {
         // Refetch following list bypassing cache to get fresh data from indexer
         await queryClient.fetchQuery({
-          queryKey: legionKeys.following(currentAccountId).concat(50, 0, 'bypass'),
+          queryKey: legionKeys.following(currentAccountId).concat("50", "0", 'bypass'),
           queryFn: async () => {
             const params = new URLSearchParams({
               account_id: currentAccountId,
@@ -385,7 +385,7 @@ export function useLegionFollowUnfollow() {
       queryClient.setQueryData(isFollowingQueryKey, { isFollowing: false });
 
       // Optimistically update following list
-      const followingQueryKey = legionKeys.following(currentAccountId).concat(50, 0);
+      const followingQueryKey = legionKeys.following(currentAccountId).concat("50", "0");
       const previousFollowing = queryClient.getQueryData(followingQueryKey);
       queryClient.setQueryData(followingQueryKey, (old: LegionSocialListResponse | undefined) => ({
         accounts: (old?.accounts || []).filter((acc) => acc !== targetAccountId),
@@ -403,7 +403,7 @@ export function useLegionFollowUnfollow() {
 
       return { previousIsFollowing, previousFollowing, previousStats, currentAccountId, targetAccountId };
     },
-    onError: (error, variables, context) => {
+    onError: (error, _variables, context) => {
       console.error("[Unfollow] Error:", error);
       toast.error(
         error instanceof Error ? error.message : "Failed to unfollow"
@@ -424,7 +424,7 @@ export function useLegionFollowUnfollow() {
         // Rollback following list
         if (previousFollowing !== undefined && currentAccountId) {
           queryClient.setQueryData(
-            legionKeys.following(currentAccountId).concat(50, 0),
+            legionKeys.following(currentAccountId).concat("50", "0"),
             previousFollowing
           );
         }
@@ -470,7 +470,7 @@ export function useLegionFollowUnfollow() {
       setTimeout(async () => {
         // Refetch following list bypassing cache to get fresh data from indexer
         await queryClient.fetchQuery({
-          queryKey: legionKeys.following(currentAccountId).concat(50, 0, 'bypass'),
+          queryKey: legionKeys.following(currentAccountId).concat("50", "0", 'bypass'),
           queryFn: async () => {
             const params = new URLSearchParams({
               account_id: currentAccountId,

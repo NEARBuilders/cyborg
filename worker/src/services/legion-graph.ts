@@ -201,7 +201,6 @@ export class LegionGraphService {
       );
 
       // Query FastData API for followers (reads from blockchain index)
-      // Note: contextual.near is the contract where Legion graph data is stored
       const apiUrl = "https://fastdata.up.railway.app";
       const afterParam = afterAccount ? `&after_account=${afterAccount}` : '';
       const url = `${apiUrl}/v1/social/followers?account_id=${cleanAccountId}&contract_id=contextual.near&limit=${limit}&offset=${offset}${afterParam}`;
@@ -217,17 +216,17 @@ export class LegionGraphService {
         throw new Error(`FastData API error: ${response.status}`);
       }
 
-      // Updated to match FastData API spec: { accounts: string[], count, meta }
-      // Note: 'count' is the number of items in THIS page, not total count
-      const data = await response.json() as { accounts?: string[]; count?: number; meta?: { has_more?: boolean; next_cursor?: string } };
+      // FastData API returns: { data: string[], count, meta }
+      const data = await response.json() as { data?: string[]; accounts?: string[]; count?: number; meta?: { has_more?: boolean; next_cursor?: string } };
 
       console.log(`[LegionGraphService] FastData API raw response:`, JSON.stringify(data, null, 2));
 
-      const followers: FollowerInfo[] = (data.accounts || []).map((id: string) => ({
+      // FastData API returns 'data' field, but also check 'accounts' for backwards compatibility
+      const followersList = data.data || data.accounts || [];
+      const followers: FollowerInfo[] = followersList.map((id: string) => ({
         accountId: id,
       }));
 
-      // FastData API doesn't provide total count - use count as page size, not total
       const hasMore = data.meta?.has_more ?? false;
       const nextCursor = data.meta?.next_cursor;
 
@@ -249,8 +248,8 @@ export class LegionGraphService {
             `${apiUrl}/v1/social/followers?account_id=${cleanAccountId}&contract_id=contextual.near&limit=1000`,
           );
           if (allResponse.ok) {
-            const allData = await allResponse.json() as { accounts?: string[] };
-            const allFollowers: FollowerInfo[] = (allData.accounts || []).map((id: string) => ({
+            const allData = await allResponse.json() as { data?: string[]; accounts?: string[] };
+            const allFollowers: FollowerInfo[] = (allData.data || allData.accounts || []).map((id: string) => ({
               accountId: id,
             }));
             console.log(`[LegionGraphService] Cached ${allFollowers.length} followers for ${cacheKey}`);
@@ -263,8 +262,6 @@ export class LegionGraphService {
 
       const result: PaginatedResult<FollowerInfo> = {
         items: followers,
-        // Note: FastData doesn't provide total count, so we use page size
-        // For offset-based pagination, total is needed but not available from FastData
         total: followers.length,
         hasMore,
       };
@@ -321,7 +318,6 @@ export class LegionGraphService {
       }
 
       // Query FastData API for following (reads from blockchain index)
-      // Note: contextual.near contract is indexed by FastData indexer
       const apiUrl = "https://fastdata.up.railway.app";
       const afterParam = afterAccount ? `&after_account=${afterAccount}` : '';
       const url = `${apiUrl}/v1/social/following?account_id=${cleanAccountId}&contract_id=contextual.near&limit=${limit}&offset=${offset}${afterParam}`;
@@ -337,17 +333,17 @@ export class LegionGraphService {
         throw new Error(`FastData API error: ${response.status}`);
       }
 
-      // Updated to match FastData API spec: { accounts: string[], count, meta }
-      // Note: 'count' is the number of items in THIS page, not total count
-      const data = await response.json() as { accounts?: string[]; count?: number; meta?: { has_more?: boolean; next_cursor?: string } };
+      // FastData API returns: { data: string[], count, meta }
+      const data = await response.json() as { data?: string[]; accounts?: string[]; count?: number; meta?: { has_more?: boolean; next_cursor?: string } };
 
       console.log(`[LegionGraphService] FastData API raw response:`, JSON.stringify(data, null, 2));
 
-      const following: FollowerInfo[] = (data.accounts || []).map((id: string) => ({
+      // FastData API returns 'data' field, but also check 'accounts' for backwards compatibility
+      const followingList = data.data || data.accounts || [];
+      const following: FollowerInfo[] = followingList.map((id: string) => ({
         accountId: id,
       }));
 
-      // FastData API doesn't provide total count - use count as page size, not total
       const hasMore = data.meta?.has_more ?? false;
       const nextCursor = data.meta?.next_cursor;
 
@@ -369,8 +365,8 @@ export class LegionGraphService {
             `${apiUrl}/v1/social/following?account_id=${cleanAccountId}&contract_id=contextual.near&limit=1000`,
           );
           if (allResponse.ok) {
-            const allData = await allResponse.json() as { accounts?: string[] };
-            const allFollowing: FollowerInfo[] = (allData.accounts || []).map((id: string) => ({
+            const allData = await allResponse.json() as { data?: string[]; accounts?: string[] };
+            const allFollowing: FollowerInfo[] = (allData.data || allData.accounts || []).map((id: string) => ({
               accountId: id,
             }));
             console.log(`[LegionGraphService] Cached ${allFollowing.length} following for ${cacheKey}`);
@@ -383,8 +379,6 @@ export class LegionGraphService {
 
       const result: PaginatedResult<FollowerInfo> = {
         items: following,
-        // Note: FastData doesn't provide total count, so we use page size
-        // For offset-based pagination, total is needed but not available from FastData
         total: following.length,
         hasMore,
       };
@@ -457,7 +451,6 @@ export class LegionGraphService {
     accountId: string,
   ): Promise<{ followers: number; following: number }> {
     try {
-      // Strip network suffix for contextual.near query
       const cleanAccountId = this.stripNetworkSuffix(accountId);
       const apiUrl = "https://fastdata.up.railway.app";
 
@@ -491,12 +484,12 @@ export class LegionGraphService {
 
       if (followersResponse.ok) {
         const data = await followersResponse.json() as {
+          data?: string[];
           accounts?: string[];
           count: number;
           meta: { has_more: boolean; next_cursor?: string };
         };
-        followersCount = data.accounts?.length || 0;
-        // If has_more, there are more followers than we fetched
+        followersCount = (data.data || data.accounts || []).length;
         if (data.meta.has_more) {
           console.log("[LegionGraphService] Followers has more pages, count is at least:", followersCount);
         }
@@ -506,12 +499,12 @@ export class LegionGraphService {
 
       if (followingResponse.ok) {
         const data = await followingResponse.json() as {
+          data?: string[];
           accounts?: string[];
           count: number;
           meta: { has_more: boolean; next_cursor?: string };
         };
-        followingCount = data.accounts?.length || 0;
-        // If has_more, there are more following than we fetched
+        followingCount = (data.data || data.accounts || []).length;
         if (data.meta.has_more) {
           console.log("[LegionGraphService] Following has more pages, count is at least:", followingCount);
         }
@@ -659,24 +652,30 @@ export class LegionGraphService {
   private async setCachedToD1(key: string, value: any): Promise<void> {
     const now = new Date();
     try {
+      const valueStr = JSON.stringify(value);
+      console.log(`[LegionGraphService] Writing to D1 cache: key=${key}, valueLength=${valueStr.length}`);
+
       await this.db
         .insert(schema.kvStore)
         .values({
           key,
-          value: JSON.stringify(value),
+          value: valueStr,
           nearAccountId: "system",
           createdAt: now,
           updatedAt: now,
         })
         .onConflictDoUpdate({
-          target: [schema.kvStore.key],
+          target: [schema.kvStore.key, schema.kvStore.nearAccountId],
           set: {
-            value: JSON.stringify(value),
+            value: valueStr,
             updatedAt: now,
           },
         });
+
+      console.log(`[LegionGraphService] D1 cache write successful: ${key}`);
     } catch (error) {
       console.error("[LegionGraphService] D1 cache write error:", error);
+      // Don't throw - cache failures shouldn't break the API
     }
   }
 

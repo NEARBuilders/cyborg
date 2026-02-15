@@ -49,7 +49,17 @@ export function useUserRanks(accountIds: string[]) {
   const queries = useQueries({
     queries: accountIds.map((accountId) => ({
       queryKey: rankKeys.user(accountId),
-      queryFn: () => apiClient.getUserRank({ accountId }),
+      queryFn: async () => {
+        try {
+          const response = await fetch(`/api/rank/${accountId}`);
+          if (!response.ok) {
+            return { rank: null, tokenId: null, hasNft: false, hasInitiate: false };
+          }
+          return response.json();
+        } catch {
+          return { rank: null, tokenId: null, hasNft: false, hasInitiate: false };
+        }
+      },
       enabled: !!accountId,
       staleTime: 5 * 60 * 1000,
       gcTime: 30 * 60 * 1000,

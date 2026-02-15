@@ -1,0 +1,30 @@
+{
+  "name": "nova-encrypt-app",
+  "version": "1.0.0",
+  "description": "Standalone Nova encryption app with NEAR auth",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"bun run dev:app\" \"bun run dev:server\"",
+    "dev:app": "vite",
+    "dev:server": "bun run server.ts",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@hot-labs/kit": "^1.6.3",
+    "hono": "^4.6.0",
+    "near-api-js": "^5.0.0",
+    "nova-sdk-js": "^1.0.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.2.1",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "vite": "^6.0.11",
+    "vite-plugin-node-polyfills": "^0.25.0"
+  }
+}

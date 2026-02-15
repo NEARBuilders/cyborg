@@ -11,7 +11,9 @@ export const Route = createFileRoute("/_layout/_authenticated/projects/")({
     const nearState = authClient.useNearState();
     if (nearState?.accountId) {
       throw redirect({
-        to: `/profile/${nearState.accountId}?tab=projects`,
+        to: "/profile/$accountId",
+        params: { accountId: nearState.accountId },
+        search: { from: undefined, tab: "projects" },
       });
     }
   },
@@ -19,6 +21,7 @@ export const Route = createFileRoute("/_layout/_authenticated/projects/")({
 
 function ProjectsList() {
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "completed" | "archived">("all");
+  const nearState = authClient.useNearState();
 
   const { data, isLoading, error } = useProjects(undefined);
 
@@ -47,8 +50,9 @@ function ProjectsList() {
         <p className="text-sm text-muted-foreground">
           Manage your projects from your{" "}
           <Link
-            to="/profile"
-            search={{ tab: "projects" }}
+            to="/profile/$accountId"
+            params={{ accountId: nearState?.accountId || "" }}
+            search={{ from: undefined, tab: "projects" }}
             className="text-primary hover:underline"
           >
             profile page

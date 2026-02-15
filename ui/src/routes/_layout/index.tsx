@@ -142,7 +142,7 @@ function LandingPage() {
                       Start Chatting
                     </Button>
                   </Link>
-                  <Link to="/profile/$accountId" params={{ accountId }}>
+                  <Link to="/profile/$accountId" params={{ accountId }} search={{ from: undefined, tab: undefined }}>
                     <Button
                       size="lg"
                       variant="outline"
@@ -279,7 +279,7 @@ function LandingPage() {
             Connect your NEAR wallet and start building your profile today.
           </p>
           {isLoggedIn ? (
-            <Link to="/profile/$accountId" params={{ accountId }}>
+            <Link to="/profile/$accountId" params={{ accountId }} search={{ from: undefined, tab: undefined }}>
               <Button size="lg" className="min-w-[180px]">
                 Go to Your Profile
               </Button>

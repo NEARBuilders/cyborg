@@ -31,6 +31,7 @@ export function UserNav() {
         <Link
           to="/profile/$accountId"
           params={{ accountId }}
+          search={{ from: undefined, tab: undefined }}
           className="text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
         >
           {displayName}

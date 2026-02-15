@@ -30,6 +30,14 @@ export interface Env {
 }
 
 /**
+ * Scheduled event from Cloudflare Workers Cron Trigger
+ */
+export interface ScheduledEvent {
+  scheduledTime: number;
+  cron: string;
+}
+
+/**
  * Request context passed to route handlers
  */
 export interface RequestContext {
