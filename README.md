@@ -1,7 +1,7 @@
 
 
 <p align="center">
-  <img src="screenshots/legion-social.jpg" alt="Legion social" width="200"/>
+  <img src="screenshots/legion-social.jpg" alt="Legion social" width="450"/>
 </p>
 
 
@@ -19,7 +19,7 @@ Legion social  is a social platform for NEAR ecosystem builders that solves thre
 
 1. **High Friction Social Interactions** - Do you ever ask who is on near who actualy build stuff  not just the yapper on X who actualy in the trenches? 
 **social proof** builders builds some of them cant even yap on x there to busy what if they could have there quiet spot to share there journee and still be seen 
-3. **AI Not Integrated Into Workflow** - Google but for legionnaire.
+3. **AI integration* - Google but for legionnaire.
 
 ---
 
@@ -49,9 +49,6 @@ Legion social  is a social platform for NEAR ecosystem builders that solves thre
 > **⚠️ PROOF OF CONCEPT** - imagine being able to interact with the blockchain with a prepaid key?    
 
 ### 📁 Project Management
-
-![Projects](screenshots/projects.png)
-
 - **Create and showcase projects** with cover images, descriptions, and status
 - **Store on-chain via FastData** protocol (contextual.near)
 - **Status tracking** - mark projects as active, completed, or archived
@@ -243,8 +240,7 @@ NEAR_RPC_URL=https://rpc.mainnet.near.org
 ![Landing Page](screenshots/landing.png)
 
 Welcome page with feature overview and sign-in button.
-
-### AI Chat Interface
+### near.email  + Ai chat
 ![Chat Interface](screenshots/chat-interface.png)
 ![AI chat](screenshots/ai-chat.png)
 
