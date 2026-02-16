@@ -20,7 +20,7 @@ Cyborg is a social platform for NEAR ecosystem builders that solves three core p
 
 ### 🤖 AI Chat with NEAR AI Cloud
 
-**Screenshot placeholder: `[screenshots/ai-chat.png]`**
+![AI Chat](screenshots/ai-chat.png)
 
 - **Streaming responses** from GLM-4.6 model via NEAR AI Cloud
 - **Persistent conversation history** - never lose context
@@ -31,7 +31,7 @@ Cyborg is a social platform for NEAR ecosystem builders that solves three core p
 
 ### 👥 Builder Discovery & Profiles
 
-**Screenshot placeholder: `[screenshots/builders-directory.png]`**
+![Builders Directory](screenshots/builders-directory.png)
 
 - **Browse NEAR Legion NFT holders** - discover who's building in the ecosystem
 - **View builder profiles** with projects, skills, and social links
@@ -51,7 +51,7 @@ Cyborg is a social platform for NEAR ecosystem builders that solves three core p
 
 ### 📁 Project Management
 
-**Screenshot placeholder: `[screenshots/projects.png]`**
+![Projects](screenshots/projects.png)
 
 - **Create and showcase projects** with cover images, descriptions, and status
 - **Store on-chain via FastData** protocol (contextual.near)
@@ -205,17 +205,17 @@ NEAR_RPC_URL=https://rpc.mainnet.near.org
 ## 📸 Screenshots
 
 ### Landing Page
-**Screenshot placeholder: `[screenshots/landing.png]`**
+![Landing Page](screenshots/landing.png)
 
 Welcome page with feature overview and sign-in button.
 
 ### AI Chat Interface
-**Screenshot placeholder: `[screenshots/chat-interface.png]`**
+![Chat Interface](screenshots/chat-interface.png)
 
 Streaming chat with conversation history and markdown support.
 
 ### Builder Profiles
-**Screenshot placeholder: `[screenshots/builder-profile.png]`**
+![Builder Profile](screenshots/builder-profile.png)
 
 View builder details, NFT rank, projects, and social links.
 
@@ -223,7 +223,7 @@ View builder details, NFT rank, projects, and social links.
 Manage encrypted payment keys and view balances.
 
 ### Project Creation
-**Screenshot placeholder: `[screenshots/project-create.png]`**
+![Project Creation](screenshots/project-create.png)
 
 Create projects with cover images and descriptions.
 
