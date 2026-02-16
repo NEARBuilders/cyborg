@@ -109,6 +109,43 @@ Legion social  is a social platform for NEAR ecosystem builders that solves thre
 └─────────────────────────────────────────────────────────────┘
 ```
 
+### Core Infrastructure: FastKV Protocol
+
+This infrastructure allows users to store and retrieve key-value data on NEAR without having to deposit NEAR for storage, only transaction fees. Instead of storing data in contract state, FastKV indexes the arguments of prefixed function calls (e.g., `__fastdata_kv`) directly from the transaction ledger. This works for any contract, even one without that method, because NEAR logs function call arguments regardless of whether the call succeeds. We provide contextual.near as a default receiver with a no-op method. Each entry is keyed by `(predecessor_account_id, current_account_id, key)`, supports overwrites, and retains full version history. The FastKV API exposes this data through REST endpoints for lookups, prefix scans, and history queries.
+
+#### How It Works
+
+**Indexing**: Scans transaction ledger for prefixed function calls (e.g., `__fastdata_kv`)
+
+**No storage deposits**: Only pay transaction fees, not rent
+
+**Universal compatibility**: Works with any contract, even ones without the method
+
+**Full history**: Retains complete version history of all changes
+
+**Key structure**: `(predecessor_account_id, current_account_id, key)`
+
+#### Benefits
+
+- **10-50x cheaper** than traditional contract storage
+- **Instant queries** via REST API
+- **No gas for reads** - data served from indexed ledger
+- **Unlimited storage** - scales with NEAR blockchain throughput
+
+#### Components
+
+- **near.garden API server** - High-performance KV lookup service
+  - Repository: https://github.com/MultiAgency/fastkv-server
+
+- **FastData indexer** - Real-time blockchain indexing
+  - Repository: https://github.com/MultiAgency/fastdata-indexer
+
+- **near.directory frontend** - User interface for browsing indexed data
+  - Repository: https://github.com/MultiAgency/fastdata-social
+
+- **No-op FastKV contract** - Contract for function call logging
+  - Repository: https://github.com/MultiAgency/fd_contract
+
 ### Data Flow
 
 **AI Chat:**
