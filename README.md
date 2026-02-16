@@ -249,10 +249,9 @@ Streaming chat with conversation history and markdown support.
 ### Builder Profiles
 ![Builder Profile](screenshots/builder-profile.png)
 
-View builder details, NFT rank, projects, and social links.
+### Builders Directory
+![Builders directory](screenshots/builders-directory.png)
 
-
-Manage encrypted payment keys and view balances.
 
 ### Project Creation
 ![Project Creation](screenshots/project-create.png)
