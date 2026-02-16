@@ -109,15 +109,19 @@ Legion social  is a social platform for NEAR ecosystem builders that solves thre
 └─────────────────────────────────────────────────────────────┘
 ```
 
+
 ### Core Infrastructure: FastKV Protocol
 
-This infrastructure allows users to store and retrieve key-value data on NEAR without having to deposit NEAR for storage, only transaction fees. Instead of storing data in contract state, FastKV indexes the arguments of prefixed function calls (e.g., `__fastdata_kv`) directly from the transaction ledger. This works for any contract, even one without that method, because NEAR logs function call arguments regardless of whether the call succeeds. We provide contextual.near as a default receiver with a no-op method. Each entry is keyed by `(predecessor_account_id, current_account_id, key)`, supports overwrites, and retains full version history. The FastKV API exposes this data through REST endpoints for lookups, prefix scans, and history queries.
+*Credit to [FastNear](https://fastnear.com)* 
+this part of the project would not have been possible without there effort!
+
+This infrastructure solves a key friction point in the NEAR ecosystem: while NEAR Social requires users to deposit NEAR tokens for storage, creating barriers to entry, FastKV allows users to store and retrieve key-value data on NEAR without having to deposit NEAR for storage, only transaction fees. Instead of storing data in contract state, FastKV indexes the arguments of prefixed function calls (e.g., `__fastdata_kv`) directly from the transaction ledger. This works for any contract, even one without that method, because NEAR logs function call arguments regardless of whether the call succeeds. We provide contextual.near as a default receiver with a no-op method. Each entry is keyed by `(predecessor_account_id, current_account_id, key)`, supports overwrites, and retains full version history. The FastKV API exposes this data through REST endpoints for lookups, prefix scans, and history queries.
 
 #### How It Works
 
 **Indexing**: Scans transaction ledger for prefixed function calls (e.g., `__fastdata_kv`)
 
-**No storage deposits**: Only pay transaction fees, not rent
+**No storage deposits**: Only pay transaction fees, not rent - eliminating the barrier created by NEAR Social's deposit requirements
 
 **Universal compatibility**: Works with any contract, even ones without the method
 
@@ -131,7 +135,8 @@ This infrastructure allows users to store and retrieve key-value data on NEAR wi
 - **Instant queries** via REST API
 - **No gas for reads** - data served from indexed ledger
 - **Unlimited storage** - scales with NEAR blockchain throughput
-
+- **Zero deposit barrier** - unlike NEAR Social, no upfront NEAR deposit required for storage
+```
 #### Components
 
 - **near.garden API server** - High-performance KV lookup service
