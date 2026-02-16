@@ -21,6 +21,8 @@ export interface Env {
   NEAR_ACCOUNT: string;
   BETTER_AUTH_URL?: string;
   FASTDATA_URL?: string; // Optional FastData API URL (defaults to railway.app if not set)
+  OUTLAYER_API_URL?: string; // Optional OutLayer API URL (defaults to https://outlayer.fastnear.com/api if not set)
+  PAYMENT_KEY_ENCRYPTION_KEY?: string; // Base64-encoded encryption key for payment key secrets (32 bytes)
 
   // Secrets (set via wrangler secret put)
   BETTER_AUTH_SECRET?: string;

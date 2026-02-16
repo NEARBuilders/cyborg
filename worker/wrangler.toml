@@ -29,6 +29,7 @@ NEAR_INITIATE_CONTRACT = "initiate.nearlegion.near"
 NEAR_ACCOUNT = "near-agent"
 BETTER_AUTH_URL = "https://near-agent.pages.dev"
 FASTDATA_URL = "https://fastdata.up.railway.app"
+OUTLAYER_API_URL = "https://api.outlayer.fastnear.com"
 
 # Environment-specific settings
 [env.production]

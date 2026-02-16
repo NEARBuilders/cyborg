@@ -1,610 +1,4246 @@
-# Technical Guide for LLMs
+# Frontend Integration
+Source: https://kit.near.tools/dapp-workflow/frontend-integration
 
-This is the technical guide for a Module Federation monorepo demonstrating every-plugin architecture, runtime-loaded configuration, and NEAR Protocol integration.
 
-For contribution guidelines, see [CONTRIBUTING.md](./CONTRIBUTING.md).
 
-## Architecture Overview
+`near-kit` is designed to work seamlessly in browser environments. The logic for building transactions is identical to the server-side; the only difference is that signing is delegated to the user's wallet via an **Adapter**.
 
-This is a **Module Federation monorepo** with runtime-loaded configuration:
+<Info>
+  **New to React?** Check out [`@near-kit/react`](/react/overview) for ready-to-use hooks that handle loading states, error handling, and integrate with React Query or SWR.
+</Info>
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                    Host (Server)                        │
-│  - Hono.js + oRPC router                                │
-│  - Runtime config loader (bos.config.json)              │
-│  - Module Federation host                               │
-│  - every-plugin runtime                                 │
-└─────────────────────────────────────────────────────────┘
-            ↓                         ↓
-┌───────────────────────┐ ┌───────────────────────┐
-│    UI Remote          │ │    API Plugin         │
-│  - React 19           │ │  - every-plugin       │
-│  - TanStack Router    │ │  - oRPC contract      │
-│  - Module Federation  │ │  - Effect services    │
-└───────────────────────┘ └───────────────────────┘
-```
+## 🚀 Live Demo
 
-**Key Characteristics:**
-- ✅ Runtime-loaded configuration (no rebuild for URL changes)
-- ✅ Independent deployment of UI, API, and Host
-- ✅ Type-safe RPC with oRPC
-- ✅ NEAR Protocol authentication via Better-Auth
-- ✅ CDN-ready with Module Federation
+See `near-kit` running in a real React application using both Wallet Selector and HOT Connector.
 
-## Configuration System: bos.config.json
+* **Live App:** [guestbook.near.tools](https://guestbook.near.tools/)
+* **Source Code:** [github.com/r-near/near-kit-guestbook-demo](https://github.com/r-near/near-kit-guestbook-demo)
 
-The **entire system** is configured via `bos.config.json` - a runtime-loaded JSON file:
+***
 
-```json
-{
-  "account": "example.near",
-  "app": {
-    "host": {
-      "title": "App Title",
-      "development": "http://localhost:3001",
-      "production": "https://example.com"
-    },
-    "ui": {
-      "name": "ui",
-      "development": "http://localhost:3002",
-      "production": "https://cdn.example.com/ui/remoteEntry.js"
-    },
-    "api": {
-      "name": "api",
-      "development": "http://localhost:3014",
-      "production": "https://cdn.example.com/api/remoteEntry.js",
-      "variables": {},
-      "secrets": ["API_DATABASE_URL", "API_DATABASE_AUTH_TOKEN"]
-    }
-  }
-}
-```
+## The Adapter Pattern
 
-**Why this approach?**
-- Environment switching via `NODE_ENV` (no rebuild needed)
-- CDN URLs can be updated without code changes
-- Secrets use template injection (`{{VAR_NAME}}`)
-- Single source of truth for all configurations
+You initialize the `Near` instance with a `wallet` object instead of a private key.
 
-**Implementation:** See `host/src/config.ts` for the loader.
-
-## Module Federation Setup
-
-### UI Remote (ui/)
-
-**Technology:** Rsbuild + `@module-federation/rsbuild-plugin`
-
-The UI is a **React 19 application** built with:
-- TanStack Router (file-based routing)
-- TanStack Query (data fetching)
-- Tailwind CSS v4 (styling)
-- shadcn/ui (component library)
-
-**Exposed Modules:**
-```typescript
-exposes: {
-  './App': './src/bootstrap.tsx',        // Main application
-  './Router': './src/router.tsx',        // TanStack Router instance
-  './components': './src/components/index.ts',  // Reusable components
-  './providers': './src/providers/index.tsx',   // Context providers
-}
-```
-
-**Shared Dependencies (singleton):**
-- `react`, `react-dom`
-- `@tanstack/react-query`, `@tanstack/react-router`
-- `@hot-labs/near-connect`, `near-kit`
-
-**Build Config:** `ui/rsbuild.config.ts`
-- Uses `pluginModuleFederation` for federation
-- Uses `withZephyr` for automatic CDN deployment
-- Auto-updates `bos.config.json` on deployment
-
-**How Host Loads UI:**
-```typescript
-// host/src/main.tsx
-const config = await loadBosConfig();  // Reads bos.config.json
-
-createInstance({
-  name: 'host',
-  remotes: [{
-    name: config.ui.name,              // "ui"
-    entry: `${config.ui.url}/remoteEntry.js`  // From config!
-  }]
-});
-
-const RemoteApp = await loadRemote(`${config.ui.name}/App`);
-```
-
-**Key Point:** No hardcoded URLs. Everything derived from `bos.config.json`.
-
-### API Plugin (api/)
-
-**Technology:** Rspack + `every-plugin`
-
-The API is an **every-plugin** that exposes an oRPC router. See [every-plugin template guide](https://github.com/near-everything/every-plugin/blob/main/plugins/_template/LLM.txt) for plugin development patterns.
-
-**Structure:**
-```
-api/
-├── src/
-│   ├── contract.ts      # oRPC route definitions
-│   ├── index.ts         # createPlugin() implementation
-│   ├── schema.ts        # Zod schemas for validation
-│   ├── services/        # Business logic (Effect-based)
-│   └── db/              # Database schema (Drizzle)
-└── plugin.dev.ts        # Dev server config
-```
-
-**Plugin Definition:**
-```typescript
-// api/src/index.ts
-export default createPlugin({
-  variables: z.object({
-    network: z.enum(['mainnet', 'testnet']),
-    contractId: z.string()
-  }),
-  
-  secrets: z.object({
-    API_DATABASE_URL: z.string(),
-    API_DATABASE_AUTH_TOKEN: z.string()
-  }),
-  
-  contract,  // oRPC contract from contract.ts
-  
-  initialize: (config) => Effect.gen(function* () {
-    // Create services with config
-    const db = createDb(config.secrets.API_DATABASE_URL);
-    const service = new MyService(db);
-    
-    return { service };
-  }),
-  
-  createRouter: (context, builder) => ({
-    getData: builder.getData.handler(async ({ input }) => {
-      return await Effect.runPromise(
-        context.service.getData(input)
-      );
-    }),
-  })
-});
-```
-
-**How Host Loads API:**
-```typescript
-// host/src/runtime.ts
-const config = await loadBosConfig();  // Reads bos.config.json
-
-const runtime = createPluginRuntime({
-  registry: {
-    [config.api.name]: {
-      remote: config.api.url,      // From config!
-      variables: config.api.variables,
-      secrets: config.api.secrets
-    }
-  }
-});
-
-const { client, router } = await runtime.usePlugin(config.api.name, {
-  variables: config.api.variables,
-  secrets: config.api.secrets
-});
-
-// Router is merged into main oRPC router
-```
-
-**Build Config:** `api/rspack.config.cjs`
-- Uses `EveryPluginDevServer` for development
-- Uses `withZephyr` for CDN deployment
-- Auto-updates `bos.config.json` on deployment
-
-**Key Point:** Plugins are independently deployable with their own contract, services, and database schema.
-
-## UI Styling Guidelines
-
-### Semantic Tailwind Classes
-
-This project uses **Tailwind CSS v4** with semantic color classes defined via CSS variables. Always use semantic classes instead of hardcoded colors.
-
-**Available Semantic Colors:**
-```typescript
-// Backgrounds and surfaces
-bg-background       // Main background
-bg-card            // Card backgrounds
-bg-popover         // Popover/dropdown backgrounds
-bg-primary         // Primary action color
-bg-secondary       // Secondary elements
-bg-muted           // Muted/disabled states
-bg-accent          // Accent highlights
-bg-destructive     // Destructive actions (delete, errors)
-
-// Text colors (use corresponding -foreground variants)
-text-foreground           // Main text on background
-text-card-foreground      // Text on card
-text-primary-foreground   // Text on primary
-text-secondary-foreground // Text on secondary
-text-muted-foreground     // Muted/helper text
-text-accent-foreground    // Text on accent
-text-destructive-foreground // Text on destructive
-
-// Borders and inputs
-border-border      // Border color
-border-input       // Input border color
-ring-ring          // Focus ring color
-```
-
-**Custom Brand Colors:**
-```css
-/* Available as CSS variables */
---near-green: #00ec97;
---near-green-hover: #00d66f;
---near-green-light: #d4fced;
---near-blue: #3d7fff;
---near-purple: #635bff;
-```
-
-**Example Usage:**
-```tsx
-// ✅ Good: Semantic classes
-<button className="bg-primary text-primary-foreground hover:bg-primary/90">
-  Submit
-</button>
-
-<div className="bg-card text-card-foreground border border-border rounded-lg">
-  <h2 className="text-foreground">Title</h2>
-  <p className="text-muted-foreground">Description</p>
-</div>
-
-// ❌ Bad: Hardcoded colors
-<button className="bg-blue-600 text-white">
-  Submit
-</button>
-```
-
-**Key Benefits:**
-- Automatic dark mode support (colors switch via `.dark` class)
-- Consistent design system
-- Uses oklch color space for better color perception
-- Theme customization via CSS variables
-
-**Border Radius:**
-```typescript
-rounded-sm   // calc(var(--radius) - 4px)
-rounded-md   // calc(var(--radius) - 2px)
-rounded-lg   // var(--radius)
-rounded-xl   // calc(var(--radius) + 4px)
-```
-
-## NEAR Protocol Integration
-
-### Authentication: Better-Auth + better-near-auth
-
-The project uses **Better-Auth** with the **better-near-auth** plugin for NEAR Protocol authentication.
-
-**Host Setup:**
-```typescript
-// host/src/lib/auth.ts
-import { betterAuth } from "better-auth";
-import { nearAuth } from "better-near-auth";
-
-export const auth = betterAuth({
-  database: /* drizzle adapter */,
-  plugins: [
-    nearAuth({
-      network: 'mainnet',
-    })
-  ]
-});
-```
-
-**Client Setup:**
-```typescript
-// ui/src/lib/auth-client.ts
-import { createAuthClient } from "better-auth/react";
-import { nearAuthClient } from "better-near-auth/client";
-
-export const authClient = createAuthClient({
-  plugins: [nearAuthClient()]
-});
-```
-
-### NEAR Client: near-kit
-
-**near-kit** provides a unified interface for NEAR Protocol operations. Full documentation: https://kit.near.tools/llms-full.txt
-
-**How it's exposed:**
-
-Via **better-near-auth**, you get access to a near-kit client through `getNearClient()`:
-
-```typescript
-// After authentication
-const { data: session } = authClient.useSession();
-
-if (session?.user?.walletAddress) {
-  const nearClient = await getNearClient({
-    network: 'mainnet',
-    accountId: session.user.walletAddress
-  });
-  
-  // Now use near-kit methods
-  const balance = await nearClient.getBalance(session.user.walletAddress);
-  
-  // Call contracts
-  await nearClient.callContract({
-    contractId: 'social.near',
-    method: 'set',
-    args: { data: { ... } }
-  });
-}
-```
-
-See [better-near-auth LLM.txt](https://github.com/elliotBraem/better-near-auth/blob/main/LLM.txt) for complete authentication patterns.
-
-**Key near-kit features:**
-- ✅ Unified API for mainnet/testnet
-- ✅ Account management (create, import, export)
-- ✅ Contract calls (view, change methods)
-- ✅ Transaction signing
-- ✅ Balance queries
-- ✅ Storage deposit management
-- ✅ Meta-transaction support (via relayer)
-
-## Database Schema
-
-**Host Database** (Better-Auth):
-- `host/src/db/schema/auth.ts` - User accounts, sessions, verification tokens
-
-**API Database**:
-- `api/src/db/schema.ts` - Application-specific data
-
-Both use **Drizzle ORM** with **SQLite** (libsql).
-
-**Migrations:**
-```bash
-# Host migrations
-bun --filter host db:push
-
-# API migrations  
-bun --filter api db:push
-```
-
-## Development Workflow
-
-### Local Development
-
-**Start all services:**
-```bash
-bun dev
-# Starts:
-# - API: http://localhost:3014
-# - UI: http://localhost:3002
-# - Host: http://localhost:3001
-```
-
-**Individual services:**
-```bash
-bun dev:api   # API only (port 3014)
-bun dev:ui    # UI only (port 3002)
-bun dev:host  # Host only (port 3001)
-```
-
-**Environment switching:**
-```bash
-# Use local remotes (default)
-bun dev:host
-
-# Use production remotes
-NODE_ENV=production bun dev:host
-```
-
-The host reads `NODE_ENV` and loads URLs from `bos.config.json`:
-- `development` → `http://localhost:3002`, `http://localhost:3014`
-- `production` → CDN URLs
-
-### Deployment
-
-**Deploy UI:**
-```bash
-cd ui
-bun build
-# 1. Builds to dist/
-# 2. Uploads to CDN via zephyr-rsbuild-plugin
-# 3. Auto-updates bos.config.json with production URL
-```
-
-**Deploy API:**
-```bash
-cd api
-bun build
-# 1. Builds to dist/
-# 2. Uploads to CDN via zephyr-rspack-plugin
-# 3. Auto-updates bos.config.json with production URL
-```
-
-**Deploy Host:**
-```bash
-cd host
-bun build
-# 1. Builds server bundle to dist/
-# 2. Deploy to hosting provider (Vercel, Railway, etc.)
-# 3. Ensure bos.config.json is accessible at runtime
-```
-
-**Key Point:** UI and API are **independently deployable** without rebuilding the host!
-
-## Type Safety
-
-### oRPC Contract
-
-The API contract provides **end-to-end type safety**:
-
-```typescript
-// api/src/contract.ts
-export const contract = oc.router({
-  getData: oc.route({ method: 'GET', path: '/data' })
-    .input(z.object({
-      id: z.string()
-    }))
-    .output(z.object({
-      data: DataSchema
-    }))
-});
-
-// ui/src/integrations/api/
-// TypeScript knows the exact input/output types!
-const { data } = await client.getData({ id: '123' });
-// data is typed!
-```
-
-### Module Federation Types
-
-Shared dependencies ensure singleton React/TanStack instances:
-
-```typescript
-// Both ui and host use the same React instance
-import { useState } from 'react';  // Singleton
-
-// Type imports work across remote boundaries
-import type { Data } from 'ui/types';
-```
-
-## Testing
-
-**Unit Tests:**
-```bash
-bun test          # All workspaces
-bun test:api      # API only
-bun test:ui       # UI only
-```
-
-**Integration Tests:**
-See `api/tests/` for plugin testing patterns.
-
-## Common Patterns
-
-### Adding a New API Endpoint
-
-1. **Define in contract** (`api/src/contract.ts`):
-```typescript
-export const contract = oc.router({
-  myNewEndpoint: oc.route({ method: 'POST', path: '/my-endpoint' })
-    .input(MyInputSchema)
-    .output(MyOutputSchema)
-    .errors(CommonPluginErrors)
-});
-```
-
-2. **Create service** (`api/src/services/my-service.ts`):
-```typescript
-export class MyService {
-  doSomething(input: MyInput) {
-    return Effect.tryPromise({
-      try: async () => {
-        // Implementation
-        return result;
-      },
-      catch: (error: unknown) => new Error(`Failed: ${error}`)
-    });
-  }
-}
-```
-
-3. **Add handler** (`api/src/index.ts`):
-```typescript
-createRouter: (context, builder) => ({
-  myNewEndpoint: builder.myNewEndpoint.handler(async ({ input }) => {
-    return await Effect.runPromise(
-      context.myService.doSomething(input)
-    );
-  })
+```typescript theme={null}
+const near = new Near({
+  network: "testnet",
+  wallet: fromWalletSelector(wallet), // <--- The Adapter
 })
 ```
 
-4. **Use in UI** (`ui/src/integrations/api/`):
-```typescript
-export const useMyEndpoint = () => {
-  return useMutation({
-    mutationFn: (input: MyInput) => 
-      client.myNewEndpoint(input)
-  });
-};
+Once initialized, you use `near` exactly as you would in a backend script. When you call `.send()`, the library automatically triggers the wallet's popup for the user to approve the transaction.
+
+## 1. NEAR Wallet Selector
+
+[`@near-wallet-selector`](https://github.com/near/wallet-selector) is a popular library for connecting to the NEAR ecosystem. It supports MyNearWallet, Meteor, Sender, Here, and many others.
+
+### Setup
+
+```typescript theme={null}
+import { setupWalletSelector } from "@near-wallet-selector/core"
+import { setupModal } from "@near-wallet-selector/modal-ui"
+import { Near, fromWalletSelector } from "near-kit"
+
+// 1. Initialize Wallet Selector (Standard Setup)
+const selector = await setupWalletSelector({
+  network: "testnet",
+  modules: [
+    /* ... wallet modules ... */
+  ],
+})
+
+const modal = setupModal(selector, { contractId: "guestbook.near" })
+
+// 2. Connect
+if (!selector.isSignedIn()) {
+  modal.show()
+}
+
+// 3. Create the Near Instance
+const wallet = await selector.wallet()
+
+const near = new Near({
+  network: "testnet",
+  wallet: fromWalletSelector(wallet),
+})
+
+// 4. Transact
+await near.send("bob.near", "1 NEAR")
 ```
 
-### Adding a New UI Page
+## 2. HOT Connector
 
-1. **Create route file** (`ui/src/routes/my-page.tsx`):
-```tsx
-import { createFileRoute } from '@tanstack/react-router';
+[HOT Connector](https://github.com/azbang/hot-connector) is the new standard, and intended to replace NEAR Wallet Selector.
 
-export const Route = createFileRoute('/my-page')({
-  component: MyPage
-});
+### Setup
 
-function MyPage() {
+```typescript theme={null}
+import { NearConnector } from "@hot-labs/near-connect"
+import { Near, fromHotConnect } from "near-kit"
+
+// 1. Initialize Connector
+const connector = new NearConnector({ network: "testnet" })
+
+// 2. Listen for Sign In
+connector.on("wallet:signIn", async (data) => {
+  // 3. Create Near Instance
+  const near = new Near({
+    network: "testnet",
+    wallet: fromHotConnect(connector),
+  })
+
+  console.log("Connected via HOT!")
+})
+
+// Trigger connection
+connector.connect()
+```
+
+## Best Practice: React Context
+
+<Tip>
+  For a more streamlined React experience with built-in hooks, see the [`@near-kit/react`](/react/overview) package which provides `NearProvider`, `useView`, `useCall`, and more.
+</Tip>
+
+In a React application, you should create a `WalletContext` to store the `Near` instance so it can be accessed by any component.
+
+Here is a simplified pattern from the [Guestbook Demo](https://github.com/r-near/near-kit-guestbook-demo/blob/main/src/WalletProvider.tsx):
+
+```jsx theme={null}
+// WalletProvider.tsx
+import { createContext, useContext, useEffect, useState } from "react"
+import { Near, fromWalletSelector } from "near-kit"
+
+const WalletContext = createContext<{ near: Near | null }>(null)
+
+export const WalletProvider = ({ children }) => {
+  const [near, setNear] = useState<Near | null>(null)
+
+  useEffect(() => {
+    // ... setup selector ...
+    const wallet = await selector.wallet()
+
+    if (wallet) {
+      setNear(
+        new Near({
+          network: "testnet",
+          wallet: fromWalletSelector(wallet),
+        })
+      )
+    }
+  }, [])
+
   return (
-    <div className="bg-background text-foreground">
-      <h1 className="text-2xl font-bold">My Page</h1>
-      <p className="text-muted-foreground">Description</p>
-    </div>
-  );
+    <WalletContext.Provider value={{ near }}>{children}</WalletContext.Provider>
+  )
+}
+
+// Use it in any component!
+export const useWallet = () => useContext(WalletContext)
+```
+
+
+# Testing with Sandbox
+Source: https://kit.near.tools/dapp-workflow/testing
+
+
+
+Don't rely on Testnet for integration tests. It's slow, you need a faucet, and other people can mess up your state. `near-kit` includes a built-in **Sandbox** manager that runs a local NEAR node for you.
+
+## Setup
+
+We recommend using a test runner like `bun:test`, `jest`, or `vitest`.
+
+```typescript theme={null}
+import { Near } from "near-kit"
+import { Sandbox } from "near-kit/sandbox"
+import { beforeAll, afterAll, test, expect } from "bun:test"
+
+let sandbox: Sandbox
+let near: Near
+
+// 1. Start Sandbox
+beforeAll(async () => {
+  // This downloads a NEAR binary and starts a node locally
+  sandbox = await Sandbox.start()
+
+  // near-kit automatically configures the RPC and
+  // loads the root account key for you.
+  near = new Near({ network: sandbox })
+})
+
+// 2. Stop Sandbox
+afterAll(async () => {
+  if (sandbox) await sandbox.stop()
+})
+
+// 3. Write Tests
+test("can create account", async () => {
+  const newAccount = `test.${sandbox.rootAccount.id}`
+
+  await near
+    .transaction(sandbox.rootAccount.id)
+    .createAccount(newAccount)
+    .send()
+
+  const exists = await near.accountExists(newAccount)
+  expect(exists).toBe(true)
+})
+```
+
+## Pre-Funded Accounts
+
+The sandbox comes with one "Root Account" (`test.near`) that has a massive balance. Use this account to create sub-accounts for your tests.
+
+```typescript theme={null}
+const root = sandbox.rootAccount
+console.log(root.id) // "test.near"
+console.log(root.secretKey) // "ed25519:..."
+```
+
+## Custom Binary
+
+By default, `Sandbox.start()` downloads the near-sandbox binary from NEAR's servers. You can use a local binary instead:
+
+```typescript theme={null}
+// Option 1: Pass the path directly
+const sandbox = await Sandbox.start({
+  binaryPath: "/path/to/near-sandbox"
+})
+
+// Option 2: Set environment variable
+// NEAR_SANDBOX_BIN_PATH=/path/to/near-sandbox
+const sandbox = await Sandbox.start()
+```
+
+Priority order:
+
+1. `binaryPath` option (if provided)
+2. `NEAR_SANDBOX_BIN_PATH` environment variable
+3. Download from NEAR's S3 bucket
+
+This is useful for:
+
+* CI environments with pre-cached binaries
+* Testing against a custom-built sandbox
+* Offline development
+
+
+# The "Universal Code" Pattern
+Source: https://kit.near.tools/dapp-workflow/universal-pattern
+
+Write once, run anywhere - backend, frontend, or tests
+
+One of `near-kit`'s superpowers is that it abstracts the "Signer."
+
+Whether a transaction is signed by a generic private key, a secure server-side keystore, or a user's browser wallet, **the code to build and send that transaction is identical.**
+
+This allows you to write "Universal Business Logic"—functions that define *what* to do, without caring *where* they are running.
+
+## 1. The Business Logic
+
+First, write your logic as a standalone function. It should accept a `Near` instance and a `signerId`.
+
+```typescript theme={null}
+// src/features/buy-item.ts
+import { Near } from "near-kit"
+
+/**
+ * Buys an item from the market.
+ * This function works on the Server, Client, and in Tests!
+ */
+export async function buyItem(near: Near, signerId: string, itemId: string) {
+  console.log(`Attempting to buy ${itemId} as ${signerId}...`)
+
+  return await near
+    .transaction(signerId)
+    .functionCall(
+      "market.near",
+      "buy",
+      { item_id: itemId },
+      { attachedDeposit: "1 NEAR", gas: "50 Tgas" }
+    )
+    .send()
 }
 ```
 
-2. **TanStack Router auto-generates** route tree on save.
+## 2. Injecting the `Near` Instance
 
-3. **Navigate**: `<Link to="/my-page">Go</Link>`
+Now, let's see how to initialize the `Near` object for different environments.
 
-### Configuring a New Environment
+<Tabs>
+  <Tab title="Script">
+    For simple scripts, passing a raw private key is the easiest method.
 
-1. **Add to bos.config.json**:
-```json
-{
-  "app": {
-    "host": {
-      "staging": "https://staging.example.com"
-    },
-    "ui": {
-      "staging": "https://cdn.example.com/ui-staging/remoteEntry.js"
+    ```typescript theme={null}
+    import { Near } from "near-kit"
+    import { buyItem } from "./features/buy-item"
+
+    const near = new Near({
+      network: "testnet",
+      privateKey: process.env.ADMIN_KEY, // "ed25519:..."
+      defaultSignerId: "admin.testnet",
+    })
+
+    await buyItem(near, "admin.testnet", "sword-1")
+    ```
+  </Tab>
+
+  <Tab title="Backend">
+    In production server environments, you rarely handle raw private key strings manually. You use a `KeyStore`.
+
+    A `KeyStore` manages keys for multiple accounts. When you call `.transaction("alice.near")`, the `Near` instance automatically looks up Alice's key in the store.
+
+    ```typescript theme={null}
+    import { Near } from "near-kit"
+    import { FileKeyStore } from "near-kit/keys/file" // Node.js only
+    import { buyItem } from "./features/buy-item"
+
+    // Load keys from the standard ~/.near-credentials directory
+    const keyStore = new FileKeyStore("~/.near-credentials", "testnet")
+
+    const near = new Near({
+      network: "testnet",
+      keyStore: keyStore, // Pass the store instead of a single key
+    })
+
+    // The Near instance will look inside ~/.near-credentials/testnet/worker.json
+    // to find the key for 'worker.testnet'
+    await buyItem(near, "worker.testnet", "sword-1")
+    ```
+
+    <Tip>
+      **Why use a KeyStore?** It allows your app to manage multiple accounts (e.g., `worker-1`, `worker-2`, `admin`) seamlessly. You just switch the `signerId` argument, and `near-kit` finds the right key.
+    </Tip>
+  </Tab>
+
+  <Tab title="Frontend">
+    In the browser, you don't have private keys. You have a Wallet Adapter.
+
+    ```typescript theme={null}
+    import { Near, fromWalletSelector } from "near-kit"
+    import { buyItem } from "./features/buy-item"
+
+    // ... setup wallet selector ...
+    const wallet = await selector.wallet()
+
+    const near = new Near({
+      network: "testnet",
+      wallet: fromWalletSelector(wallet), // Adapter handles signing
+    })
+
+    const userAccount = (await wallet.getAccounts())[0].accountId
+
+    // The wallet popup will appear for the user!
+    await buyItem(near, userAccount, "sword-1")
+    ```
+  </Tab>
+
+  <Tab title="Testing">
+    In tests, `near-kit` auto-configures everything when you pass the sandbox object.
+
+    ```typescript theme={null}
+    import { Near } from "near-kit"
+    import { Sandbox } from "near-kit/sandbox"
+    import { buyItem } from "./features/buy-item"
+
+    const sandbox = await Sandbox.start()
+
+    const near = new Near({
+      network: sandbox, // Auto-configures RPC and Root Key
+    })
+
+    await buyItem(near, sandbox.rootAccount.id, "sword-1")
+    ```
+  </Tab>
+</Tabs>
+
+## Summary
+
+| Environment  | Config Option       | Who Signs?                                      |
+| :----------- | :------------------ | :---------------------------------------------- |
+| **Script**   | `privateKey: "..."` | The provided key string.                        |
+| **Backend**  | `keyStore: store`   | The key matching `signerId` found in the store. |
+| **Frontend** | `wallet: adapter`   | The user (via wallet popup).                    |
+| **Sandbox**  | `network: sandbox`  | The root account key (in-memory).               |
+
+Your business logic (`buyItem`) never needs to know which one is happening.
+
+
+# Reading Data
+Source: https://kit.near.tools/essentials/reading-data
+
+
+
+Reading data from the blockchain is free, fast, and does not require a private key (unless you are connecting to a private node).
+
+## 1. Calling View Methods
+
+Use `near.view()` to query smart contracts. This connects to the RPC and fetches the state directly.
+
+### Basic Usage
+
+Arguments are automatically JSON-serialized for you.
+
+```typescript theme={null}
+const messages = await near.view(
+  "guestbook.near", // Contract ID
+  "get_messages", // Method Name
+  { limit: 10 } // Arguments object
+)
+```
+
+### Typed Return Values
+
+By default, `near.view` returns `any`. You can pass a generic type to get a strongly-typed response.
+
+```typescript theme={null}
+// Define what the contract returns
+type Message = {
+  sender: string
+  text: string
+}
+
+// Pass the type to .view<T>()
+const messages = await near.view<Message[]>("guestbook.near", "get_messages", {
+  limit: 10,
+})
+
+// Now 'messages' is typed as Message[]
+console.log(messages[0].sender)
+```
+
+> **Pro Tip:** For even better type safety (including arguments), check out [Type-Safe Contracts](./type-safe-contracts).
+
+## 2. Reading Historical Data (Time Travel)
+
+By default, you read from the "Optimistic" head of the chain (the absolute latest state). Sometimes you need to read from a specific point in the past, or ensure you are reading fully finalized data.
+
+Most read methods accept an options object as the last argument.
+
+```typescript theme={null}
+// Read from a specific Block Height
+await near.view(
+  "token.near",
+  "ft_balance_of",
+  { account_id: "alice.near" },
+  {
+    blockId: 120494923,
+  }
+)
+
+// Read from a specific Block Hash
+await near.getBalance("alice.near", {
+  blockId: "GZ8vK...",
+})
+
+// Read only "Final" data (slower, but immutable)
+await near.view(
+  "game.near",
+  "get_winner",
+  {},
+  {
+    finality: "final",
+  }
+)
+```
+
+## 3. Checking Balances
+
+### Available Balance
+
+Use `near.getBalance()` to get the **available** (spendable) balance. This accounts for storage costs and staked tokens.
+
+```typescript theme={null}
+const available = await near.getBalance("alice.near")
+console.log(`Can spend: ${available} NEAR`) // "98.50"
+```
+
+### Full Account State
+
+Use `near.getAccount()` when you need all balance details:
+
+```typescript theme={null}
+const account = await near.getAccount("alice.near")
+
+console.log(`Liquid balance: ${account.balance} NEAR`)     // Total liquid tokens
+console.log(`Available to spend: ${account.available} NEAR`) // What you can actually transfer
+console.log(`Staked: ${account.staked} NEAR`)              // Locked for staking (validators)
+console.log(`Storage cost: ${account.storageUsage} NEAR`)  // Reserved for on-chain storage
+console.log(`Storage bytes: ${account.storageBytes}`)      // Raw storage in bytes
+console.log(`Has contract: ${account.hasContract}`)        // Whether contract is deployed
+```
+
+<Note>
+  **Why is available different from balance?**
+
+  NEAR accounts must reserve tokens to pay for on-chain storage. However, staked tokens count towards this requirement. So:
+
+  * If staked ≥ storage cost → all liquid balance is available
+  * If staked \< storage cost → some liquid balance is reserved
+
+  This is why `getBalance()` returns `available`, not `balance` — it's what you can actually spend.
+</Note>
+
+## 4. Listing Access Keys
+
+Use `near.getAccessKeys()` to list all access keys for an account.
+
+```typescript theme={null}
+const keys = await near.getAccessKeys("alice.near")
+
+for (const key of keys.keys) {
+  console.log(key.public_key) // "ed25519:..."
+  
+  if (key.access_key.permission === "FullAccess") {
+    console.log("Full access key")
+  } else {
+    // Function call key - has receiver_id, method_names, allowance
+    console.log("Function call key for:", key.access_key.permission.FunctionCall.receiver_id)
+  }
+}
+```
+
+To get a single access key by public key, use `near.getAccessKey()`:
+
+```typescript theme={null}
+const accessKey = await near.getAccessKey("alice.near", "ed25519:...")
+if (accessKey) {
+  console.log("Nonce:", accessKey.nonce)
+}
+```
+
+## 5. Batching Requests
+
+If you need to make multiple read calls at once, use `near.batch()`. This runs them in parallel (like `Promise.all`) but preserves the types of the results in the returned tuple.
+
+```typescript theme={null}
+const [balance, messages, exists] = await near.batch(
+  near.getBalance("alice.near"),
+  near.view<Message[]>("guestbook.near", "get_messages", {}),
+  near.accountExists("bob.near")
+)
+```
+
+## 6. Network Status
+
+Use `near.getStatus()` to check the health of the node and the latest block height.
+
+```typescript theme={null}
+const status = await near.getStatus()
+console.log(`Latest Block: ${status.latestBlockHeight}`)
+console.log(`Syncing: ${status.syncing}`)
+```
+
+
+# Type-Safe Contracts
+Source: https://kit.near.tools/essentials/type-safe-contracts
+
+
+
+Using `near.view` and `near.call` works well for quick scripts, but they are "stringly typed." If you misspell a method name or pass the wrong arguments, you won't know until your code crashes at runtime.
+
+`near-kit` allows you to define a TypeScript interface for your contract. This gives you:
+
+1. **Autocomplete** for method names.
+2. **Type Checking** for arguments and return values.
+3. **Inline Documentation** (if you add JSDoc comments).
+
+## 1. Define the Interface
+
+You define a type that passes a generic object to `Contract`. This object must have `view` and `call` properties describing your methods.
+
+```typescript theme={null}
+import type { Contract } from "near-kit"
+
+// Define your data shapes
+type Message = { sender: string; text: string }
+
+// Define the contract type using the Generic syntax
+type Guestbook = Contract<{
+  view: {
+    // MethodName: (args: Arguments) => Promise<ReturnValue>
+    get_messages: (args: { limit: number }) => Promise<Message[]>
+    total_messages: () => Promise<number>
+  }
+  call: {
+    // Call methods usually return void, but can return values too
+    add_message: (args: { text: string }) => Promise<void>
+  }
+}>
+```
+
+## 2. Create the Proxy
+
+Use the `near.contract<T>()` method to create a typed proxy for a specific contract ID.
+
+```typescript theme={null}
+// This object now has all the methods defined in your type
+const guestbook = near.contract<Guestbook>("guestbook.near")
+```
+
+## 3. Use it!
+
+You can now access methods directly under `.view` and `.call`.
+
+### Calling Views
+
+Arguments are passed as the first parameter.
+
+```typescript theme={null}
+// ✅ Autocomplete works here!
+const messages = await guestbook.view.get_messages({ limit: 5 })
+
+// ❌ TypeScript Error: Argument 'limit' is missing
+// const messages = await guestbook.view.get_messages({});
+```
+
+### Calling Change Methods
+
+Change methods take two arguments:
+
+1. **Args:** The arguments for the contract function.
+2. **Options:** (Optional) Gas and Attached Deposit.
+
+```typescript theme={null}
+await guestbook.call.add_message(
+  { text: "Hello Types!" }, // 1. Contract Args
+  { gas: "30 Tgas", attachedDeposit: "0.1 NEAR" } // 2. Transaction Options
+)
+```
+
+
+# Writing Data (Transactions)
+Source: https://kit.near.tools/essentials/writing-data
+
+
+
+To change state on the blockchain (send money, write to a contract), you must send a transaction. Transactions cost **Gas** and must be signed by an account with a private key.
+
+## 1. The Transaction Builder
+
+The primary way to write data is the fluent **Transaction Builder**. It allows you to chain multiple actions into a single, atomic package.
+
+```typescript theme={null}
+const result = await near
+  .transaction("alice.near") // 1. Who is paying? (Signer)
+  .functionCall(
+    // 2. Action
+    "guestbook.near",
+    "add_message",
+    { text: "Hello World" }
+  )
+  .send() // 3. Sign & Broadcast
+```
+
+## 2. Atomicity (Batching Actions)
+
+You can chain multiple actions in one transaction. **This is atomic**: either every action succeeds, or the entire transaction is rolled back.
+
+This is perfect for scenarios like "Create an account AND fund it AND deploy a contract."
+
+```typescript theme={null}
+await near
+  .transaction("alice.near")
+  .createAccount("bob.alice.near") // 1. Create
+  .transfer("bob.alice.near", "1 NEAR") // 2. Fund
+  .deployContract("bob.alice.near", code) // 3. Deploy Code
+  .functionCall("bob.alice.near", "init", {}) // 4. Initialize
+  .send()
+```
+
+If the `init` call fails, the account `bob.alice.near` will not be created, and the 1 NEAR will stay with Alice.
+
+## 3. Attaching Gas & Deposits
+
+When calling a function, you often need to attach Gas (computation limit) or a Deposit (real NEAR tokens).
+
+These are passed as the 4th argument (the `options` object) to `.functionCall`.
+
+```typescript theme={null}
+await near
+  .transaction("alice.near")
+  .functionCall(
+    "nft.near",
+    "mint_token",
+    { token_id: "1" },
+    {
+      gas: "100 Tgas", // Limit for complex operations
+      attachedDeposit: "0.1 NEAR", // Payment (e.g. for storage)
+    }
+  )
+  .send()
+```
+
+* **Gas:** Defaults to 30 Tgas. Increase this for complex calculations.
+* **Deposit:** Defaults to 0. Required if the contract needs to pay for storage or if you are transferring value to a contract.
+
+## 4. Working with Amounts (Dynamic Values)
+
+For dynamic calculations, use the `Amount` helper instead of manually constructing strings:
+
+```typescript theme={null}
+import { Amount } from "near-kit"
+
+// Dynamic NEAR amounts
+const basePrice = 5
+const quantity = 2
+await near.send("bob.near", Amount.NEAR(basePrice * quantity)) // "10 NEAR"
+
+// Fractional amounts
+await near.send("bob.near", Amount.NEAR(10.5)) // "10.5 NEAR"
+
+// YoctoNEAR (10^-24 NEAR) for precise calculations
+await near.send("bob.near", Amount.yocto(1000000n)) // "1000000 yocto"
+
+// Or pass bigint directly (treated as yoctoNEAR)
+await near.send("bob.near", 1000000n)
+```
+
+**Constants:**
+
+* `Amount.ZERO` → `"0 yocto"`
+* `Amount.ONE_NEAR` → `"1 NEAR"`
+* `Amount.ONE_YOCTO` → `"1 yocto"`
+
+## 5. Shortcuts
+
+For simple, single-action transactions, `near-kit` provides shortcuts. These are just syntax sugar around the builder.
+
+```typescript theme={null}
+// Shortcut for .transaction().transfer().send()
+await near.send("bob.near", "5 NEAR")
+
+// Shortcut for .transaction().functionCall().send()
+await near.call("counter.near", "increment", {})
+```
+
+## 6. Inspecting the Result
+
+The `.send()` method returns a `FinalExecutionOutcome` object. This contains everything that happened on-chain.
+
+```typescript theme={null}
+const result = await near.call(...);
+
+// ✅ Check the Transaction Hash
+console.log("Tx Hash:", result.transaction.hash);
+
+// 📜 Check Logs
+// Logs from ALL receipts in the transaction are collected here
+const logs = result.receipts_outcome.flatMap(r => r.outcome.logs);
+console.log("Contract Logs:", logs);
+
+// 📦 Get the Return Value
+// If the contract returned data (e.g. a JSON object), it's base64 encoded here.
+if (result.status.SuccessValue) {
+  const raw = Buffer.from(result.status.SuccessValue, 'base64').toString();
+  const value = JSON.parse(raw);
+  console.log("Returned:", value);
+}
+```
+
+## 7. Execution Speed (WaitUntil)
+
+By default, `.send()` waits until the transaction is "Optimistically Executed" (usually 1-2 seconds). You can change this behavior.
+
+```typescript theme={null}
+// Fast: Returns as soon as the network accepts it. No return value available.
+.send({ waitUntil: "INCLUDED" })
+
+// Slow: Waits for full BFT Finality (extra 2-3 seconds). 100% irreversible.
+.send({ waitUntil: "FINAL" })
+```
+
+
+# Advanced Transactions
+Source: https://kit.near.tools/in-depth/advanced-transactions
+
+
+
+The `TransactionBuilder` allows you to orchestrate complex account management and state changes. Understanding how these actions execute is critical for writing safe smart contracts and scripts.
+
+## 1. Atomicity & Execution
+
+All actions added to a single transaction are executed **sequentially as one atomic unit on-chain**:
+
+* If **all actions succeed**, the state changes produced by those actions are committed and any promises (cross-contract calls) they created are emitted.
+* If **any action fails** (e.g. a function call panics, a transfer hits insufficient balance, etc.), the entire transaction is reverted.
+
+In other words: **within one transaction / receipt, it’s all-or-nothing.**
+
+<Warning title="The atomicity boundary stops at the transaction itself">
+  Cross-contract calls created *by* your transaction run later as separate receipts. Once those child receipts have been emitted and executed on other contracts, their effects are **not** automatically rolled back if something else fails later—you must implement any "compensating logic" yourself.
+</Warning>
+
+## 2. The "Factory" Pattern (Batching)
+
+Because of the atomicity rules above, we can safely use the "Factory" pattern: creating a new sub-account, funding it, deploying a contract to it, and initializing that contract—all in one transaction.
+
+<Tip title="Why do it this way?">
+  If you deploy a contract but forget to initialize it, anyone could call `init` and take ownership. By bundling `deploy` and `init` in one atomic transaction, you guarantee that **only you** can initialize it, and if initialization fails, the account creation is rolled back entirely.
+</Tip>
+
+```typescript theme={null}
+import { generateKey } from "near-kit"
+import { readFileSync } from "fs"
+
+const wasm = readFileSync("./token.wasm")
+const newKey = generateKey() // Generate a fresh KeyPair
+
+const newAccountId = "token.alice.near"
+
+await near
+  .transaction("alice.near")
+  // 1. Create the account on-chain
+  .createAccount(newAccountId)
+
+  // 2. Fund it (needs storage for the contract)
+  .transfer(newAccountId, "6 NEAR")
+
+  // 3. Add a Full Access Key so we can control it later
+  .addKey(newKey.publicKey.toString(), { type: "fullAccess" })
+
+  // 4. Deploy the compiled Wasm
+  .deployContract(newAccountId, wasm)
+
+  // 5. Initialize the contract state
+  .functionCall(newAccountId, "init", {
+    owner_id: "alice.near",
+    total_supply: "1000000",
+  })
+
+  .send()
+
+console.log("🚀 Deployed!")
+```
+
+## 3. Managing Access Keys
+
+NEAR has a unique permission system based on Access Keys. You can add multiple keys to a single account with different permission levels.
+
+### Adding a Restricted Key (FunctionCall)
+
+This is how "Sign in with NEAR" works. You create a key that can **only** call specific methods on a specific contract. It cannot transfer NEAR.
+
+```typescript theme={null}
+const appKey = generateKey()
+
+await near
+  .transaction("alice.near")
+  .addKey(appKey.publicKey.toString(), {
+    type: "functionCall",
+
+    // The ONLY contract this key can interact with
+    receiverId: "game.near",
+
+    // The ONLY methods this key can call
+    // (Empty array = Any method on this contract)
+    methodNames: ["move", "attack", "heal"],
+
+    // The max amount of gas fees this key can spend
+    allowance: "0.25 NEAR",
+  })
+  .send()
+```
+
+<Info title="Understanding Allowance">
+  The `allowance` is a specific amount of NEAR set aside **strictly for gas fees**. It cannot be transferred or withdrawn. If the key uses up this allowance, it will be deleted automatically.
+</Info>
+
+### Rotating Keys (Security)
+
+To rotate keys (e.g., for security hygiene), you add a new key and delete the old one in the same transaction. This prevents you from locking yourself out.
+
+```typescript theme={null}
+const newMasterKey = generateKey()
+
+await near
+  .transaction("alice.near")
+  .addKey(newMasterKey.publicKey.toString(), { type: "fullAccess" })
+  .deleteKey("alice.near", "ed25519:OLD_KEY...")
+  .send()
+```
+
+## 4. Staking
+
+You can stake NEAR natively with a validator to earn rewards.
+
+```typescript theme={null}
+// Stake 100 NEAR with your validator's public key
+await near
+  .transaction("alice.near")
+  .stake("ed25519:VALIDATOR_PUBLIC_KEY...", "100 NEAR")
+  .send()
+```
+
+<Note title="Unstaking">
+  To unstake, you typically need to call function methods (`unstake`, `withdraw`) on the staking pool contract rather than using a native action.
+</Note>
+
+## 5. Deleting Accounts
+
+You can delete an account to recover its storage rent (the NEAR locked to pay for its data). The account passed to `.transaction()` is the account being deleted, and the `beneficiary` receives the remaining NEAR balance.
+
+```typescript theme={null}
+// Delete 'old-account.alice.near' and send all funds to 'alice.near'
+await near
+  .transaction("old-account.alice.near")
+  .deleteAccount({ beneficiary: "alice.near" })
+  .send()
+```
+
+## 6. Transaction Lifecycle & Finality
+
+When you call `.send()`, you can control exactly when `near-kit` returns using the `waitUntil` option.
+
+### The Lifecycle
+
+1. **Validation:** RPC checks structure.
+2. **Inclusion:** The transaction hits a validator node. Signature is checked, gas is pre-paid, nonce is updated.
+3. **Execution:** The receipt is processed. If it's a function call, the VM runs.
+4. **Finalization:** The block containing the transaction is finalized by consensus.
+
+### `waitUntil` Options
+
+You can pass these options to `.send({ waitUntil: "..." })`.
+
+#### `EXECUTED_OPTIMISTIC` (Default)
+
+* **Returns:** When the entire chain of receipts finishes execution.
+* **Data:** Full logs and return values are available.
+
+<Tip title="Best for most cases">
+  This is the default for a reason. It provides the return value you need for your UI, and happens relatively quickly (\~2s).
+</Tip>
+
+#### `INCLUDED`
+
+* **Returns:** When the transaction is in a block.
+* **Data:** **No return values or logs are available yet.**
+
+<Warning title="Missing Data">
+  Use `INCLUDED` only for "fire-and-forget" UI feedback. You cannot check if the smart contract call actually succeeded or failed logic checks yet.
+</Warning>
+
+#### `FINAL`
+
+* **Returns:** When the block containing the *last* receipt is finalized.
+* **State:** 100% irreversible.
+
+<Tip title="High Value Transfer">
+  Use `FINAL` when moving large amounts of money to ensure 100% certainty.
+
+  ```typescript theme={null}
+  await near.transaction("alice.near")
+    .transfer("bob.near", "10000 NEAR")
+    .send({ waitUntil: "FINAL" });
+  ```
+</Tip>
+
+
+# Error Handling
+Source: https://kit.near.tools/in-depth/error-handling
+
+Typed errors for clean exception handling
+
+`near-kit` converts cryptic RPC JSON errors into typed JavaScript Error classes. You can `catch` these errors and handle them logically.
+
+## The Error Hierarchy
+
+All errors extend `NearError`. You can check for specific types using `instanceof`.
+
+```typescript theme={null}
+import {
+  FunctionCallError,
+  AccountDoesNotExistError,
+  NetworkError,
+} from "near-kit"
+
+try {
+  await near.call("contract.near", "method", {})
+} catch (e) {
+  if (e instanceof FunctionCallError) {
+    // The contract logic failed
+    console.log("Panic:", e.panic)
+    console.log("Logs:", e.logs)
+  } else if (e instanceof AccountDoesNotExistError) {
+    // The account isn't real
+    console.log(`Account ${e.accountId} not found`)
+  } else if (e instanceof NetworkError) {
+    // RPC is down
+    if (e.retryable) {
+      // You might want to try again
     }
   }
 }
 ```
 
-2. **Update config types** (`host/src/config.ts`):
-```typescript
-type Environment = 'development' | 'production' | 'staging';
+## Error Types
+
+<AccordionGroup>
+  <Accordion title="FunctionCallError" icon="code">
+    Thrown when a smart contract call fails (panics or runs out of gas).
+
+    **Properties:**
+
+    * `panic`: The panic message from the contract
+    * `logs`: Any logs emitted before the failure
+
+    ```typescript theme={null}
+    if (e instanceof FunctionCallError) {
+      console.log("Contract panicked:", e.panic)
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="AccountDoesNotExistError" icon="user-slash">
+    Thrown when trying to interact with an account that doesn't exist.
+
+    **Properties:**
+
+    * `accountId`: The account that wasn't found
+
+    ```typescript theme={null}
+    if (e instanceof AccountDoesNotExistError) {
+      console.log(`Account ${e.accountId} not found`)
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="NetworkError" icon="wifi-slash">
+    Thrown when there's a network or RPC issue.
+
+    **Properties:**
+
+    * `retryable`: Whether it's safe to retry
+    * `statusCode`: HTTP status code (if applicable)
+
+    ```typescript theme={null}
+    if (e instanceof NetworkError && e.retryable) {
+      // Wait and try again
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="InsufficientBalanceError" icon="wallet">
+    Thrown when an account doesn't have enough NEAR for the operation.
+
+    **Properties:**
+
+    * `accountId`: The account with insufficient balance
+    * `required`: Amount needed
+    * `available`: Amount available
+  </Accordion>
+
+  <Accordion title="InvalidNonceError" icon="rotate">
+    Thrown when a transaction's nonce is stale (usually from concurrent transactions).
+
+    <Tip>
+      Use `RotatingKeyStore` to avoid nonce issues in high-concurrency scenarios.
+    </Tip>
+  </Accordion>
+</AccordionGroup>
+
+## Panic Messages
+
+When a contract fails, the most important info is the **Panic Message**. `near-kit` extracts this from the deep RPC response and puts it right on `error.panic`.
+
+Common panics include:
+
+* `ERR_NOT_ENOUGH_FUNDS`
+* `ERR_INVALID_ARGUMENT`
+* `Smart contract panicked: ...`
+
+Use this string to debug or show user-friendly error messages in your UI.
+
+
+# Global Contracts
+Source: https://kit.near.tools/in-depth/global-contracts
+
+
+
+On NEAR, typically every smart contract account holds its own copy of the Wasm bytecode. This means if you deploy the same Token contract to 1,000 accounts, you are paying for that storage 1,000 times.
+
+**Global Contracts** allow you to publish the Wasm bytecode **once** to a global registry. You can then deploy instances of that contract by simply referencing its hash.
+
+## Use Cases
+
+* **Factories:** If you are building a "DAO Factory" or "Token Factory" that deploys new contracts for users, this reduces the deployment cost from \~4 NEAR (storage) to less than 0.1 NEAR.
+* **Standard Libraries:** Publish a standard implementation (like a multisig) that everyone trusts and uses.
+
+## 1. Publishing Code
+
+Publishing requires a storage deposit proportional to the size of your Wasm file (approx 1 NEAR per 100KB).
+
+### Updatable Contracts (Default)
+
+By default, published contracts are identified by **your account ID**. This allows you to update the code later by publishing again. All users who deployed referencing your account will automatically use the latest version you published.
+
+```typescript theme={null}
+import { readFileSync } from "fs"
+
+const wasm = readFileSync("./my-token.wasm")
+
+// Publish updatable contract (identified by your account)
+await near.transaction("factory.near").publishContract(wasm).send()
+
+// Later, you can update it:
+const updatedWasm = readFileSync("./my-token-v2.wasm")
+await near
+  .transaction("factory.near")
+  .publishContract(updatedWasm) // Overwrites previous version
+  .send()
 ```
 
-3. **Use**: `NODE_ENV=staging bun dev:host`
+Users deploying with `{ accountId: "factory.near" }` will always get your latest published version.
 
-## Related Documentation
+### Immutable Contracts (Trustless)
 
-- **every-plugin Guide**: https://github.com/near-everything/every-plugin/blob/main/plugins/_template/LLM.txt
-- **near-kit Full Documentation**: https://kit.near.tools/llms-full.txt
-- **better-near-auth Guide**: https://github.com/elliotBraem/better-near-auth/blob/main/LLM.txt
-- **Contributing Guide**: [CONTRIBUTING.md](./CONTRIBUTING.md)
+For trustless protocols or when you want guaranteed immutability, publish the code identified by its **SHA-256 hash**. It can never be changed.
 
-## Troubleshooting
+```typescript theme={null}
+import { readFileSync } from "fs"
+import { createHash } from "crypto" // Standard Node.js module
 
-**Module Federation Issues:**
-- Clear browser cache
-- Check `bos.config.json` URLs are accessible
-- Verify shared dependencies versions match in `package.json`
+const wasm = readFileSync("./my-token.wasm")
 
-**Type Errors:**
-- Run `bun typecheck` in each workspace
-- Ensure oRPC contract is up-to-date
-- Check Module Federation type exports
+// 1. Calculate the hash locally
+const codeHash = createHash("sha256").update(wasm).digest()
 
-**Build Errors:**
-- Check all dependencies are installed: `bun install`
-- Clear dist folders: `rm -rf */dist`
-- Rebuild: `bun build`
+// 2. Publish as immutable (identified by hash)
+await near
+  .transaction("deployer.near")
+  .publishContract(wasm, { identifiedBy: "hash" })
+  .send()
 
-**Runtime Config Not Loading:**
-- Ensure `bos.config.json` is in host root
-- Check file is accessible at runtime (not in .gitignore)
-- Verify NODE_ENV matches a key in config
+console.log("Immutable contract published!")
+console.log("Hash:", codeHash.toString("base64"))
+```
 
-For more help, see [CONTRIBUTING.md](./CONTRIBUTING.md) or open an issue.
+## 2. Deploying by Reference
+
+To deploy, use `deployFromPublished` instead of `deployContract`. This action is extremely cheap because it uses almost no bandwidth or new storage.
+
+### Deploying from Account (Updatable)
+
+This deploys whatever code `factory.near` has currently published. If they update the contract later, you'll automatically get the latest version.
+
+```typescript theme={null}
+await near
+  .transaction("user.near")
+  .createAccount("dao.user.near")
+  .transfer("dao.user.near", "1 NEAR") // Storage for state, not code!
+  .deployFromPublished({ accountId: "factory.near" })
+  .functionCall("dao.user.near", "init", {})
+  .send()
+```
+
+### Deploying from Hash (Immutable)
+
+For contracts published with `identifiedBy: "hash"`, reference them by their SHA-256 hash:
+
+```typescript theme={null}
+const codeHash = "5FzD8..." // Base58-encoded hash from publishing
+
+await near
+  .transaction("user.near")
+  .createAccount("token.user.near")
+  .transfer("token.user.near", "1 NEAR")
+  .deployFromPublished({ codeHash })
+  .functionCall("token.user.near", "init", { supply: "1000" })
+  .send()
+```
+
+## 3. Deterministic Account IDs (NEP-616)
+
+**NEP-616** enables deploying contracts to deterministic addresses (starting with `0s`) derived from their initialization state. Perfect for sharded contract designs where you deploy many instances of the same contract.
+
+### Deploying with StateInit
+
+```typescript theme={null}
+import { deriveAccountId } from "near-kit"
+
+const encoder = new TextEncoder();
+
+// Deploy to deterministic address (auto-derived from state)
+await near
+  .transaction("alice.near")
+  .stateInit({
+    code: { accountId: "publisher.near" },
+    data: new Map([
+      [encoder.encode("owner"), encoder.encode("alice.near")]
+    ]),
+    deposit: "1 NEAR",
+  })
+  .send()
+
+// If already deployed, deposit is refunded automatically
+```
+
+The account ID is derived as: `"0s" + hex(keccak256(borsh(state_init))[12..32])`
+
+### Computing Addresses
+
+```typescript theme={null}
+const encoder = new TextEncoder();
+
+// Derive the address without deploying
+const accountId = deriveAccountId({
+  code: { accountId: "publisher.near" },
+  data: new Map([
+    [encoder.encode("owner"), encoder.encode("alice.near")]
+  ]),
+})
+// => "0s1234567890abcdef1234567890abcdef12345678"
+
+// Check if an account is deterministic
+isDeterministicAccountId("0s123...") // true
+isDeterministicAccountId("alice.near") // false
+```
+
+### Why Use This?
+
+* **Anyone can deploy:** Since addresses are deterministic, anyone can pay to deploy if it doesn't exist
+* **Sharded contracts:** Deploy many instances with predictable addresses
+* **Code verification:** Verify that another contract is running specific code
+
+<Info title="Learn More">
+  See [NEP-616](https://github.com/near/NEPs/blob/master/neps/nep-0616) for the full specification.
+</Info>
+
+
+# Key Management
+Source: https://kit.near.tools/in-depth/key-management
+
+
+
+Managing private keys securely is the most critical part of any blockchain application. `near-kit` provides several `KeyStore` implementations to suit different environments, from temporary testing to secure production servers.
+
+## 1. `InMemoryKeyStore` (Testing & Scripts)
+
+* **Best for:** Unit tests, CI/CD, and short-lived scripts.
+
+This store keeps keys in a plain JavaScript object in RAM. If the process exits, the keys are gone.
+
+```typescript theme={null}
+import { InMemoryKeyStore, Near, parseKey } from "near-kit"
+
+const keyStore = new InMemoryKeyStore()
+
+// You can pre-seed it with keys
+await keyStore.add("alice.testnet", parseKey("ed25519:..."))
+
+const near = new Near({
+  network: "testnet",
+  keyStore: keyStore,
+})
+```
+
+## 2. `FileKeyStore` (Dev & Servers)
+
+* **Best for:** Local development and simple server deployments.
+* **Requires:** Node.js or Bun.
+
+This store reads and writes keys to JSON files in the standard `~/.near-credentials` directory. This makes it compatible with the NEAR CLI.
+
+```typescript theme={null}
+import { FileKeyStore } from "near-kit/keys/file";
+
+// Uses ~/.near-credentials/testnet/
+const keyStore = new FileKeyStore("~/.near-credentials", "testnet");
+
+const near = new Near({
+  network: "testnet",
+  keyStore: keyStore
+});
+
+// Now you can sign for any account in that folder
+await near.transaction("alice.testnet")...
+```
+
+## 3. `NativeKeyStore` (Maximum Security)
+
+* **Best for:** Production servers, desktop apps, and CLI tools.
+* **Requires:** Node.js/Bun and `@napi-rs/keyring`.
+
+This store uses your operating system's native secure credential storage (Keychain on macOS, Credential Manager on Windows, libsecret on Linux). Keys are encrypted by the OS and protected by the user's password/biometrics.
+
+```bash theme={null}
+# Install the native dependency first
+npm install @napi-rs/keyring
+```
+
+```typescript theme={null}
+import { NativeKeyStore } from "near-kit/keys/native"
+
+// Keys are stored in the OS Keychain under "NEAR Credentials"
+const keyStore = new NativeKeyStore()
+
+const near = new Near({
+  network: "mainnet",
+  keyStore,
+})
+
+// The first time you add a key, the OS may prompt for permission
+await keyStore.add("secure-admin.near", keyPair)
+```
+
+> **Note:** OS Keyrings do not allow listing all keys for security reasons. You must know the `accountId` you want to retrieve.
+
+## 4. `RotatingKeyStore` (High Throughput)
+
+* **Best for:** Trading bots, faucets, and high-traffic relayers.
+
+The NEAR network processes transactions sequentially for each Access Key. If you try to send 50 transactions in parallel from one account, most will fail with `InvalidNonce` errors.
+
+`RotatingKeyStore` solves this by managing multiple keys for a single account and rotating through them round-robin.
+
+```typescript theme={null}
+import { RotatingKeyStore } from "near-kit"
+
+const keyStore = new RotatingKeyStore({
+  "bot.near": ["ed25519:key1...", "ed25519:key2...", "ed25519:key3..."],
+})
+
+const near = new Near({ keyStore })
+
+// Now you can fire off concurrent requests!
+await Promise.all([
+  near.send("a.near", "1 NEAR"),
+  near.send("b.near", "1 NEAR"), // Uses Key 2
+  near.send("c.near", "1 NEAR"), // Uses Key 3
+])
+```
+
+<Tip title="Complete Example">
+  See [`examples/rotating-keystore.ts`](https://github.com/r-near/near-kit/blob/main/examples/rotating-keystore.ts) for a complete working example including account setup and adding multiple access keys.
+</Tip>
+
+## Permissions
+
+When you add a key to an account (using `.addKey`), you define what that key can do.
+
+### Full Access
+
+Can do anything: transfer NEAR, delete the account, deploy code, add more keys.
+
+* **Use case:** Your main admin key.
+
+### Function Call Access
+
+Can **only** call specific methods on a specific contract. It cannot transfer NEAR.
+
+* **Use case:** "Log in with NEAR", limited session keys, automated agents.
+
+```typescript theme={null}
+await near
+  .transaction("alice.near")
+  .addKey(newPublicKey, {
+    type: "functionCall",
+    receiverId: "game.near",
+    methodNames: ["move", "attack"], // Only these methods
+    allowance: "0.25 NEAR", // Max gas fees this key can spend
+  })
+  .send()
+```
+
+
+# Message Signing (Authentication)
+Source: https://kit.near.tools/in-depth/message-signing
+
+
+
+Transactions change the blockchain state and cost gas. Sometimes, you just want to prove **who you are**.
+
+Message Signing (standardized in [NEP-413](https://github.com/near/NEPs/blob/master/neps/nep-0413)) allows a user to sign a piece of data with their private key off-chain. This is free, instant, and is the standard way to implement **"Log in with NEAR"**.
+
+## How it Works
+
+1. **Client:** Generates a random "nonce" and asks the user to sign a specific message.
+2. **Wallet:** Shows the message to the user. If approved, it returns a cryptographic signature.
+3. **Backend:** Verifies the signature against the user's public key and checks the nonce to prevent replay attacks.
+
+## 1. The Client (Frontend)
+
+Use `near.signMessage` to request a signature.
+
+You **must** generate a random nonce. This ensures that a captured signature cannot be re-used by an attacker later.
+
+```typescript theme={null}
+import { Near, generateNonce } from "near-kit"
+import { hex } from "@scure/base"
+
+// 1. Generate a random 32-byte nonce with embedded timestamp
+const nonce = generateNonce()
+
+// 2. Request Signature
+const signedMessage = await near.signMessage({
+  message: "Log in to MyApp", // What the user sees
+  recipient: "myapp.com", // Your app identifier (prevents phishing)
+  nonce,
+})
+
+// 3. Send to Backend
+await fetch("/api/login", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    signedMessage,
+    message: "Log in to MyApp",
+    recipient: "myapp.com",
+    nonce: hex.encode(nonce), // Convert Uint8Array to hex string
+  }),
+})
+```
+
+The `signature` field is base64 encoded per the NEP-413 specification. Send it unchanged to your backend.
+
+## 2. The Server (Backend)
+
+**Automatic Expiration:** Nonces include an embedded timestamp. Signatures older than 5 minutes are automatically rejected, limiting the replay attack window.
+
+```typescript theme={null}
+import { Near, verifyNep413Signature } from "near-kit"
+import { hex } from "@scure/base"
+
+const near = new Near({ network: "mainnet" })
+
+app.post("/api/login", async (req, res) => {
+  const { signedMessage, message, recipient, nonce } = req.body
+
+  // 1. Verify Signature
+  const isValid = await verifyNep413Signature(
+    signedMessage,
+    {
+      message,
+      recipient,
+      nonce: hex.decode(nonce), // Convert hex string back to Uint8Array
+    },
+    { near }
+  )
+
+  if (!isValid) {
+    return res.status(401).send("Invalid or expired signature")
+  }
+
+  // 2. (Recommended) Check for Replays
+  // if (db.seenNonces.has(nonce)) ...
+
+  // 3. Success!
+  console.log(`User verified: ${signedMessage.accountId}`)
+  res.send({ token: "session_token_123" })
+})
+```
+
+This verifies the cryptographic signature and confirms the public key belongs to the claimed account as a full access key.
+
+Customize expiration window if needed:
+
+```typescript theme={null}
+// Accept signatures up to 10 minutes old
+await verifyNep413Signature(signedMessage, params, { near, maxAge: 10 * 60 * 1000 })
+```
+
+You can also check key existence directly:
+
+```typescript theme={null}
+// Returns true if the key exists and is a full access key
+const hasKey = await near.fullAccessKeyExists("alice.near", "ed25519:...")
+```
+
+<Warning title="Security Critical: Replay Attacks">
+  Cryptographic verification alone is not enough! If you do not check if the `nonce` has been used before, an attacker who intercepts the signed message can "replay" it to your server to log in as the user again.
+
+  **Always store used nonces in your database (with an expiration time) and reject duplicates.**
+</Warning>
+
+## Type Definition
+
+The `SignedMessage` object returned by the client and sent to the server looks like this:
+
+```typescript theme={null}
+type SignedMessage = {
+  accountId: string // "alice.near"
+  publicKey: string // "ed25519:..."
+  signature: string // Base64-encoded signature per NEP-413 spec
+}
+```
+
+`near.signMessage` returns a base64-encoded signature as specified in NEP-413. `verifyNep413Signature` also accepts legacy base58 signatures (with or without key type prefix) for backward compatibility.
+
+
+# Meta-Transactions (Gasless)
+Source: https://kit.near.tools/in-depth/meta-transactions
+
+
+
+Meta-transactions (NEP-366) allow a user to sign a transaction off-chain, which is then submitted and paid for by a separate "Relayer" account.
+
+## How it Works
+
+1. **User (Client):** Constructs a transaction and calls `.delegate()`. This returns a **typed object** (for UI/validation) and a **serialized string** (for transport).
+2. **Transport:** The user sends the serialized string (`payload`) to your backend.
+3. **Relayer (Server):** Your server decodes the payload back into an object, validates it, wraps it, and submits it.
+
+***
+
+## 1. Client Side: Signing the Action
+
+On the frontend, use the `.delegate()` method. This works exactly like `.send()`, but implies no network activity and no gas cost for the signer.
+
+It returns two properties:
+
+* `signedDelegateAction`: The raw JS object. Useful for debugging or showing details in your UI.
+* `payload`: A Base64-encoded string. This is what you send to the server.
+
+```typescript theme={null}
+// 1. Delegate (builds and signs the transaction off-chain)
+const { signedDelegateAction, payload } = userNear
+  .transaction("user.near")
+  .functionCall("game.near", "move", { x: 1, y: 2 })
+  .delegate()
+
+// Inspect locally (Typed Object)
+console.log("User signed for:", signedDelegateAction.delegateAction.receiverId)
+
+// 3. Send the PAYLOAD to your API (Base64 String)
+await fetch("https://api.mygame.com/relay", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ payload }),
+})
+```
+
+***
+
+## 2. Server Side: The Relayer
+
+The server receives the Base64 string (`payload`). It must decode this string back into a typed object to inspect it before submitting.
+
+Use `near-kit`'s `decodeSignedDelegateAction` helper for this.
+
+### Example: Express.js Route
+
+```typescript theme={null}
+import { Near, decodeSignedDelegateAction } from "near-kit"
+
+const relayer = new Near({
+  network: "testnet",
+  privateKey: process.env.RELAYER_KEY,
+})
+
+app.post("/relay", async (req, res) => {
+  try {
+    const { payload } = req.body
+
+    // 1. Decode the Base64 string back into a Typed Object
+    const userAction = decodeSignedDelegateAction(payload)
+
+    // 2. SECURITY: Inspect the object before paying for it!
+    // access the inner details via .delegateAction
+    const innerAction = userAction.delegateAction
+
+    // Example Check: Only allow calls to "game.near"
+    if (innerAction.receiverId !== "game.near") {
+      return res.status(400).send("Invalid target contract")
+    }
+
+    // 3. Submit to the Network
+    // The relayer wraps the user's action in its own transaction
+    const result = await relayer
+      .transaction("relayer.near")
+      .signedDelegateAction(userAction)
+      .send()
+
+    res.json({ hash: result.transaction.hash })
+  } catch (e) {
+    console.error(e)
+    res.status(500).send("Relay failed")
+  }
+})
+```
+
+## Security Checklist
+
+Running a relayer makes you a target.
+
+1. **Whitelist Receivers:** Always check `userAction.delegateAction.receiverId`.
+2. **Whitelist Methods:** Inspect `userAction.delegateAction.actions` to ensure users are only calling allowed methods (e.g., "move" vs "withdraw").
+3. **Rate Limiting:** Rate limit your API endpoint to prevent draining your relayer's funds.
+
+
+# Introduction
+Source: https://kit.near.tools/index
+
+A modern, lightweight TypeScript SDK for NEAR blockchain
+
+Welcome to `near-kit`.
+
+If you have built on NEAR before, you know that the tooling can sometimes feel... heavy. `near-kit` is an attempt to fix that. It is a modern, lightweight, and opinionated TypeScript SDK designed to make interacting with the NEAR blockchain feel as simple as using `fetch`.
+
+## Why `near-kit`?
+
+<CardGroup>
+  <Card title="Human-Readable Units" icon="text">
+    No more calculating zeros. Write `"10.5 NEAR"` or `"30 Tgas"` — the library handles conversions.
+  </Card>
+
+  <Card title="Fluent API" icon="link">
+    Chainable builder pattern that makes your code read like a sentence.
+  </Card>
+
+  <Card title="Type Safety" icon="shield-check">
+    Full TypeScript support with typed errors and contract interfaces.
+  </Card>
+
+  <Card title="Universal" icon="globe">
+    Same API for backend scripts, frontend dApps, and integration tests.
+  </Card>
+</CardGroup>
+
+## See It In Action
+
+```typescript theme={null}
+await near
+  .transaction("alice.near")
+  .createAccount("bob.alice.near")
+  .transfer("bob.alice.near", "10 NEAR")
+  .send()
+```
+
+## Get Started
+
+<CardGroup>
+  <Card title="Quickstart" icon="rocket" href="/start-here/quickstart">
+    Send your first transaction in under 2 minutes.
+  </Card>
+
+  <Card title="Mental Model" icon="brain" href="/start-here/mental-model">
+    Understand the core concepts behind near-kit.
+  </Card>
+
+  <Card title="Migration Guide" icon="arrow-right-arrow-left" href="/start-here/migration">
+    Coming from near-api-js? We've got you covered.
+  </Card>
+</CardGroup>
+
+
+# Data Fetching Patterns
+Source: https://kit.near.tools/react/data-fetching
+
+Integrate @near-kit/react with React Query or SWR for production-grade caching
+
+The built-in hooks (`useView`, `useBalance`, etc.) are intentionally thin - they manage loading and error states but don't include caching, deduplication, or background refetching.
+
+For production applications, we recommend pairing `@near-kit/react` with a data fetching library:
+
+<CardGroup>
+  <Card title="React Query" icon="react" href="#react-query">
+    Most popular. Full-featured with devtools, mutations, and infinite queries.
+  </Card>
+
+  <Card title="SWR" icon="bolt" href="#swr">
+    Lightweight alternative from Vercel. Simpler API, smaller bundle.
+  </Card>
+</CardGroup>
+
+***
+
+## React Query
+
+[TanStack Query](https://tanstack.com/query) (React Query) is the most popular data fetching library for React. It provides caching, background updates, stale-while-revalidate, and excellent DevTools.
+
+### Installation
+
+```bash theme={null}
+npm install @tanstack/react-query
+```
+
+### Setup
+
+<Steps>
+  <Step title="Add QueryClientProvider alongside NearProvider">
+    ```tsx theme={null}
+    import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+    import { Near } from "near-kit"
+    import { NearProvider } from "@near-kit/react"
+
+    const queryClient = new QueryClient()
+    const near = new Near({ network: "mainnet" })
+
+    function App() {
+      return (
+        <QueryClientProvider client={queryClient}>
+          <NearProvider near={near}>
+            <YourApp />
+          </NearProvider>
+        </QueryClientProvider>
+      )
+    }
+    ```
+  </Step>
+
+  <Step title="Create custom hooks using useNear">
+    ```tsx theme={null}
+    import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+    import { useNear } from "@near-kit/react"
+
+    // Cached view call
+    export function useMessages(limit: number) {
+      const near = useNear()
+
+      return useQuery({
+        queryKey: ["messages", limit],
+        queryFn: () => near.view<Message[]>("guestbook.near", "get_messages", { limit }),
+        staleTime: 30_000, // Consider fresh for 30 seconds
+      })
+    }
+
+    // Mutation with cache invalidation
+    export function useAddMessage() {
+      const near = useNear()
+      const queryClient = useQueryClient()
+
+      return useMutation({
+        mutationFn: (text: string) =>
+          near.call("guestbook.near", "add_message", { text }),
+        onSuccess: () => {
+          // Invalidate messages cache after adding
+          queryClient.invalidateQueries({ queryKey: ["messages"] })
+        },
+      })
+    }
+    ```
+  </Step>
+</Steps>
+
+### Complete Example
+
+<Accordion title="Full Guestbook with React Query">
+  ```tsx theme={null}
+  import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+  import { useNear } from "@near-kit/react"
+
+  interface Message {
+    id: number
+    sender: string
+    text: string
+  }
+
+  // Custom hooks
+  function useMessages() {
+    const near = useNear()
+    return useQuery({
+      queryKey: ["guestbook", "messages"],
+      queryFn: () => near.view<Message[]>("guestbook.near", "get_messages", { limit: 50 }),
+      staleTime: 10_000,
+      refetchInterval: 30_000, // Poll every 30s
+    })
+  }
+
+  function useAddMessage() {
+    const near = useNear()
+    const queryClient = useQueryClient()
+
+    return useMutation({
+      mutationFn: async (text: string) => {
+        await near.call("guestbook.near", "add_message", { text })
+      },
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["guestbook", "messages"] })
+      },
+    })
+  }
+
+  // Components
+  function MessageList() {
+    const { data: messages, isLoading, error } = useMessages()
+
+    if (isLoading) return <p>Loading messages...</p>
+    if (error) return <p>Error loading messages</p>
+
+    return (
+      <ul>
+        {messages?.map((msg) => (
+          <li key={msg.id}>
+            <strong>{msg.sender}</strong>: {msg.text}
+          </li>
+        ))}
+      </ul>
+    )
+  }
+
+  function AddMessageForm() {
+    const { mutate, isPending } = useAddMessage()
+    const [text, setText] = useState("")
+
+    const handleSubmit = (e: FormEvent) => {
+      e.preventDefault()
+      mutate(text, {
+        onSuccess: () => setText(""),
+      })
+    }
+
+    return (
+      <form onSubmit={handleSubmit}>
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Your message"
+          disabled={isPending}
+        />
+        <button type="submit" disabled={isPending || !text}>
+          {isPending ? "Sending..." : "Send"}
+        </button>
+      </form>
+    )
+  }
+
+  function Guestbook() {
+    return (
+      <div>
+        <h1>Guestbook</h1>
+        <AddMessageForm />
+        <MessageList />
+      </div>
+    )
+  }
+  ```
+</Accordion>
+
+### Patterns
+
+<Tabs>
+  <Tab title="Optimistic Updates">
+    Update the UI immediately, then reconcile with the server response:
+
+    ```tsx theme={null}
+    function useAddMessage() {
+      const near = useNear()
+      const queryClient = useQueryClient()
+
+      return useMutation({
+        mutationFn: (text: string) =>
+          near.call("guestbook.near", "add_message", { text }),
+
+        // Optimistically add the message
+        onMutate: async (text) => {
+          await queryClient.cancelQueries({ queryKey: ["messages"] })
+
+          const previous = queryClient.getQueryData<Message[]>(["messages"])
+
+          queryClient.setQueryData<Message[]>(["messages"], (old) => [
+            ...(old ?? []),
+            { id: Date.now(), sender: "you.near", text },
+          ])
+
+          return { previous }
+        },
+
+        // Rollback on error
+        onError: (err, text, context) => {
+          queryClient.setQueryData(["messages"], context?.previous)
+        },
+
+        // Refetch to get the real data
+        onSettled: () => {
+          queryClient.invalidateQueries({ queryKey: ["messages"] })
+        },
+      })
+    }
+    ```
+  </Tab>
+
+  <Tab title="Dependent Queries">
+    Fetch data that depends on other data:
+
+    ```tsx theme={null}
+    function useUserProfile(accountId: string) {
+      const near = useNear()
+
+      // First, check if account exists
+      const { data: exists } = useQuery({
+        queryKey: ["account-exists", accountId],
+        queryFn: () => near.accountExists(accountId),
+      })
+
+      // Then fetch profile only if account exists
+      return useQuery({
+        queryKey: ["profile", accountId],
+        queryFn: () => near.view("profiles.near", "get_profile", { account_id: accountId }),
+        enabled: exists === true, // Only runs if account exists
+      })
+    }
+    ```
+  </Tab>
+
+  <Tab title="Parallel Queries">
+    Fetch multiple resources in parallel:
+
+    ```tsx theme={null}
+    function useDashboardData(accountId: string) {
+      const near = useNear()
+
+      const results = useQueries({
+        queries: [
+          {
+            queryKey: ["balance", accountId],
+            queryFn: () => near.getBalance(accountId),
+          },
+          {
+            queryKey: ["nfts", accountId],
+            queryFn: () => near.view("nft.near", "nft_tokens_for_owner", { account_id: accountId }),
+          },
+          {
+            queryKey: ["staking", accountId],
+            queryFn: () => near.view("poolv1.near", "get_account", { account_id: accountId }),
+          },
+        ],
+      })
+
+      return {
+        balance: results[0].data,
+        nfts: results[1].data,
+        staking: results[2].data,
+        isLoading: results.some((r) => r.isLoading),
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+***
+
+## SWR
+
+[SWR](https://swr.vercel.app/) is a lightweight data fetching library from Vercel. It's simpler than React Query with a smaller bundle size.
+
+### Installation
+
+```bash theme={null}
+npm install swr
+```
+
+### Setup
+
+<Steps>
+  <Step title="Add SWRConfig alongside NearProvider">
+    ```tsx theme={null}
+    import { SWRConfig } from "swr"
+    import { Near } from "near-kit"
+    import { NearProvider } from "@near-kit/react"
+
+    const near = new Near({ network: "mainnet" })
+
+    function App() {
+      return (
+        <SWRConfig value={{ revalidateOnFocus: false }}>
+          <NearProvider near={near}>
+            <YourApp />
+          </NearProvider>
+        </SWRConfig>
+      )
+    }
+    ```
+  </Step>
+
+  <Step title="Create custom hooks using useNear">
+    ```tsx theme={null}
+    import useSWR from "swr"
+    import useSWRMutation from "swr/mutation"
+    import { useNear } from "@near-kit/react"
+
+    // Cached view call
+    export function useMessages(limit: number) {
+      const near = useNear()
+
+      return useSWR(
+        ["messages", limit],
+        () => near.view<Message[]>("guestbook.near", "get_messages", { limit })
+      )
+    }
+
+    // Mutation
+    export function useAddMessage() {
+      const near = useNear()
+
+      return useSWRMutation(
+        "messages",
+        (_, { arg: text }: { arg: string }) =>
+          near.call("guestbook.near", "add_message", { text })
+      )
+    }
+    ```
+  </Step>
+</Steps>
+
+### Complete Example
+
+<Accordion title="Full Guestbook with SWR">
+  ```tsx theme={null}
+  import useSWR, { mutate } from "swr"
+  import useSWRMutation from "swr/mutation"
+  import { useNear } from "@near-kit/react"
+
+  interface Message {
+    id: number
+    sender: string
+    text: string
+  }
+
+  // Custom hooks
+  function useMessages() {
+    const near = useNear()
+
+    return useSWR("messages", () =>
+      near.view<Message[]>("guestbook.near", "get_messages", { limit: 50 })
+    )
+  }
+
+  function useAddMessage() {
+    const near = useNear()
+
+    return useSWRMutation(
+      "messages",
+      async (_, { arg: text }: { arg: string }) => {
+        await near.call("guestbook.near", "add_message", { text })
+      },
+      {
+        onSuccess: () => mutate("messages"), // Revalidate after success
+      }
+    )
+  }
+
+  // Components
+  function MessageList() {
+    const { data: messages, isLoading, error } = useMessages()
+
+    if (isLoading) return <p>Loading messages...</p>
+    if (error) return <p>Error loading messages</p>
+
+    return (
+      <ul>
+        {messages?.map((msg) => (
+          <li key={msg.id}>
+            <strong>{msg.sender}</strong>: {msg.text}
+          </li>
+        ))}
+      </ul>
+    )
+  }
+
+  function AddMessageForm() {
+    const { trigger, isMutating } = useAddMessage()
+    const [text, setText] = useState("")
+
+    const handleSubmit = async (e: FormEvent) => {
+      e.preventDefault()
+      await trigger(text)
+      setText("")
+    }
+
+    return (
+      <form onSubmit={handleSubmit}>
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Your message"
+          disabled={isMutating}
+        />
+        <button type="submit" disabled={isMutating || !text}>
+          {isMutating ? "Sending..." : "Send"}
+        </button>
+      </form>
+    )
+  }
+  ```
+</Accordion>
+
+### Patterns
+
+<Tabs>
+  <Tab title="Conditional Fetching">
+    ```tsx theme={null}
+    function useProfile(accountId?: string) {
+      const near = useNear()
+
+      return useSWR(
+        accountId ? ["profile", accountId] : null, // null key = don't fetch
+        () => near.view("profiles.near", "get_profile", { account_id: accountId })
+      )
+    }
+    ```
+  </Tab>
+
+  <Tab title="Revalidation">
+    ```tsx theme={null}
+    function useBalance(accountId: string) {
+      const near = useNear()
+
+      return useSWR(
+        ["balance", accountId],
+        () => near.getBalance(accountId),
+        {
+          refreshInterval: 10_000,     // Refetch every 10s
+          revalidateOnFocus: true,     // Refetch when window regains focus
+          dedupingInterval: 2_000,     // Dedupe requests within 2s
+        }
+      )
+    }
+    ```
+  </Tab>
+
+  <Tab title="Global Mutate">
+    ```tsx theme={null}
+    import { mutate } from "swr"
+
+    // Revalidate specific key
+    mutate(["balance", "alice.near"])
+
+    // Revalidate all keys starting with "balance"
+    mutate((key) => Array.isArray(key) && key[0] === "balance")
+
+    // Revalidate everything
+    mutate(() => true)
+    ```
+  </Tab>
+</Tabs>
+
+***
+
+## Comparison
+
+| Feature                | Built-in Hooks | React Query | SWR    |
+| ---------------------- | -------------- | ----------- | ------ |
+| Bundle size            | 0 KB           | \~13 KB     | \~4 KB |
+| Caching                | ❌              | ✅           | ✅      |
+| Deduplication          | ❌              | ✅           | ✅      |
+| Background refetch     | ❌              | ✅           | ✅      |
+| Stale-while-revalidate | ❌              | ✅           | ✅      |
+| Optimistic updates     | ❌              | ✅           | ✅      |
+| DevTools               | ❌              | ✅           | ❌      |
+| Infinite queries       | ❌              | ✅           | ✅      |
+| Learning curve         | Low            | Medium      | Low    |
+
+<Info>
+  **Recommendation**: Use built-in hooks for prototypes and simple apps. For production, choose React Query for complex apps with mutations, or SWR for simpler read-heavy apps.
+</Info>
+
+***
+
+## Common Pitfalls
+
+### Data not refreshing after mutations
+
+**Problem**: You call `useCall` to submit a transaction, then call `refetch()` from `useView`, but the data doesn't update.
+
+**Cause**: React state updates are batched and asynchronous. When you call `refetch()` immediately after a mutation, React may not have re-rendered yet, so the refetch uses stale parameters.
+
+```tsx theme={null}
+// ❌ This won't work reliably
+const { refetch: refetchMessages } = useView({ ... })
+const { mutate } = useCall({ ... })
+
+const handleSubmit = async () => {
+  await mutate({ text: "Hello" })
+  await refetchMessages() // May use stale args!
+}
+```
+
+**Solution**: Use React Query's `invalidateQueries()` which properly handles the timing:
+
+```tsx theme={null}
+// ✅ This works correctly
+const { mutate } = useMutation({
+  mutationFn: (text) => near.call("contract", "add_message", { text }),
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ["messages"] })
+  },
+})
+```
+
+### Queries not refetching when args change
+
+**Problem**: You change the arguments to `useView` but it doesn't refetch.
+
+**Cause**: JavaScript object identity. If you create a new object each render, `useView` sees it as the same value (via JSON serialization), but if you're computing args from state that hasn't updated yet, you get stale data.
+
+**Solution**: Ensure args are derived from state that has actually updated, or use React Query which handles this more predictably.
+
+
+# Hooks Reference
+Source: https://kit.near.tools/react/hooks
+
+Complete API reference for all @near-kit/react hooks
+
+All hooks require being inside a `NearProvider`. They will throw an error if used outside the provider context.
+
+## Read Hooks
+
+These hooks fetch data from the blockchain. They all return a consistent shape:
+
+```typescript theme={null}
+interface ViewResult<T> {
+  data: T | undefined          // The fetched data
+  error: Error | undefined     // Any error that occurred
+  isLoading: boolean           // Whether fetch is in progress
+  refetch: () => Promise<void> // Manually trigger a refetch
+}
+```
+
+***
+
+### useView
+
+<ParamField type="UseViewParams">
+  Call any view method on a NEAR smart contract.
+</ParamField>
+
+<Expandable title="UseViewParams Properties">
+  <ResponseField name="contractId" type="string">
+    The contract account ID (e.g., `"guestbook.near"`)
+  </ResponseField>
+
+  <ResponseField name="method" type="string">
+    The view method name to call
+  </ResponseField>
+
+  <ResponseField name="args" type="object">
+    Arguments to pass to the method. Defaults to `{}`
+  </ResponseField>
+
+  <ResponseField name="enabled" type="boolean">
+    Whether the query is enabled. Defaults to `true`
+  </ResponseField>
+</Expandable>
+
+<CodeGroup>
+  ```tsx Basic Usage theme={null}
+  import { useView } from "@near-kit/react"
+
+  function Messages() {
+    const { data, isLoading, error, refetch } = useView<{ limit: number }, Message[]>({
+      contractId: "guestbook.near",
+      method: "get_messages",
+      args: { limit: 10 },
+    })
+
+    if (isLoading) return <p>Loading...</p>
+    if (error) return <p>Error: {error.message}</p>
+
+    return (
+      <div>
+        {data?.map((msg) => <p key={msg.id}>{msg.text}</p>)}
+        <button onClick={refetch}>Refresh</button>
+      </div>
+    )
+  }
+  ```
+
+  ```tsx Conditional Fetching theme={null}
+  function UserProfile({ userId }: { userId?: string }) {
+    // Only fetch when we have a userId
+    const { data: profile } = useView({
+      contractId: "profiles.near",
+      method: "get_profile",
+      args: { user_id: userId },
+      enabled: !!userId, // Won't fetch until userId is truthy
+    })
+
+    if (!userId) return <p>Select a user</p>
+    return <p>{profile?.name}</p>
+  }
+  ```
+
+  ```tsx Type-Safe Arguments theme={null}
+  interface GetMessagesArgs {
+    limit: number
+    offset?: number
+  }
+
+  interface Message {
+    id: string
+    sender: string
+    text: string
+    timestamp: number
+  }
+
+  // Full type safety for args and return type
+  const { data } = useView<GetMessagesArgs, Message[]>({
+    contractId: "guestbook.near",
+    method: "get_messages",
+    args: { limit: 20, offset: 0 },
+  })
+  ```
+</CodeGroup>
+
+<Tip>
+  When `args` change (by reference or value), the hook automatically refetches. Use `useMemo` for computed args to prevent unnecessary refetches.
+</Tip>
+
+***
+
+### useBalance
+
+<ParamField type="UseBalanceParams">
+  Fetch an account's NEAR balance as a formatted string.
+</ParamField>
+
+<Expandable title="UseBalanceParams Properties">
+  <ResponseField name="accountId" type="string">
+    The account ID to check balance for
+  </ResponseField>
+
+  <ResponseField name="enabled" type="boolean">
+    Whether the query is enabled. Defaults to `true`
+  </ResponseField>
+</Expandable>
+
+```tsx theme={null}
+import { useBalance } from "@near-kit/react"
+
+function WalletBalance({ accountId }: { accountId: string }) {
+  const { data: balance, isLoading, refetch } = useBalance({ accountId })
+
+  if (isLoading) return <span>...</span>
+
+  return (
+    <div>
+      <span>{balance}</span> {/* "10.50 NEAR" */}
+      <button onClick={refetch}>↻</button>
+    </div>
+  )
+}
+```
+
+<Note>
+  Returns a human-readable string like `"10.50 NEAR"`. For raw BigInt values, use `useNear()` and call `near.getAccountDetails()` directly.
+</Note>
+
+***
+
+### useAccountExists
+
+<ParamField type="UseAccountExistsParams">
+  Check if a NEAR account exists on the network.
+</ParamField>
+
+<Expandable title="UseAccountExistsParams Properties">
+  <ResponseField name="accountId" type="string">
+    The account ID to check
+  </ResponseField>
+
+  <ResponseField name="enabled" type="boolean">
+    Whether the query is enabled. Defaults to `true`
+  </ResponseField>
+</Expandable>
+
+```tsx theme={null}
+import { useAccountExists } from "@near-kit/react"
+
+function AccountChecker() {
+  const [input, setInput] = useState("")
+  const { data: exists, isLoading } = useAccountExists({
+    accountId: input,
+    enabled: input.length > 0,
+  })
+
+  return (
+    <div>
+      <input value={input} onChange={(e) => setInput(e.target.value)} />
+      {isLoading && <span>Checking...</span>}
+      {exists === true && <span>✓ Account exists</span>}
+      {exists === false && <span>✗ Account not found</span>}
+    </div>
+  )
+}
+```
+
+***
+
+### useAccount
+
+<ParamField type="">
+  Get the current connected account state from the Near client.
+</ParamField>
+
+Returns:
+
+```typescript theme={null}
+interface AccountState {
+  accountId: string | undefined  // The connected account ID
+  isConnected: boolean           // Whether any account is connected
+  isLoading: boolean             // Whether state is being fetched
+  refetch: () => Promise<void>   // Refresh account state
+}
+```
+
+```tsx theme={null}
+import { useAccount } from "@near-kit/react"
+
+function Header() {
+  const { accountId, isConnected, isLoading } = useAccount()
+
+  if (isLoading) return <span>Loading...</span>
+  if (!isConnected) return <button>Connect Wallet</button>
+
+  return <span>Connected: {accountId}</span>
+}
+```
+
+<Warning>
+  This hook accesses internal Near client state. The account is derived from whatever signer was configured (wallet adapter, private key, or keystore).
+</Warning>
+
+***
+
+## Mutation Hooks
+
+These hooks modify blockchain state. They return a consistent shape:
+
+```typescript theme={null}
+interface MutationResult<TArgs, TResult> {
+  mutate: (args: TArgs) => Promise<TResult>  // Execute the mutation
+  data: TResult | undefined                  // Last successful result
+  error: Error | undefined                   // Any error from last call
+  isPending: boolean                         // Whether mutation is in progress
+  isSuccess: boolean                         // Whether last call succeeded
+  isError: boolean                           // Whether last call failed
+  reset: () => void                          // Reset mutation state
+}
+```
+
+***
+
+### useCall
+
+<ParamField type="UseCallParams">
+  Call a change method on a NEAR smart contract.
+</ParamField>
+
+<Warning>
+  **Cache invalidation not included.** After a mutation, related queries won't automatically refetch. For apps where mutations should update the UI, use [React Query with `invalidateQueries()`](/react/data-fetching#react-query) instead.
+</Warning>
+
+<Expandable title="UseCallParams Properties">
+  <ResponseField name="contractId" type="string">
+    The contract account ID
+  </ResponseField>
+
+  <ResponseField name="method" type="string">
+    The change method name to call
+  </ResponseField>
+
+  <ResponseField name="options" type="CallOptions">
+    Default options (gas, attachedDeposit, etc.)
+  </ResponseField>
+</Expandable>
+
+<CodeGroup>
+  ```tsx Basic Usage theme={null}
+  import { useCall } from "@near-kit/react"
+
+  function IncrementButton() {
+    const { mutate, isPending, isError, error } = useCall({
+      contractId: "counter.testnet",
+      method: "increment",
+    })
+
+    return (
+      <div>
+        <button onClick={() => mutate({})} disabled={isPending}>
+          {isPending ? "Processing..." : "Increment"}
+        </button>
+        {isError && <p>Error: {error?.message}</p>}
+      </div>
+    )
+  }
+  ```
+
+  ```tsx With Arguments and Options theme={null}
+  interface AddMessageArgs {
+    text: string
+  }
+
+  function AddMessage() {
+    const { mutate, isPending, isSuccess, reset } = useCall<AddMessageArgs, void>({
+      contractId: "guestbook.near",
+      method: "add_message",
+      options: {
+        gas: "30 Tgas",
+        attachedDeposit: "0.01 NEAR", // Storage deposit
+      },
+    })
+
+    const handleSubmit = async (e: FormEvent) => {
+      e.preventDefault()
+      const formData = new FormData(e.target as HTMLFormElement)
+      await mutate({ text: formData.get("text") as string })
+    }
+
+    if (isSuccess) {
+      return (
+        <div>
+          <p>Message sent!</p>
+          <button onClick={reset}>Send another</button>
+        </div>
+      )
+    }
+
+    return (
+      <form onSubmit={handleSubmit}>
+        <input name="text" placeholder="Your message" />
+        <button type="submit" disabled={isPending}>
+          {isPending ? "Sending..." : "Send"}
+        </button>
+      </form>
+    )
+  }
+  ```
+
+  ```tsx Override Options Per-Call theme={null}
+  const { mutate } = useCall({
+    contractId: "nft.near",
+    method: "nft_mint",
+    options: { gas: "50 Tgas" },
+  })
+
+  // Override deposit for this specific call
+  await mutate(
+    { token_id: "1", receiver_id: "alice.near" },
+    { attachedDeposit: "0.1 NEAR" }
+  )
+  ```
+</CodeGroup>
+
+<Accordion title="CallOptions Reference">
+  | Option            | Type                                  | Description                                      |
+  | ----------------- | ------------------------------------- | ------------------------------------------------ |
+  | `gas`             | `string`                              | Gas limit (e.g., `"30 Tgas"`, `"100 Tgas"`)      |
+  | `attachedDeposit` | `string`                              | NEAR to attach (e.g., `"1 NEAR"`, `"0.01 NEAR"`) |
+  | `waitUntil`       | `"INCLUDED" \| "EXECUTED" \| "FINAL"` | When to resolve the promise                      |
+</Accordion>
+
+***
+
+### useSend
+
+<ParamField type="">
+  Send NEAR tokens to another account.
+</ParamField>
+
+Returns a `mutate` function with signature:
+
+```typescript theme={null}
+mutate: (to: string, amount: AmountInput) => Promise<void>
+```
+
+Where `AmountInput` is `"10 NEAR"` | `"1000 yocto"` | `bigint`
+
+```tsx theme={null}
+import { useSend } from "@near-kit/react"
+
+function SendForm() {
+  const { mutate: send, isPending, isSuccess, error } = useSend()
+  const [recipient, setRecipient] = useState("")
+  const [amount, setAmount] = useState("")
+
+  const handleSend = async () => {
+    try {
+      await send(recipient, `${amount} NEAR`)
+    } catch (err) {
+      // Error is also available via `error` state
+      console.error("Transfer failed:", err)
+    }
+  }
+
+  return (
+    <div>
+      <input
+        placeholder="Recipient (e.g., bob.near)"
+        value={recipient}
+        onChange={(e) => setRecipient(e.target.value)}
+      />
+      <input
+        placeholder="Amount in NEAR"
+        value={amount}
+        onChange={(e) => setAmount(e.target.value)}
+      />
+      <button onClick={handleSend} disabled={isPending}>
+        {isPending ? "Sending..." : "Send NEAR"}
+      </button>
+      {isSuccess && <p>Transfer complete!</p>}
+      {error && <p>Error: {error.message}</p>}
+    </div>
+  )
+}
+```
+
+***
+
+## Utility Hooks
+
+### useNear
+
+Access the raw Near client instance for advanced operations:
+
+```tsx theme={null}
+import { useNear } from "@near-kit/react"
+
+function AdvancedTransaction() {
+  const near = useNear()
+
+  const handleBatch = async () => {
+    // Full access to the transaction builder
+    await near
+      .transaction("alice.near")
+      .createAccount("sub.alice.near")
+      .transfer("sub.alice.near", "5 NEAR")
+      .addKey("sub.alice.near", "ed25519:...")
+      .send()
+  }
+
+  return <button onClick={handleBatch}>Create Subaccount</button>
+}
+```
+
+***
+
+### useContract
+
+<ParamField type="string">
+  Get a fully-typed contract interface using `near.contract<T>()`.
+</ParamField>
+
+```tsx theme={null}
+import { useContract } from "@near-kit/react"
+import type { Contract } from "near-kit"
+
+// Define your contract's type signature
+type FungibleToken = Contract<{
+  view: {
+    ft_balance_of: (args: { account_id: string }) => Promise<string>
+    ft_metadata: () => Promise<{ name: string; symbol: string; decimals: number }>
+  }
+  call: {
+    ft_transfer: (args: { receiver_id: string; amount: string }) => Promise<void>
+  }
+}>
+
+function TokenBalance({ accountId }: { accountId: string }) {
+  const token = useContract<FungibleToken>("usdt.tether-token.near")
+  const [balance, setBalance] = useState<string>()
+
+  useEffect(() => {
+    token.view.ft_balance_of({ account_id: accountId }).then(setBalance)
+  }, [token, accountId])
+
+  return <p>Balance: {balance}</p>
+}
+```
+
+<Tip>
+  For reactive data fetching with contracts, combine `useContract` with `useEffect` or integrate with React Query. See [Data Fetching](/react/data-fetching) for patterns.
+</Tip>
+
+
+# React Integration
+Source: https://kit.near.tools/react/overview
+
+First-class React hooks for NEAR blockchain interactions
+
+`@near-kit/react` provides thin, focused React hooks that wrap the core `near-kit` library. These hooks handle the React lifecycle for you while giving you full control over caching and data fetching strategies.
+
+<Info>
+  **Design Philosophy**: These hooks are intentionally thin wrappers. They manage loading states and errors, but don't include built-in caching. For production apps, we recommend pairing them with [React Query](/react/data-fetching#react-query) or [SWR](/react/data-fetching#swr).
+</Info>
+
+## Installation
+
+<CodeGroup>
+  ```bash npm theme={null}
+  npm install @near-kit/react
+  ```
+
+  ```bash bun theme={null}
+  bun add @near-kit/react
+  ```
+
+  ```bash yarn theme={null}
+  yarn add @near-kit/react
+  ```
+
+  ```bash pnpm theme={null}
+  pnpm add @near-kit/react
+  ```
+</CodeGroup>
+
+<Note>
+  `@near-kit/react` includes `near-kit` as a dependency — both packages are versioned together.
+</Note>
+
+## Quick Example
+
+Here's a complete example showing provider setup, reading data, and sending transactions:
+
+```tsx theme={null}
+import { Near } from "near-kit"
+import { NearProvider, useNear, useBalance, useSend } from "@near-kit/react"
+
+// 1. Create the Near client
+const near = new Near({
+  network: "testnet",
+  privateKey: "ed25519:...",
+  defaultSignerId: "alice.testnet",
+})
+
+// 2. Wrap your app with NearProvider
+function App() {
+  return (
+    <NearProvider near={near}>
+      <Wallet />
+    </NearProvider>
+  )
+}
+
+// 3. Use hooks in any component
+function Wallet() {
+  const { data: balance, isLoading } = useBalance({ accountId: "alice.testnet" })
+  const { mutate: send, isPending } = useSend()
+
+  const handleSend = async () => {
+    await send("bob.testnet", "1 NEAR")
+  }
+
+  if (isLoading) return <p>Loading...</p>
+
+  return (
+    <div>
+      <p>Balance: {balance}</p>
+      <button onClick={handleSend} disabled={isPending}>
+        {isPending ? "Sending..." : "Send 1 NEAR"}
+      </button>
+    </div>
+  )
+}
+```
+
+<Tip>
+  **For production apps with mutations**, we recommend using [React Query](/react/data-fetching#react-query) with `useNear()` for proper cache invalidation. The thin hooks above are great for prototyping but don't automatically refetch data after mutations.
+</Tip>
+
+## Available Hooks
+
+<CardGroup>
+  <Card title="useNear" icon="link" href="/react/hooks#usenear">
+    Access the Near client instance from context
+  </Card>
+
+  <Card title="useView" icon="eye" href="/react/hooks#useview">
+    Call view methods on smart contracts
+  </Card>
+
+  <Card title="useBalance" icon="wallet" href="/react/hooks#usebalance">
+    Get formatted account balance
+  </Card>
+
+  <Card title="useAccountExists" icon="user-check" href="/react/hooks#useaccountexists">
+    Check if an account exists
+  </Card>
+
+  <Card title="useCall" icon="terminal" href="/react/hooks#usecall">
+    Call contract methods that modify state
+  </Card>
+
+  <Card title="useSend" icon="paper-plane" href="/react/hooks#usesend">
+    Send NEAR tokens to another account
+  </Card>
+
+  <Card title="useAccount" icon="user" href="/react/hooks#useaccount">
+    Get full account details and access keys
+  </Card>
+
+  <Card title="useContract" icon="file-code" href="/react/hooks#usecontract">
+    Get a typed contract interface
+  </Card>
+</CardGroup>
+
+## Hook Categories
+
+<Tabs>
+  <Tab title="Read Hooks">
+    These hooks fetch data from the blockchain. They return `{ data, error, isLoading, refetch }`.
+
+    ```tsx theme={null}
+    // View method call
+    const { data: messages } = useView<Message[]>({
+      contractId: "guestbook.near",
+      method: "get_messages",
+      args: { limit: 10 },
+    })
+
+    // Account balance
+    const { data: balance } = useBalance({ accountId: "alice.near" })
+
+    // Account existence check
+    const { data: exists } = useAccountExists({ accountId: "bob.near" })
+
+    // Full account details (connected wallet account)
+    const { data: account } = useAccount()
+    ```
+  </Tab>
+
+  <Tab title="Mutation Hooks">
+    These hooks modify blockchain state. They return `{ mutate, isPending, error, data, reset }`.
+
+    ```tsx theme={null}
+    // Send tokens
+    const { mutate: send, isPending } = useSend()
+    await send("bob.near", "5 NEAR")
+
+    // Call contract method
+    const { mutate, isPending: isCallPending } = useCall({
+      contractId: "counter.near",
+      method: "increment",
+    })
+    await mutate({})
+    ```
+  </Tab>
+</Tabs>
+
+## What's Next?
+
+<CardGroup>
+  <Card title="Provider Setup" icon="gear" href="/react/provider">
+    Configure the NearProvider for your app
+  </Card>
+
+  <Card title="Hooks Reference" icon="book" href="/react/hooks">
+    Complete API reference for all hooks
+  </Card>
+
+  <Card title="Data Fetching" icon="arrows-rotate" href="/react/data-fetching">
+    Integrate with React Query or SWR
+  </Card>
+
+  <Card title="Wallet Connection" icon="wallet" href="/dapp-workflow/frontend-integration">
+    Connect user wallets in the browser
+  </Card>
+</CardGroup>
+
+
+# Provider Setup
+Source: https://kit.near.tools/react/provider
+
+Configure the NearProvider for your React application
+
+The `NearProvider` component makes a `Near` client instance available to all components in your app via React Context.
+
+## Basic Setup
+
+<Steps>
+  <Step title="Create the Near client">
+    Create your `Near` instance with your desired configuration. This can be done outside your component tree.
+
+    ```tsx theme={null}
+    import { Near } from "near-kit"
+
+    const near = new Near({
+      network: "mainnet",
+    })
+    ```
+  </Step>
+
+  <Step title="Wrap your app with NearProvider">
+    Place the `NearProvider` at the root of your component tree.
+
+    ```tsx theme={null}
+    import { NearProvider } from "@near-kit/react"
+
+    function App() {
+      return (
+        <NearProvider near={near}>
+          <YourApp />
+        </NearProvider>
+      )
+    }
+    ```
+  </Step>
+
+  <Step title="Use hooks in any component">
+    All hooks from `@near-kit/react` will now have access to the Near client.
+
+    ```tsx theme={null}
+    import { useBalance } from "@near-kit/react"
+
+    function WalletDisplay() {
+      const { data: balance } = useBalance({ accountId: "alice.near" })
+      return <p>Balance: {balance}</p>
+    }
+    ```
+  </Step>
+</Steps>
+
+## Provider Props
+
+<ResponseField name="near" type="Near">
+  The Near client instance to provide to all child components.
+</ResponseField>
+
+<ResponseField name="children" type="ReactNode">
+  React children to render inside the provider.
+</ResponseField>
+
+## useNear Hook
+
+Access the Near client directly when you need the full API:
+
+```tsx theme={null}
+import { useNear } from "@near-kit/react"
+
+function AdvancedComponent() {
+  const near = useNear()
+
+  const handleComplex = async () => {
+    // Full access to the Near client API
+    const result = await near
+      .transaction("alice.near")
+      .functionCall("contract.near", "method", { arg: "value" })
+      .transfer("bob.near", "1 NEAR")
+      .send()
+  }
+
+  return <button onClick={handleComplex}>Complex Transaction</button>
+}
+```
+
+<Warning>
+  `useNear()` will throw an error if called outside of a `NearProvider`. Always ensure your components are wrapped.
+</Warning>
+
+## Framework-Specific Setup
+
+<Tabs>
+  <Tab title="Next.js (App Router)">
+    Create a client component for the provider:
+
+    ```tsx theme={null}
+    // providers/near-provider.tsx
+    "use client"
+
+    import { Near } from "near-kit"
+    import { NearProvider } from "@near-kit/react"
+
+    const near = new Near({ network: "mainnet" })
+
+    export function NearProviderWrapper({ children }: { children: React.ReactNode }) {
+      return <NearProvider near={near}>{children}</NearProvider>
+    }
+    ```
+
+    Use it in your root layout:
+
+    ```tsx theme={null}
+    // app/layout.tsx
+    import { NearProviderWrapper } from "@/providers/near-provider"
+
+    export default function RootLayout({ children }: { children: React.ReactNode }) {
+      return (
+        <html>
+          <body>
+            <NearProviderWrapper>{children}</NearProviderWrapper>
+          </body>
+        </html>
+      )
+    }
+    ```
+
+    <Note>
+      The `@near-kit/react` package includes the `"use client"` directive, so you don't need to add it to your imports. However, components using the hooks must be client components.
+    </Note>
+  </Tab>
+
+  <Tab title="Next.js (Pages Router)">
+    Set up the provider in `_app.tsx`:
+
+    ```tsx theme={null}
+    // pages/_app.tsx
+    import type { AppProps } from "next/app"
+    import { Near } from "near-kit"
+    import { NearProvider } from "@near-kit/react"
+
+    const near = new Near({ network: "mainnet" })
+
+    export default function App({ Component, pageProps }: AppProps) {
+      return (
+        <NearProvider near={near}>
+          <Component {...pageProps} />
+        </NearProvider>
+      )
+    }
+    ```
+  </Tab>
+
+  <Tab title="Vite / CRA">
+    Set up the provider in your entry point:
+
+    ```tsx theme={null}
+    // main.tsx or index.tsx
+    import React from "react"
+    import ReactDOM from "react-dom/client"
+    import { Near } from "near-kit"
+    import { NearProvider } from "@near-kit/react"
+    import App from "./App"
+
+    const near = new Near({ network: "mainnet" })
+
+    ReactDOM.createRoot(document.getElementById("root")!).render(
+      <React.StrictMode>
+        <NearProvider near={near}>
+          <App />
+        </NearProvider>
+      </React.StrictMode>
+    )
+    ```
+  </Tab>
+</Tabs>
+
+## With Wallet Connection
+
+For dApps where users connect their own wallets, create the Near instance dynamically:
+
+```tsx theme={null}
+"use client"
+
+import { useState, useEffect } from "react"
+import { Near, fromWalletSelector } from "near-kit"
+import { NearProvider } from "@near-kit/react"
+import { setupWalletSelector } from "@near-wallet-selector/core"
+
+export function WalletProvider({ children }: { children: React.ReactNode }) {
+  const [near, setNear] = useState<Near | null>(null)
+
+  useEffect(() => {
+    async function init() {
+      const selector = await setupWalletSelector({
+        network: "mainnet",
+        modules: [/* ... */],
+      })
+
+      if (selector.isSignedIn()) {
+        const wallet = await selector.wallet()
+        setNear(
+          new Near({
+            network: "mainnet",
+            wallet: fromWalletSelector(wallet),
+          })
+        )
+      }
+    }
+    init()
+  }, [])
+
+  // Show loading or connect button when not connected
+  if (!near) {
+    return <ConnectWalletButton />
+  }
+
+  return <NearProvider near={near}>{children}</NearProvider>
+}
+```
+
+<Tip>
+  For a complete wallet integration example, see the [Frontend Integration](/dapp-workflow/frontend-integration) guide.
+</Tip>
+
+## Error: Nested Provider
+
+<Warning>
+  `NearProvider` throws an error if nested inside another `NearProvider`. This prevents accidental context shadowing.
+</Warning>
+
+```tsx theme={null}
+// ❌ This will throw an error
+<NearProvider near={near1}>
+  <NearProvider near={near2}>  {/* Error! */}
+    <App />
+  </NearProvider>
+</NearProvider>
+
+// ✅ Use a single provider at the root
+<NearProvider near={near}>
+  <App />
+</NearProvider>
+```
+
+If you need multiple Near clients (rare), manage them outside of context:
+
+```tsx theme={null}
+const mainnetNear = new Near({ network: "mainnet" })
+const testnetNear = new Near({ network: "testnet" })
+
+// Use the specific client directly where needed
+const balance = await testnetNear.getBalance("alice.testnet")
+```
+
+
+# Action Reference
+Source: https://kit.near.tools/reference/actions
+
+Every method available on the TransactionBuilder
+
+This page documents every method available on the `TransactionBuilder`.
+
+To start a transaction:
+
+```typescript theme={null}
+near.transaction(signerId: string)
+```
+
+## Token Operations
+
+<AccordionGroup>
+  <Accordion title=".transfer(receiverId, amount)">
+    Sends NEAR tokens from the signer to the receiver.
+
+    <ResponseField name="receiverId" type="string">
+      The account receiving the tokens.
+    </ResponseField>
+
+    <ResponseField name="amount" type="Amount">
+      The amount to send (e.g. `"10 NEAR"`, `"0.5 NEAR"`, `"1000 yocto"`).
+    </ResponseField>
+
+    ```typescript theme={null}
+    .transfer("bob.near", "10 NEAR")
+    ```
+  </Accordion>
+
+  <Accordion title=".stake(publicKey, amount)">
+    Stakes NEAR with a validator.
+
+    <ResponseField name="publicKey" type="string">
+      The validator's public key.
+    </ResponseField>
+
+    <ResponseField name="amount" type="Amount">
+      The amount to stake.
+    </ResponseField>
+  </Accordion>
+</AccordionGroup>
+
+## Contract Operations
+
+<AccordionGroup>
+  <Accordion title=".functionCall(contractId, methodName, args, options)">
+    Calls a method on a smart contract.
+
+    <ResponseField name="contractId" type="string">
+      The contract account ID.
+    </ResponseField>
+
+    <ResponseField name="methodName" type="string">
+      The method to call.
+    </ResponseField>
+
+    <ResponseField name="args" type="object | Uint8Array">
+      Arguments. Objects are automatically JSON serialized.
+    </ResponseField>
+
+    <ResponseField name="options" type="object">
+      <Expandable title="properties">
+        <ResponseField name="gas" type="Gas">
+          Computation limit.
+        </ResponseField>
+
+        <ResponseField name="attachedDeposit" type="Amount">
+          NEAR to send to the contract.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+
+    ```typescript theme={null}
+    .functionCall(
+      "market.near",
+      "buy",
+      { item_id: "sword-1" },
+      { gas: "50 Tgas", attachedDeposit: "1 NEAR" }
+    )
+    ```
+  </Accordion>
+
+  <Accordion title=".deployContract(accountId, code)">
+    Deploys Wasm code to an account. If the account already has a contract, it will be updated.
+
+    <ResponseField name="accountId" type="string">
+      The account to deploy to.
+    </ResponseField>
+
+    <ResponseField name="code" type="Uint8Array">
+      The raw bytes of the compiled Wasm file.
+    </ResponseField>
+  </Accordion>
+
+  <Accordion title=".stateInit(stateInit, options?)">
+    Deploys a contract to a deterministic account ID (NEP-616). The address is auto-derived from the initialization state. Idempotent—refunds if already deployed.
+
+    <ResponseField name="stateInit" type="object">
+      <Expandable title="properties">
+        <ResponseField name="code" type="object">
+          Global contract reference: `{ accountId: string }` or `{ codeHash: string }`
+        </ResponseField>
+
+        <ResponseField name="data" type="Map<Uint8Array, Uint8Array>">
+          Initial storage key-value pairs (borsh-serialized bytes).
+        </ResponseField>
+
+        <ResponseField name="deposit" type="Amount">
+          Storage cost reserve.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+
+    <ResponseField name="options" type="object">
+      <Expandable title="properties">
+        <ResponseField name="refundTo" type="string">
+          Custom refund recipient.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+
+    ```typescript theme={null}
+    const encoder = new TextEncoder();
+    .stateInit({
+      code: { accountId: "publisher.near" },
+      data: new Map([
+        [encoder.encode("owner"), encoder.encode("alice.near")]
+      ]),
+      deposit: "1 NEAR",
+    })
+    ```
+
+    See [Global Contracts](/in-depth/global-contracts) for more details.
+  </Accordion>
+</AccordionGroup>
+
+## Account Management
+
+<AccordionGroup>
+  <Accordion title=".createAccount(accountId)">
+    Creates a new account. This is often chained with `.transfer` (to fund it) and `.addKey` (to secure it).
+
+    <ResponseField name="accountId" type="string">
+      The full ID of the new account (must be a sub-account of the signer).
+    </ResponseField>
+
+    ```typescript theme={null}
+    .createAccount("bob.alice.near")
+    .transfer("bob.alice.near", "1 NEAR")
+    .addKey(publicKey, { type: "fullAccess" })
+    ```
+  </Accordion>
+
+  <Accordion title=".deleteAccount({ beneficiary })">
+    Deletes the transaction receiver's account and sends all remaining funds to the beneficiary.
+
+    <ResponseField name="beneficiary" type="string">
+      The account that receives the remaining NEAR balance.
+    </ResponseField>
+
+    ```typescript theme={null}
+    // Delete 'old-account.alice.near' and send remaining funds to 'alice.near'
+    await near
+      .transaction("old-account.alice.near")
+      .deleteAccount({ beneficiary: "alice.near" })
+      .send()
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Access Keys
+
+<AccordionGroup>
+  <Accordion title=".addKey(publicKey, permission)">
+    Adds a new access key to the account.
+
+    <ResponseField name="publicKey" type="string">
+      The public key to add (ed25519 or secp256k1).
+    </ResponseField>
+
+    <ResponseField name="permission" type="AccessKeyPermission">
+      One of:
+
+      * `{ type: "fullAccess" }` - Can do anything.
+      * `{ type: "functionCall", receiverId, methodNames?, allowance? }` - Restricted to specific contracts/methods.
+    </ResponseField>
+
+    <Tabs>
+      <Tab title="Full Access">
+        ```typescript theme={null}
+        .addKey(pk, { type: "fullAccess" })
+        ```
+      </Tab>
+
+      <Tab title="Function Call (Restricted)">
+        ```typescript theme={null}
+        .addKey(pk, {
+          type: "functionCall",
+          receiverId: "app.near",
+          methodNames: ["vote", "comment"],
+          allowance: "0.25 NEAR" // Gas allowance
+        })
+        ```
+      </Tab>
+    </Tabs>
+  </Accordion>
+
+  <Accordion title=".deleteKey(accountId, publicKey)">
+    Removes an access key.
+
+    <ResponseField name="accountId" type="string">
+      The account to remove the key from.
+    </ResponseField>
+
+    <ResponseField name="publicKey" type="string">
+      The public key to remove.
+    </ResponseField>
+  </Accordion>
+</AccordionGroup>
+
+## Global Contracts
+
+<AccordionGroup>
+  <Accordion title=".publishContract(code, options?)">
+    Publishes contract code to the global registry so others can deploy it by reference.
+
+    <ResponseField name="code" type="Uint8Array">
+      The Wasm bytes.
+    </ResponseField>
+
+    <ResponseField name="options" type="object">
+      <Expandable title="properties">
+        <ResponseField name="identifiedBy" type="string">
+          How the contract is referenced:
+
+          * `"account"`: Updatable by signer, identified by signer's account ID
+          * `"hash"`: Immutable, identified by code hash
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+
+    <Tabs>
+      <Tab title="Updatable (default)">
+        ```typescript theme={null}
+        // Identified by your account - you can update it later
+        .publishContract(wasm)
+        ```
+      </Tab>
+
+      <Tab title="Immutable">
+        ```typescript theme={null}
+        // Identified by hash - can never be changed
+        .publishContract(wasm, { identifiedBy: "hash" })
+        ```
+      </Tab>
+    </Tabs>
+  </Accordion>
+
+  <Accordion title=".deployFromPublished(reference)">
+    Deploys contract code that was previously published to the registry. This saves gas by avoiding uploading the full Wasm bytes.
+
+    <ResponseField name="reference" type="object">
+      One of:
+
+      * `{ accountId: string }` - Account ID of the publisher (for updatable contracts)
+      * `{ codeHash: string }` - Base58 hash of an immutable contract
+    </ResponseField>
+  </Accordion>
+</AccordionGroup>
+
+## Advanced / Meta-Transactions
+
+<AccordionGroup>
+  <Accordion title=".delegate(options?)">
+    Instead of sending the transaction, this method signs it and returns a `SignedDelegateAction` payload. This is used for meta-transactions where a relayer pays the gas.
+
+    <ResponseField name="options" type="object">
+      <Expandable title="properties">
+        <ResponseField name="maxBlockHeight" type="bigint">
+          Expiration block.
+        </ResponseField>
+
+        <ResponseField name="payloadFormat" type="string">
+          Output format: `"base64"` or `"bytes"`.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+
+    **Returns:** `{ signedDelegateAction, payload, format }`
+  </Accordion>
+
+  <Accordion title=".signedDelegateAction(signedDelegate)">
+    Adds a pre-signed delegate action to this transaction. Used by relayers to submit a user's action.
+
+    <ResponseField name="signedDelegate" type="SignedDelegateAction">
+      The signed delegate action from the user.
+    </ResponseField>
+  </Accordion>
+
+  <Accordion title=".signWith(key)">
+    Overrides the signer for *this specific transaction*. Does not change the global `Near` configuration.
+
+    <ResponseField name="key" type="string | Signer">
+      A private key string OR a custom signer function.
+    </ResponseField>
+
+    <Tabs>
+      <Tab title="Private Key">
+        ```typescript theme={null}
+        // Use a specific key just for this transaction
+        .signWith("ed25519:...")
+        ```
+      </Tab>
+
+      <Tab title="Custom Signer">
+        ```typescript theme={null}
+        // Use a custom signer (e.g. hardware wallet)
+        .signWith(async (hash) => {
+          return ledger.sign(hash);
+        })
+        ```
+      </Tab>
+    </Tabs>
+  </Accordion>
+</AccordionGroup>
+
+
+# For AI Agents
+Source: https://kit.near.tools/reference/ai-integration
+
+How to use near-kit documentation with AI coding assistants
+
+This documentation is optimized for AI coding assistants. Whether you're using **Cursor**, **Windsurf**, **Claude**, **ChatGPT**, or other AI tools, there are multiple ways to give them context about `near-kit`.
+
+<Warning>
+  **Important:** `near-kit` is NOT `near-api-js`. AI models often confuse the two. Always provide context to ensure the AI uses the correct, modern API.
+</Warning>
+
+## Quick Access Methods
+
+<CardGroup>
+  <Card title="Contextual Menu" icon="mouse-pointer">
+    Select any text on this site and use the popup menu to send it directly to ChatGPT, Claude, Cursor, or VS Code.
+  </Card>
+
+  <Card title="MCP Server" icon="plug">
+    Connect your AI tool to our Model Context Protocol server for live documentation access.
+  </Card>
+
+  <Card title="llms.txt" icon="file-text">
+    Fetch the full documentation as a single text file optimized for LLMs.
+  </Card>
+
+  <Card title="Markdown Export" icon="download">
+    Click the copy button on any page to get markdown for your AI context.
+  </Card>
+</CardGroup>
+
+***
+
+## Model Context Protocol (MCP)
+
+MCP allows AI tools to connect directly to our documentation server. This gives your AI assistant live access to search and read the docs.
+
+### Supported Tools
+
+* **Claude Desktop** - Native MCP support
+* **Cursor** - Via MCP extension
+* **VS Code** - Via Copilot MCP extensions
+
+### Connection URL
+
+```
+https://kit.near.tools/mcp
+```
+
+<Tabs>
+  <Tab title="Claude Desktop">
+    Add to your `claude_desktop_config.json`:
+
+    ```json theme={null}
+    {
+      "mcpServers": {
+        "near-kit": {
+          "command": "npx",
+          "args": ["-y", "@anthropic-ai/mcp-remote", "https://kit.near.tools/mcp"]
+        }
+      }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Cursor">
+    Add to your Cursor MCP settings:
+
+    ```json theme={null}
+    {
+      "mcpServers": {
+        "near-kit": {
+          "url": "https://kit.near.tools/mcp"
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+***
+
+## llms.txt Files
+
+The full documentation is available as plain text files optimized for LLM context windows.
+
+<AccordionGroup>
+  <Accordion title="llms-full.txt (Recommended)" icon="file">
+    Contains the entire documentation in a single text file. Use this for most coding tasks.
+
+    **URL:** [https://kit.near.tools/llms-full.txt](https://kit.near.tools/llms-full.txt)
+
+    ```bash theme={null}
+    curl https://kit.near.tools/llms-full.txt
+    ```
+  </Accordion>
+
+  <Accordion title="llms.txt (Index Only)" icon="list">
+    A condensed table of contents with page summaries. Use this if you're hitting context window limits.
+
+    **URL:** [https://kit.near.tools/llms.txt](https://kit.near.tools/llms.txt)
+  </Accordion>
+</AccordionGroup>
+
+***
+
+## Using with AI Assistants
+
+<Tabs>
+  <Tab title="Cursor / Windsurf">
+    1. Open the **Chat** pane
+    2. Type `@Docs` and add the URL: `https://kit.near.tools/llms-full.txt`
+    3. Or use `@Web` to fetch any documentation page directly
+
+    The editor will ingest the documentation as a reference file.
+  </Tab>
+
+  <Tab title="Claude Desktop">
+    Connect via MCP for the best experience:
+
+    1. Open Claude Desktop settings
+    2. Add the MCP server: `https://kit.near.tools/mcp`
+    3. Claude can now search and read the docs directly
+
+    Or paste the llms-full.txt URL in your conversation.
+  </Tab>
+
+  <Tab title="ChatGPT">
+    1. Paste the URL in your chat: `https://kit.near.tools/llms-full.txt`
+    2. Ask ChatGPT to read and reference it
+    3. Add the recommended prompt below
+  </Tab>
+
+  <Tab title="VS Code Copilot">
+    Use the contextual menu on this site:
+
+    1. Select code or text you want to reference
+    2. Click the VS Code option in the popup menu
+    3. The content opens in your editor for Copilot context
+  </Tab>
+</Tabs>
+
+***
+
+## Recommended Prompt
+
+When starting a new AI session, use this prompt to ensure accurate responses:
+
+```text theme={null}
+I am building an application using the `near-kit` TypeScript library for NEAR blockchain.
+
+IMPORTANT: `near-kit` is NOT `near-api-js`. They are completely different libraries.
+- Do NOT use `near-api-js` patterns (like `utils.format`, `account.functionCall`, `BN`)
+- Use human-readable strings for amounts: "10 NEAR", "30 Tgas"
+- Use the fluent transaction builder: `near.transaction().transfer().send()`
+- Reference the provided documentation as the source of truth
+```
+
+<Note>
+  This prompt helps prevent the AI from hallucinating `near-api-js` patterns, which is a common issue since that library has more training data.
+</Note>
+
+
+# Configuration Options
+Source: https://kit.near.tools/reference/configuration
+
+All options for the Near class constructor
+
+These are the properties accepted by the `Near` class constructor.
+
+```typescript theme={null}
+const near = new Near({
+  network: "testnet",
+  privateKey: "...",
+})
+```
+
+## Network
+
+Controls which NEAR network to connect to.
+
+<ResponseField name="network" type="string | NetworkConfig">
+  The network to connect to.
+
+  **Presets:** `"mainnet"`, `"testnet"`, `"localnet"`
+
+  **Custom config:**
+
+  ```typescript theme={null}
+  {
+    networkId: "my-private-net",
+    rpcUrl: "http://127.0.0.1:3030"
+  }
+  ```
+
+  **Sandbox:** Passing a `Sandbox` instance automatically configures RPC and the root account key.
+</ResponseField>
+
+<ResponseField name="rpcUrl" type="string">
+  Override the RPC URL for a preset network (e.g., to use a specific provider like Infura or Lava).
+</ResponseField>
+
+<ResponseField name="headers" type="Record<string, string>">
+  Custom HTTP headers for RPC requests.
+
+  ```typescript theme={null}
+  { "Authorization": "Bearer ..." }
+  ```
+</ResponseField>
+
+## Credentials & Signing
+
+`near-kit` checks these in order: `wallet` > `signer` > `privateKey` > `keyStore`.
+
+<ResponseField name="privateKey" type="string">
+  A single private key (`ed25519:...`). Useful for scripts.
+</ResponseField>
+
+<ResponseField name="keyStore" type="KeyStore">
+  A storage backend for multiple keys.
+
+  | KeyStore           | Environment | Description                                 |
+  | ------------------ | ----------- | ------------------------------------------- |
+  | `InMemoryKeyStore` | Any         | Default, keys in memory                     |
+  | `FileKeyStore`     | Node.js     | Stores in `~/.near-credentials`             |
+  | `NativeKeyStore`   | Node.js     | macOS Keychain / Windows Credential Manager |
+  | `RotatingKeyStore` | Any         | For high-concurrency apps                   |
+</ResponseField>
+
+<ResponseField name="wallet" type="WalletAdapter">
+  A wrapper around a browser wallet.
+
+  ```typescript theme={null}
+  wallet: fromWalletSelector(wallet)
+  ```
+</ResponseField>
+
+<ResponseField name="signer" type="(hash: Uint8Array) => Promise<Signature>">
+  A custom signing function. Use this for hardware wallets, KMS, or multi-sig logic.
+</ResponseField>
+
+<ResponseField name="defaultSignerId" type="string">
+  The account ID to use when calling `near.transaction()` without arguments.
+</ResponseField>
+
+## Execution Behavior
+
+<ResponseField name="defaultWaitUntil" type="string">
+  Controls how long `.send()` waits before returning.
+
+  | Value                   | Description                                                         |
+  | ----------------------- | ------------------------------------------------------------------- |
+  | `"INCLUDED"`            | Return as soon as the network accepts it (fastest, no result value) |
+  | `"EXECUTED_OPTIMISTIC"` | Transaction is executed and result is available (default)           |
+  | `"FINAL"`               | Wait for BFT finality (safest, slowest)                             |
+</ResponseField>
+
+<ResponseField name="retryConfig" type="object">
+  Configuration for automatic retries on network errors.
+
+  <Expandable title="properties">
+    <ResponseField name="maxRetries" type="number">
+      Maximum retries for retryable network errors (429, 503, etc).
+    </ResponseField>
+
+    <ResponseField name="initialDelayMs" type="number">
+      Initial backoff delay in milliseconds.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+
+# Data Structures
+Source: https://kit.near.tools/reference/data-structures
+
+
+
+This reference details the shape of objects returned by the `Near` client. Use this to understand exactly what fields are available when parsing results.
+
+## Transaction Result (`FinalExecutionOutcome`)
+
+Returned by `.send()` and `near.call()`.
+
+```typescript theme={null}
+type FinalExecutionOutcome = {
+  // High-level status of the transaction execution
+  final_execution_status:
+    | "NONE"
+    | "INCLUDED"
+    | "INCLUDED_FINAL"
+    | "EXECUTED_OPTIMISTIC"
+    | "EXECUTED"
+    | "FINAL";
+
+  // Detailed status of the transaction
+  status:
+    | { SuccessValue: string } // Base64 encoded return value
+    | { SuccessReceiptId: string } // ID of the final receipt
+    | { Failure: object }; // Error object if failed
+
+  // The transaction itself
+  transaction: {
+    signer_id: string;
+    public_key: string;
+    nonce: number;
+    receiver_id: string;
+    actions: Action[];
+    signature: string;
+    hash: string;
+  };
+
+  // Execution outcome of the transaction (initial receipt)
+  transaction_outcome: ExecutionOutcomeWithId;
+
+  // Execution outcomes of all subsequent receipts (cross-contract calls)
+  receipts_outcome: ExecutionOutcomeWithId[];
+};
+```
+
+## Execution Outcome (`ExecutionOutcomeWithId`)
+
+Contains gas usage and logs.
+
+```typescript theme={null}
+type ExecutionOutcomeWithId = {
+  id: string; // Receipt ID
+  block_hash: string;
+  outcome: {
+    logs: string[]; // Console logs from the contract
+    receipt_ids: string[]; // IDs of receipts generated by this execution
+    gas_burnt: number; // Gas used in Tgas units * 1e12
+    tokens_burnt: string; // NEAR burnt (yoctoNEAR)
+    executor_id: string; // The account that executed this receipt
+    status: ExecutionStatus;
+  };
+};
+```
+
+## Account Details (`AccountView`)
+
+Returned by `near.getAccountDetails(accountId)`.
+
+```typescript theme={null}
+type AccountView = {
+  amount: string; // Balance in yoctoNEAR
+  locked: string; // Staked balance in yoctoNEAR
+  code_hash: string; // Hash of the contract code (111111... if none)
+  storage_usage: number; // Storage used in bytes
+  storage_paid_at: number;
+  block_height: number;
+  block_hash: string;
+};
+```
+
+## Access Key (`AccessKeyView`)
+
+Returned by `near.getAccessKey(accountId, publicKey)`.
+
+```typescript theme={null}
+type AccessKeyView = {
+  nonce: number;
+  permission:
+    | "FullAccess"
+    | {
+        FunctionCall: {
+          receiver_id: string;
+          method_names: string[];
+          allowance: string | null;
+        };
+      };
+};
+```
+
+## Errors
+
+### `FunctionCallError`
+
+Thrown when a smart contract panics.
+
+```typescript theme={null}
+class FunctionCallError extends NearError {
+  code: "FUNCTION_CALL_ERROR";
+  contractId: string; // The contract that failed
+  methodName?: string; // The method that failed
+  panic?: string; // The panic message (e.g. "ERR_NO_DEPOSIT")
+  logs: string[]; // Logs leading up to the failure
+}
+```
+
+### `InvalidTransactionError`
+
+Thrown when the network rejects a transaction.
+
+```typescript theme={null}
+class InvalidTransactionError extends NearError {
+  code: "INVALID_TRANSACTION";
+  retryable: boolean; // True if it was a transient network issue
+  shardCongested: boolean;
+  shardStuck: boolean;
+}
+```
+
+## Utility Functions
+
+### Deterministic Account IDs (NEP-616)
+
+#### `deriveAccountId(stateInit)`
+
+Computes the deterministic account ID from initialization state.
+
+```typescript theme={null}
+import { deriveAccountId } from "near-kit";
+
+const encoder = new TextEncoder();
+deriveAccountId({
+  code: { accountId: "publisher.near" },
+  data: new Map([
+    [encoder.encode("owner"), encoder.encode("alice.near")]
+  ]),
+});
+// => "0s1234567890abcdef1234567890abcdef12345678"
+```
+
+#### `isDeterministicAccountId(accountId)`
+
+Checks if an account ID is deterministic (starts with `0s`).
+
+```typescript theme={null}
+isDeterministicAccountId("0s123..."); // true
+isDeterministicAccountId("alice.near"); // false
+```
+
+#### `verifyDeterministicAccountId(accountId, stateInit)`
+
+Verifies an account ID matches the expected derivation.
+
+```typescript theme={null}
+const encoder = new TextEncoder();
+verifyDeterministicAccountId("0s123...", {
+  code: { accountId: "publisher.near" },
+  data: new Map([
+    [encoder.encode("owner"), encoder.encode("alice.near")]
+  ]),
+});
+// => true if matches
+```
+
+See [Global Contracts](/in-depth/global-contracts#3-deterministic-account-ids-nep-616).
+
+
+# The Mental Model
+Source: https://kit.near.tools/start-here/mental-model
+
+Three concepts to understand 90% of near-kit
+
+To use `near-kit` effectively, there are only three concepts you need to internalize. If you understand these, you can guess 90% of the API.
+
+<Steps>
+  <Step title="Everything hangs off Near">
+    The `Near` class is your single entry point. You initialize it once with your configuration (network and credentials), and reuse that instance everywhere.
+
+    ```typescript theme={null}
+    const near = new Near({ ...config });
+
+    // All operations start here:
+    near.view(...)
+    near.transaction(...)
+    near.getBalance(...)
+    ```
+  </Step>
+
+  <Step title="We hate math (Units)">
+    Blockchain development is plagued by unit conversion errors. `near-kit` solves this by using **Human-Readable Strings**.
+
+    * **Amounts:** Never count 24 zeros. Use `"1.5 NEAR"` or `"1 yocto"`.
+    * **Gas:** Never calculate gas units. Use `"30 Tgas"`.
+
+    The library parses these strings automatically. If you try to pass a raw number where a unit is expected, `near-kit` will throw an error to protect you from mistakes.
+
+    ```typescript theme={null}
+    // ✅ Good
+    near.transfer("bob.near", "5 NEAR")
+
+    // ❌ Bad (Throws Error)
+    near.transfer("bob.near", 5) // Did you mean 5 NEAR or 5 yocto?
+    ```
+  </Step>
+
+  <Step title="Transactions are Fluent Chains">
+    NEAR transactions can contain multiple actions (e.g., "Create Account" AND "Transfer Money"). `near-kit` models this as a fluent chain.
+
+    1. **Start:** `.transaction(signer)` identifies *who is paying*.
+    2. **Chain:** Add as many actions as you want (`.transfer`, `.functionCall`).
+    3. **Send:** Call `.send()` to sign and broadcast.
+
+    ```typescript theme={null}
+    await near
+      .transaction("alice.near") // 1. Start
+      .createAccount("bob.alice.near") // 2. Chain
+      .transfer("bob.alice.near", "1 NEAR") // 2. Chain
+      .send() // 3. Send
+    ```
+  </Step>
+</Steps>
+
+## Quick Reference
+
+<CardGroup>
+  <Card title="Reading Data" icon="book-open" href="/essentials/reading-data">
+    Query balances, state, and call view methods
+  </Card>
+
+  <Card title="Writing Data" icon="pen" href="/essentials/writing-data">
+    Build and send transactions
+  </Card>
+</CardGroup>
+
+
+# Migrating from near-api-js
+Source: https://kit.near.tools/start-here/migration
+
+Side-by-side comparisons to help you migrate
+
+If you are coming from `near-api-js`, you will find `near-kit` to be more concise and less prone to "unit arithmetic" errors.
+
+## Core Philosophy Shifts
+
+<CardGroup>
+  <Card title="No Account Object" icon="user-slash">
+    Use the central `Near` instance and pass signer IDs as arguments
+  </Card>
+
+  <Card title="Strings, not BigInts" icon="quote-left">
+    No more `utils.format` or counting zeros
+  </Card>
+
+  <Card title="Fluent Builder" icon="link">
+    Chain readable methods instead of config objects
+  </Card>
+</CardGroup>
+
+***
+
+## Side-by-Side Comparisons
+
+### 1. Connecting & Keys
+
+<Tabs>
+  <Tab title="near-api-js">
+    You have to manually assemble the Account, JsonRpcProvider, and KeyPairSigner.
+
+    ```typescript theme={null}
+    import { Account } from "@near-js/accounts"
+    import { JsonRpcProvider } from "@near-js/providers"
+    import { KeyPairSigner } from "@near-js/signers"
+
+    const provider = new JsonRpcProvider({
+      url: "https://test.rpc.fastnear.com",
+    })
+    const signer = KeyPairSigner.fromSecretKey("ed25519:...")
+    const account = new Account("alice.testnet", provider, signer)
+    ```
+  </Tab>
+
+  <Tab title="near-kit">
+    Configuration is flattened. The KeyStore is optional for simple cases.
+
+    ```typescript theme={null}
+    const near = new Near({
+      network: "testnet",
+      privateKey: "ed25519:...", // Automatically sets up an InMemoryKeyStore
+      defaultSignerId: "alice.testnet",
+    })
+    ```
+  </Tab>
+</Tabs>
+
+### 2. Handling Units
+
+<Tabs>
+  <Tab title="near-api-js">
+    Requires manual conversion, often leading to `BN` (BigNumber) headaches.
+
+    ```typescript theme={null}
+    import { parseNearAmount } from "@near-js/utils"
+
+    const amount = parseNearAmount("10.5") // "1050000..."
+    const gas = "30000000000000" // Hope you counted the zeros right!
+    ```
+  </Tab>
+
+  <Tab title="near-kit">
+    Parses human-readable strings automatically.
+
+    ```typescript theme={null}
+    const amount = "10.5 NEAR"
+    const gas = "30 Tgas"
+    ```
+  </Tab>
+</Tabs>
+
+### 3. Calling Contracts
+
+<Tabs>
+  <Tab title="near-api-js">
+    Arguments are passed inside a configuration object.
+
+    ```typescript theme={null}
+    const account = new Account("alice.testnet", provider, signer)
+
+    await account.callFunction({
+      contractId: "market.near",
+      methodName: "buy",
+      args: { id: "1" },
+      gas: "50000000000000",
+      deposit: parseNearAmount("1")!,
+    })
+    ```
+  </Tab>
+
+  <Tab title="near-kit">
+    Uses a fluent chain.
+
+    ```typescript theme={null}
+    await near
+      .transaction("alice.testnet")
+      .functionCall(
+        "market.near",
+        "buy",
+        { id: "1" },
+        { gas: "50 Tgas", attachedDeposit: "1 NEAR" }
+      )
+      .send()
+    ```
+  </Tab>
+</Tabs>
+
+### 4. Error Handling
+
+<Tabs>
+  <Tab title="near-api-js">
+    Often throws raw RPC errors or generic "TypedErrors" that are hard to parse.
+
+    ```typescript theme={null}
+    try {
+      // ...
+    } catch (e) {
+      // You have to inspect e.type or e.message string matching
+      if (e.type === 'FunctionCallError') { ... }
+    }
+    ```
+  </Tab>
+
+  <Tab title="near-kit">
+    Throws distinct, standard JavaScript Error subclasses.
+
+    ```typescript theme={null}
+    import { FunctionCallError } from "near-kit"
+
+    try {
+      // ...
+    } catch (e) {
+      if (e instanceof FunctionCallError) {
+        console.log(e.panic) // Access the panic message directly
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### 5. Access Keys
+
+<Tabs>
+  <Tab title="near-api-js">
+    ```typescript theme={null}
+    await account.addFunctionCallAccessKey({
+      publicKey,
+      contractId: "market.near",
+      methodNames: ["buy"],
+      allowance: parseNearAmount("0.25")!,
+    })
+    ```
+  </Tab>
+
+  <Tab title="near-kit">
+    Explicitly typed permissions object.
+
+    ```typescript theme={null}
+    await near
+      .transaction("alice.testnet")
+      .addKey(publicKey, {
+        type: "functionCall",
+        receiverId: "market.near",
+        methodNames: ["buy"],
+        allowance: "0.25 NEAR",
+      })
+      .send()
+    ```
+  </Tab>
+</Tabs>
+
+
+# Quickstart
+Source: https://kit.near.tools/start-here/quickstart
+
+Send your first NEAR transaction in under 2 minutes
+
+Let's get you connected to the NEAR Testnet and sending your first transaction in under 2 minutes.
+
+## Prerequisites
+
+<CardGroup>
+  <Card title="Node.js or Bun" icon="node-js">
+    Any recent version works
+  </Card>
+
+  <Card title="Testnet Account" icon="wallet" href="https://testnet.mynearwallet.com/">
+    Create one for free
+  </Card>
+
+  <Card title="Private Key" icon="key">
+    Starts with `ed25519:...`
+  </Card>
+</CardGroup>
+
+## Installation
+
+<CodeGroup>
+  ```bash npm theme={null}
+  npm install near-kit
+  ```
+
+  ```bash bun theme={null}
+  bun add near-kit
+  ```
+
+  ```bash yarn theme={null}
+  yarn add near-kit
+  ```
+
+  ```bash pnpm theme={null}
+  pnpm add near-kit
+  ```
+</CodeGroup>
+
+## Your First Script
+
+<Steps>
+  <Step title="Create a file named index.ts">
+    ```typescript theme={null}
+    import { Near } from "near-kit"
+
+    async function main() {
+      // 1. Initialize the client
+      // In a real app, ALWAYS use environment variables for keys!
+      const near = new Near({
+        network: "testnet",
+        privateKey: "ed25519:...", // Replace with your actual private key
+        defaultSignerId: "your-account.testnet", // Replace with your account ID
+      })
+
+      console.log("🔗 Connected to Testnet")
+
+      // 2. Read some data (Free!)
+      // Let's check the balance of the account we just connected
+      const balance = await near.getBalance("your-account.testnet")
+      console.log(`💰 Balance: ${balance}`)
+
+      // 3. Write some data (Send a transaction)
+      // We will send 1 NEAR to ourselves.
+      // Note: "1 NEAR" is a string. No math required.
+      console.log("💸 Sending 1 NEAR...")
+
+      const result = await near
+        .transaction("your-account.testnet")
+        .transfer("your-account.testnet", "1 NEAR")
+        .send()
+
+      console.log(`✅ Transaction successful!`)
+      console.log(`   Hash: ${result.transaction.hash}`)
+    }
+
+    main().catch(console.error)
+    ```
+  </Step>
+
+  <Step title="Run it">
+    <CodeGroup>
+      ```bash bun theme={null}
+      bun run index.ts
+      ```
+
+      ```bash tsx theme={null}
+      npx tsx index.ts
+      ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="See the result">
+    You should see output like:
+
+    ```
+    🔗 Connected to Testnet
+    💰 Balance: 10.5 NEAR
+    💸 Sending 1 NEAR...
+    ✅ Transaction successful!
+       Hash: 9abc123...
+    ```
+  </Step>
+</Steps>
+
+## What's Next?
+
+<CardGroup>
+  <Card title="Reading Data" icon="book-open" href="/essentials/reading-data">
+    Query account state, balances, and contract data
+  </Card>
+
+  <Card title="Writing Data" icon="pen" href="/essentials/writing-data">
+    Build and send transactions
+  </Card>
+</CardGroup>
+
+
+1228 x 797
+
+|
+
+lg

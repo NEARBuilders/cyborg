@@ -11,7 +11,7 @@
  * - user/session/account/verification: Better-Auth tables
  */
 
-import { integer, sqliteTable, text, primaryKey, index } from "drizzle-orm/sqlite-core";
+import { integer, sqliteTable, text, primaryKey, index, unique } from "drizzle-orm/sqlite-core";
 
 // =============================================================================
 // CORE SCHEMA - Conversations and Messages
@@ -141,3 +141,31 @@ export const nearAccount = sqliteTable("nearAccount", {
 // =============================================================================
 
 export * from "./schema/holders";
+
+// =============================================================================
+// OUTLAYER PAYMENT KEYS
+// Optional payment keys for server-side transaction execution
+// =============================================================================
+
+export const paymentKeys = sqliteTable(
+  "payment_keys",
+  {
+    id: text("id").primaryKey(), // UUID
+    nearAccountId: text("near_account_id").notNull(),
+    nonce: integer("nonce").notNull().unique(), // OutLayer key number
+    secret: text("secret").notNull(), // Encrypted storage
+    initialBalance: text("initial_balance").notNull(), // USD amount (string, e.g., "10.00")
+    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+    metadata: text("metadata"), // JSON: {maxPerCall, projectIds, createdAt}
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  },
+  (table) => ({
+    // Index for lookups
+    nearAccountIdIdx: index("payment_keys_account_id_idx").on(table.nearAccountId),
+    // Index for active keys
+    activeIdx: index("payment_keys_active_idx").on(table.nearAccountId, table.isActive),
+    // Composite index for account + created_at (for ordering)
+    accountCreatedIdx: index("payment_keys_account_created_idx").on(table.nearAccountId, table.createdAt),
+  })
+);

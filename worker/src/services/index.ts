@@ -15,3 +15,13 @@ export type { FollowerInfo, PaginatedResult } from "./social";
 
 export { LegionGraphService } from "./legion-graph";
 export type { FollowerInfo as LegionFollowerInfo, PaginatedResult as LegionPaginatedResult } from "./legion-graph";
+
+export { PaymentKeyService } from "./payment-keys";
+export type {
+  PaymentKeyConfig,
+  PaymentKey,
+  BalanceInfo,
+  ExecutionParams,
+  ExecutionResult,
+  PreparedTx,
+} from "./payment-keys";

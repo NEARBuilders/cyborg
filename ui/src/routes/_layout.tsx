@@ -6,7 +6,7 @@ import {
   useRouter,
 } from "@tanstack/react-router";
 import { ThemeToggle } from "../components/theme-toggle";
-import { Menu, X, LogOut } from "lucide-react";
+import { Menu, X, LogOut, Key } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Avatar, AvatarImage, AvatarFallback } from "../components/ui/avatar";
 import {
@@ -19,6 +19,7 @@ import {
 import { useProfile } from "../integrations/near-social-js";
 import { authClient } from "../lib/auth-client";
 import { queryClient } from "../utils/orpc";
+import { usePaymentKeys } from "../hooks/usePaymentKeys";
 
 export const Route = createFileRoute("/_layout")({
   component: Layout,
@@ -36,6 +37,13 @@ function Layout() {
   const { data: profile } = useProfile(accountId || "", {
     enabled: !!accountId,
   });
+
+  // Fetch payment keys
+  const { data: paymentKeysData } = usePaymentKeys();
+
+  // Calculate total balance across all active keys
+  const activeKeys = paymentKeysData?.keys?.filter(k => k.isActive && !k.isIncomplete) || [];
+  const totalBalance = activeKeys.reduce((sum, key) => sum + parseFloat(key.availableUsd || "0"), 0);
 
   // Build avatar URL from profile
   const avatarUrl = profile?.image?.ipfs_cid
@@ -140,6 +148,21 @@ function Layout() {
                         <div className="px-2 py-1 text-xs text-muted-foreground font-mono">
                           {accountId}
                         </div>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem asChild>
+                          <Link
+                            to="/settings"
+                            className="flex items-center gap-2 cursor-pointer"
+                          >
+                            <Key className="mr-2 h-4 w-4" />
+                            <span>Payment Keys</span>
+                            {activeKeys.length > 0 && (
+                              <span className="ml-auto text-xs text-muted-foreground">
+                                {activeKeys.length} key{activeKeys.length > 1 ? 's' : ''} · ${totalBalance.toFixed(2)}
+                              </span>
+                            )}
+                          </Link>
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           className="cursor-pointer text-destructive focus:text-destructive"
@@ -247,6 +270,21 @@ function Layout() {
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   profile
+                </Link>
+                <Link
+                  to="/settings"
+                  className="flex items-center justify-between px-4 py-3 text-base font-medium text-foreground hover:bg-muted/50 rounded-lg transition-colors"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  <div className="flex items-center gap-3">
+                    <Key className="h-5 w-5" />
+                    <span>Payment Keys</span>
+                  </div>
+                  {activeKeys.length > 0 && (
+                    <span className="text-sm text-muted-foreground">
+                      {activeKeys.length} key{activeKeys.length > 1 ? 's' : ''} · ${totalBalance.toFixed(2)}
+                    </span>
+                  )}
                 </Link>
                 <DropdownMenuSeparator className="mx-4" />
                 <button

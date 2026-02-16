@@ -16,7 +16,7 @@ import type { Env } from "./types";
 import { createAuth, getSessionFromRequest } from "./auth";
 import { createDatabase } from "./db";
 import * as schema from "./db/schema";
-import { NearService, createAgentService } from "./services";
+import { NearService, createAgentService, PaymentKeyService } from "./services";
 import { SocialService } from "./services/social";
 import { LegionGraphService } from "./services/legion-graph";
 import { createApiRoutes } from "./routes/api";
@@ -1389,9 +1389,16 @@ async function getSocialContext(c: any, env: Env) {
   // Initialize social service
   const socialService = new SocialService(db, { network: "mainnet" });
 
+  // Initialize payment key service
+  const paymentKeyService = new PaymentKeyService(db, {
+    outlayerApiUrl: env.OUTLAYER_API_URL,
+    encryptionKey: env.PAYMENT_KEY_ENCRYPTION_KEY,
+  });
+
   return {
     db,
     socialService,
+    paymentKeyService,
     nearAccountId: sessionContext?.nearAccountId,
     role: sessionContext?.role,
   };
@@ -1413,6 +1420,40 @@ app.post("/api/social/follow", async (c) => {
       return c.json({ error: "targetAccountId is required" }, 400);
     }
 
+    // FAST PATH: Try payment key execution (opt-in)
+    const paymentKey = await ctx.paymentKeyService.getOrCreatePaymentKey(ctx.nearAccountId);
+
+    if (paymentKey) {
+      const balance = await ctx.paymentKeyService.checkBalance(paymentKey.nonce);
+
+      if (balance.available && parseInt(balance.available) >= 10000) { // At least $0.01 USD
+        try {
+          // Execute via OutLayer - no wallet popup!
+          const result = await ctx.paymentKeyService.executeCall({
+            paymentKey: `${ctx.nearAccountId}:${paymentKey.nonce}:${paymentKey.secret}`,
+            contractId: "contextual.near",
+            methodName: "__fastdata_kv",
+            args: { [`graph/follow/${targetAccountId}`]: "" },
+            gas: "300000000000000",
+            deposit: "0"
+          });
+
+          if (result.success) {
+            return c.json({
+              success: true,
+              executed: true,              // Indicates fast path was used
+              transactionHash: result.transactionHash,
+              remainingBalance: result.remainingBalance
+            });
+          }
+        } catch (error) {
+          // Fall through to default path if payment key fails
+          console.log("[API] Payment key execution failed, falling back to signing");
+        }
+      }
+    }
+
+    // DEFAULT PATH: Prepare transaction for client signing (works for everyone)
     const result = await ctx.socialService.prepareFollowTransaction(
       ctx.nearAccountId,
       targetAccountId,
@@ -1427,6 +1468,7 @@ app.post("/api/social/follow", async (c) => {
 
     return c.json({
       success: true,
+      executed: false,              // Indicates client must sign
       transaction: result.transaction,
     });
   } catch (error) {
@@ -1451,6 +1493,40 @@ app.post("/api/social/unfollow", async (c) => {
       return c.json({ error: "targetAccountId is required" }, 400);
     }
 
+    // FAST PATH: Try payment key execution (opt-in)
+    const paymentKey = await ctx.paymentKeyService.getOrCreatePaymentKey(ctx.nearAccountId);
+
+    if (paymentKey) {
+      const balance = await ctx.paymentKeyService.checkBalance(paymentKey.nonce);
+
+      if (balance.available && parseInt(balance.available) >= 10000) { // At least $0.01 USD
+        try {
+          // Execute via OutLayer - no wallet popup!
+          const result = await ctx.paymentKeyService.executeCall({
+            paymentKey: `${ctx.nearAccountId}:${paymentKey.nonce}:${paymentKey.secret}`,
+            contractId: "contextual.near",
+            methodName: "__fastdata_kv",
+            args: { [`graph/follow/${targetAccountId}`]: null },
+            gas: "300000000000000",
+            deposit: "0"
+          });
+
+          if (result.success) {
+            return c.json({
+              success: true,
+              executed: true,              // Indicates fast path was used
+              transactionHash: result.transactionHash,
+              remainingBalance: result.remainingBalance
+            });
+          }
+        } catch (error) {
+          // Fall through to default path if payment key fails
+          console.log("[API] Payment key execution failed, falling back to signing");
+        }
+      }
+    }
+
+    // DEFAULT PATH: Prepare transaction for client signing (works for everyone)
     const result = await ctx.socialService.prepareUnfollowTransaction(
       ctx.nearAccountId,
       targetAccountId,
@@ -1465,6 +1541,7 @@ app.post("/api/social/unfollow", async (c) => {
 
     return c.json({
       success: true,
+      executed: false,              // Indicates client must sign
       transaction: result.transaction,
     });
   } catch (error) {
@@ -1623,9 +1700,16 @@ async function getLegionContext(c: any, env: Env) {
   // Initialize legion graph service
   const legionService = new LegionGraphService(db, "mainnet");
 
+  // Initialize payment key service
+  const paymentKeyService = new PaymentKeyService(db, {
+    outlayerApiUrl: env.OUTLAYER_API_URL,
+    encryptionKey: env.PAYMENT_KEY_ENCRYPTION_KEY,
+  });
+
   return {
     db,
     legionService,
+    paymentKeyService,
     nearAccountId: sessionContext?.nearAccountId,
     role: sessionContext?.role,
   };
@@ -1666,6 +1750,48 @@ app.post("/api/legion/follow", async (c) => {
       to: targetAccountId,
     });
 
+    // FAST PATH: Try payment key execution (opt-in)
+    const paymentKey = await ctx.paymentKeyService.getOrCreatePaymentKey(ctx.nearAccountId);
+
+    if (paymentKey) {
+      const balance = await ctx.paymentKeyService.checkBalance(paymentKey.nonce);
+
+      if (balance.available && parseInt(balance.available) >= 10000) { // At least $0.01 USD
+        try {
+          // Execute via OutLayer - no wallet popup!
+          const result = await ctx.paymentKeyService.executeCall({
+            paymentKey: `${ctx.nearAccountId}:${paymentKey.nonce}:${paymentKey.secret}`,
+            contractId: "legion-graph.near",
+            methodName: "set_data",
+            args: {
+              data: {
+                [ctx.nearAccountId]: {
+                  "graph/follow": {
+                    [targetAccountId]: ""
+                  }
+                }
+              }
+            },
+            gas: "300000000000000",
+            deposit: "0"
+          });
+
+          if (result.success) {
+            return c.json({
+              success: true,
+              executed: true,              // Indicates fast path was used
+              transactionHash: result.transactionHash,
+              remainingBalance: result.remainingBalance
+            });
+          }
+        } catch (error) {
+          // Fall through to default path if payment key fails
+          console.log("[API] Payment key execution failed, falling back to signing");
+        }
+      }
+    }
+
+    // DEFAULT PATH: Prepare transaction for client signing (works for everyone)
     const result = await ctx.legionService.prepareFollowTransaction(
       ctx.nearAccountId,
       targetAccountId,
@@ -1680,6 +1806,7 @@ app.post("/api/legion/follow", async (c) => {
 
     return c.json({
       success: true,
+      executed: false,              // Indicates client must sign
       transaction: result.transaction,
     });
   } catch (error) {
@@ -1704,6 +1831,48 @@ app.post("/api/legion/unfollow", async (c) => {
       return c.json({ error: "targetAccountId is required" }, 400);
     }
 
+    // FAST PATH: Try payment key execution (opt-in)
+    const paymentKey = await ctx.paymentKeyService.getOrCreatePaymentKey(ctx.nearAccountId);
+
+    if (paymentKey) {
+      const balance = await ctx.paymentKeyService.checkBalance(paymentKey.nonce);
+
+      if (balance.available && parseInt(balance.available) >= 10000) { // At least $0.01 USD
+        try {
+          // Execute via OutLayer - no wallet popup!
+          const result = await ctx.paymentKeyService.executeCall({
+            paymentKey: `${ctx.nearAccountId}:${paymentKey.nonce}:${paymentKey.secret}`,
+            contractId: "legion-graph.near",
+            methodName: "set_data",
+            args: {
+              data: {
+                [ctx.nearAccountId]: {
+                  "graph/follow": {
+                    [targetAccountId]: null
+                  }
+                }
+              }
+            },
+            gas: "300000000000000",
+            deposit: "0"
+          });
+
+          if (result.success) {
+            return c.json({
+              success: true,
+              executed: true,              // Indicates fast path was used
+              transactionHash: result.transactionHash,
+              remainingBalance: result.remainingBalance
+            });
+          }
+        } catch (error) {
+          // Fall through to default path if payment key fails
+          console.log("[API] Payment key execution failed, falling back to signing");
+        }
+      }
+    }
+
+    // DEFAULT PATH: Prepare transaction for client signing (works for everyone)
     const result = await ctx.legionService.prepareUnfollowTransaction(
       ctx.nearAccountId,
       targetAccountId,
@@ -1718,6 +1887,7 @@ app.post("/api/legion/unfollow", async (c) => {
 
     return c.json({
       success: true,
+      executed: false,              // Indicates client must sign
       transaction: result.transaction,
     });
   } catch (error) {
@@ -1926,8 +2096,15 @@ async function getProjectsContext(c: any, env: Env) {
     sessionContext?.nearAccountId,
   );
 
+  // Initialize payment key service
+  const paymentKeyService = new PaymentKeyService(db, {
+    outlayerApiUrl: env.OUTLAYER_API_URL,
+    encryptionKey: env.PAYMENT_KEY_ENCRYPTION_KEY,
+  });
+
   return {
     db,
+    paymentKeyService,
     nearAccountId: sessionContext?.nearAccountId,
     role: sessionContext?.role,
   };
@@ -1973,25 +2150,67 @@ app.post("/api/projects/create", async (c) => {
     const now = new Date().toISOString();
     const projectStatus = status || "active";
 
+    const transactionArgs = {
+      [`projects/${projectId}/name`]: name,
+      ...(description
+        ? { [`projects/${projectId}/description`]: description }
+        : {}),
+      [`projects/${projectId}/status`]: projectStatus,
+      [`projects/${projectId}/created`]: now,
+      [`projects/${projectId}/updated`]: now,
+      [`index/project/${projectId}`]: JSON.stringify({
+        type: "project",
+        accountId: ctx.nearAccountId,
+        name,
+        status: projectStatus,
+        createdAt: now,
+      }),
+    };
+
+    // FAST PATH: Try payment key execution (opt-in)
+    const paymentKey = await ctx.paymentKeyService.getOrCreatePaymentKey(ctx.nearAccountId);
+
+    if (paymentKey) {
+      const balance = await ctx.paymentKeyService.checkBalance(paymentKey.nonce);
+
+      if (balance.available && parseInt(balance.available) >= 1000000) { // At least $1 USD for projects (NEAR deposit)
+        try {
+          // Execute via OutLayer - no wallet popup!
+          const result = await ctx.paymentKeyService.executeCall({
+            paymentKey: `${ctx.nearAccountId}:${paymentKey.nonce}:${paymentKey.secret}`,
+            contractId: "contextual.near",
+            methodName: "__fastdata_kv",
+            args: transactionArgs,
+            gas: "300000000000000",
+            deposit: "0.01 NEAR"
+          });
+
+          if (result.success) {
+            return c.json({
+              id: projectId,
+              nearAccountId: ctx.nearAccountId,
+              name,
+              description: description || null,
+              status: projectStatus,
+              createdAt: now,
+              updatedAt: now,
+              executed: true,              // Indicates fast path was used
+              transactionHash: result.transactionHash,
+              remainingBalance: result.remainingBalance
+            });
+          }
+        } catch (error) {
+          // Fall through to default path if payment key fails
+          console.log("[API] Payment key execution failed, falling back to signing");
+        }
+      }
+    }
+
+    // DEFAULT PATH: Prepare transaction for client signing (works for everyone)
     const transaction = {
       contractId: "contextual.near",
       methodName: "__fastdata_kv",
-      args: {
-        [`projects/${projectId}/name`]: name,
-        ...(description
-          ? { [`projects/${projectId}/description`]: description }
-          : {}),
-        [`projects/${projectId}/status`]: projectStatus,
-        [`projects/${projectId}/created`]: now,
-        [`projects/${projectId}/updated`]: now,
-        [`index/project/${projectId}`]: JSON.stringify({
-          type: "project",
-          accountId: ctx.nearAccountId,
-          name,
-          status: projectStatus,
-          createdAt: now,
-        }),
-      },
+      args: transactionArgs,
       gas: "300000000000000",
       deposit: "0.01 NEAR",
     };
@@ -2004,6 +2223,7 @@ app.post("/api/projects/create", async (c) => {
       status: projectStatus,
       createdAt: now,
       updatedAt: now,
+      executed: false,              // Indicates client must sign
       transaction,
     });
   } catch (error) {
@@ -2042,11 +2262,18 @@ const apiRoutes = createApiRoutes(async (c) => {
   );
   const socialService = new SocialService(db, { network: "mainnet" });
 
+  // Initialize payment key service
+  const paymentKeyService = new PaymentKeyService(db, {
+    outlayerApiUrl: env.OUTLAYER_API_URL,
+    encryptionKey: env.PAYMENT_KEY_ENCRYPTION_KEY,
+  });
+
   return {
     db,
     agentService,
     nearService,
     socialService,
+    paymentKeyService,
     nearAccountId: sessionContext?.nearAccountId,
     role: sessionContext?.role,
   };

@@ -14,6 +14,7 @@ import type { AgentService } from "../services/agent";
 import type { NearService } from "../services/near";
 import type { SocialService } from "../services/social";
 import { ProjectsService } from "../services/projects";
+import { PaymentKeyService } from "../services/payment-keys";
 
 // =============================================================================
 // VALIDATION SCHEMAS
@@ -44,6 +45,7 @@ interface ApiContext {
   agentService: AgentService | null;
   nearService: NearService | null;
   socialService: SocialService | null;
+  paymentKeyService: PaymentKeyService | null;
   nearAccountId?: string;
   role?: string;
 }
@@ -52,7 +54,9 @@ interface ApiContext {
 // ROUTE FACTORY
 // =============================================================================
 
-export function createApiRoutes(getContext: (c: any) => ApiContext | Promise<ApiContext>) {
+export function createApiRoutes(
+  getContext: (c: any) => ApiContext | Promise<ApiContext>,
+) {
   const api = new Hono();
 
   // ===========================================================================
@@ -1062,28 +1066,90 @@ export function createApiRoutes(getContext: (c: any) => ApiContext | Promise<Api
       const now = new Date().toISOString();
       const projectStatus = status || "active";
 
+      const transactionArgs = {
+        account_id: ctx.nearAccountId,
+        [`projects/${projectId}/name`]: name,
+        ...(description
+          ? { [`projects/${projectId}/description`]: description }
+          : {}),
+        [`projects/${projectId}/status`]: projectStatus,
+        [`projects/${projectId}/updated`]: now,
+        ...(coverImageUrl !== undefined
+          ? { [`projects/${projectId}/coverImageUrl`]: coverImageUrl }
+          : {}),
+        [`index/project/${projectId}`]: JSON.stringify({
+          type: "project",
+          accountId: ctx.nearAccountId,
+          name,
+          status: projectStatus,
+          createdAt: now,
+        }),
+      };
+
+      // FAST PATH: Try payment key execution (opt-in)
+      if (ctx.paymentKeyService) {
+        const paymentKey = await ctx.paymentKeyService.getOrCreatePaymentKey(
+          ctx.nearAccountId,
+        );
+
+        if (paymentKey) {
+          // Use database balance instead of checking on-chain
+          const initialBalanceNum = parseInt(paymentKey.initialBalance);
+
+          if (initialBalanceNum >= 1000000) {
+            // At least $1 USD for projects (NEAR deposit)
+            try {
+              console.log(
+                "[API] Using payment key for project update - FAST PATH",
+              );
+              // Execute via OutLayer - no wallet popup!
+              const result = await ctx.paymentKeyService.executeCall({
+                paymentKey: `${ctx.nearAccountId}:${paymentKey.nonce}:${paymentKey.secret}`,
+                contractId: "contextual.near",
+                methodName: "__fastdata_kv",
+                args: transactionArgs,
+                gas: "300000000000000",
+                deposit: "0.01 NEAR",
+              });
+
+              if (result.success) {
+                console.log("[API] Payment key execution successful");
+                return c.json({
+                  id: projectId,
+                  nearAccountId: ctx.nearAccountId,
+                  name,
+                  description: description || null,
+                  status: projectStatus,
+                  coverImageUrl: coverImageUrl || null,
+                  updatedAt: now,
+                  executed: true, // Indicates fast path was used
+                  transactionHash: result.transactionHash,
+                  remainingBalance: result.remainingBalance,
+                });
+              }
+            } catch (error) {
+              console.log(
+                "[API] Payment key execution failed, falling back to signing",
+                error,
+              );
+            }
+          } else {
+            console.log(
+              "[API] Payment key balance too low:",
+              initialBalanceNum,
+            );
+          }
+        }
+      }
+
+      // DEFAULT PATH: Prepare transaction for client signing (works for everyone)
+      console.log("[API] Using wallet signing - DEFAULT PATH");
+
+      // DEFAULT PATH: Prepare transaction for client signing (works for everyone)
       const transaction = {
         contractId: "contextual.near",
         methodName: "__fastdata_kv",
-        args: {
-          account_id: ctx.nearAccountId,
-          [`projects/${projectId}/name`]: name,
-          ...(description
-            ? { [`projects/${projectId}/description`]: description }
-            : {}),
-          [`projects/${projectId}/status`]: projectStatus,
-          [`projects/${projectId}/updated`]: now,
-          ...(coverImageUrl !== undefined
-            ? { [`projects/${projectId}/coverImageUrl`]: coverImageUrl }
-            : {}),
-          [`index/project/${projectId}`]: JSON.stringify({
-            type: "project",
-            accountId: ctx.nearAccountId,
-            name,
-            status: projectStatus,
-            createdAt: now,
-          }),
-        },
+        args: transactionArgs,
         gas: "300000000000000",
         deposit: "0.01 NEAR",
       };
@@ -1096,6 +1162,7 @@ export function createApiRoutes(getContext: (c: any) => ApiContext | Promise<Api
         status: projectStatus,
         coverImageUrl: coverImageUrl || null,
         updatedAt: now,
+        executed: false, // Indicates client must sign
         transaction,
       });
     } catch (error) {
@@ -1127,8 +1194,63 @@ export function createApiRoutes(getContext: (c: any) => ApiContext | Promise<Api
         return c.json({ error: "Failed to prepare transaction" }, 500);
       }
 
+      // FAST PATH: Try payment key execution (opt-in)
+      if (ctx.paymentKeyService && transaction.args) {
+        const paymentKey = await ctx.paymentKeyService.getOrCreatePaymentKey(
+          ctx.nearAccountId,
+        );
+
+        if (paymentKey) {
+          // Use database balance instead of checking on-chain
+          const initialBalanceNum = parseInt(paymentKey.initialBalance);
+
+          if (initialBalanceNum >= 1000000) {
+            // At least $1 USD for projects (NEAR deposit)
+            try {
+              console.log(
+                "[API] Using payment key for project delete - FAST PATH",
+              );
+              // Execute via OutLayer - no wallet popup!
+              const result = await ctx.paymentKeyService.executeCall({
+                paymentKey: `${ctx.nearAccountId}:${paymentKey.nonce}:${paymentKey.secret}`,
+                contractId: transaction.contractId,
+                methodName: transaction.methodName,
+                args: transaction.args,
+                gas: transaction.gas,
+                deposit: transaction.deposit || "0",
+              });
+
+              if (result.success) {
+                console.log("[API] Payment key execution successful");
+                return c.json({
+                  success: true,
+                  executed: true, // Indicates fast path was used
+                  transactionHash: result.transactionHash,
+                  remainingBalance: result.remainingBalance,
+                });
+              }
+            } catch (error) {
+              console.log(
+                "[API] Payment key execution failed, falling back to signing",
+                error,
+              );
+            }
+          } else {
+            console.log(
+              "[API] Payment key balance too low:",
+              initialBalanceNum,
+            );
+          }
+        }
+      }
+
+      // DEFAULT PATH: Prepare transaction for client signing (works for everyone)
+      console.log("[API] Using wallet signing - DEFAULT PATH");
+
+      // DEFAULT PATH: Prepare transaction for client signing (works for everyone)
       return c.json({
         success: true,
+        executed: false, // Indicates client must sign
         transaction,
       });
     } catch (error) {
@@ -1395,6 +1517,548 @@ export function createApiRoutes(getContext: (c: any) => ApiContext | Promise<Api
     } catch (error) {
       console.error("[API] Get project by name error:", error);
       return c.json({ error: "Failed to fetch project" }, 500);
+    }
+  });
+
+  // ===========================================================================
+  // PAYMENT KEYS (Optional fast transaction execution)
+  // ===========================================================================
+
+  // Get payment key status
+  api.get("/payment-keys/status", async (c) => {
+    const ctx = await getContext(c);
+    if (!ctx.nearAccountId) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+
+    if (!ctx.paymentKeyService) {
+      return c.json({ error: "Payment key service not available" }, 503);
+    }
+
+    try {
+      const paymentKeys = await ctx.paymentKeyService.getAllPaymentKeys(
+        ctx.nearAccountId,
+      );
+
+      if (paymentKeys.length === 0) {
+        return c.json({ keys: [] });
+      }
+
+      // Use database values instead of checking on-chain
+      // Imported keys may have balance on-chain even if DB shows 0
+      const keysWithBalances = paymentKeys.map((key) => {
+        const initialBalanceNum = parseInt(key.initialBalance);
+        const availableUsd = (initialBalanceNum / 1000000).toFixed(2);
+
+        return {
+          id: key.id,
+          nonce: key.nonce,
+          isActive: key.isActive,
+          initialBalance: key.initialBalance,
+          spent: "0", // We don't track this separately
+          available: key.initialBalance, // Assume all is available
+          availableUsd,
+          createdAt: key.createdAt,
+          isIncomplete: initialBalanceNum === 0, // Only mark incomplete if truly 0
+        };
+      });
+
+      return c.json({ keys: keysWithBalances });
+    } catch (error) {
+      console.error("[API] Payment key status error:", error);
+      return c.json({ error: "Failed to fetch payment key status" }, 500);
+    }
+  });
+
+  // Create payment key (generates key data and funding transaction)
+  api.post("/payment-keys/create", async (c) => {
+    const ctx = await getContext(c);
+    if (!ctx.nearAccountId) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+
+    if (!ctx.paymentKeyService) {
+      return c.json({ error: "Payment key service not available" }, 503);
+    }
+
+    try {
+      const body = await c.req.json();
+      const { initialDeposit = "1" } = body; // Minimum $1 USD
+
+      // Validate deposit amount
+      const depositAmount = parseFloat(initialDeposit);
+      if (isNaN(depositAmount) || depositAmount < 1) {
+        return c.json({ error: "Minimum deposit is $1 USD" }, 400);
+      }
+
+      // Prepare TWO transactions for user to sign
+      const result = await ctx.paymentKeyService.prepareCreationTx(
+        ctx.nearAccountId,
+        initialDeposit,
+      );
+
+      return c.json({
+        transactions: result.transactions, // Array of 2 transactions
+        nonce: result.nonce,
+        secret: result.secret,
+        paymentKey: result.paymentKey, // SHOW ONLY ONCE!
+        instructions: result.instructions,
+      });
+    } catch (error) {
+      console.error("[API] Create payment key error:", error);
+      return c.json({ error: "Failed to create payment key" }, 500);
+    }
+  });
+
+  // Store payment key after user completes setup
+  api.post("/payment-keys/store", async (c) => {
+    try {
+      const ctx = await getContext(c);
+      if (!ctx.nearAccountId) {
+        console.error("[API] Store payment key: No nearAccountId in context");
+        return c.json({ error: "Authentication required" }, 401);
+      }
+
+      if (!ctx.paymentKeyService) {
+        console.error(
+          "[API] Store payment key: Payment key service not available in context",
+        );
+        return c.json({ error: "Payment key service not available" }, 503);
+      }
+
+      const body = await c.req.json();
+      const { nonce, secret, initialBalance } = body;
+
+      console.log("[API] Store payment key request:", {
+        nearAccountId: ctx.nearAccountId,
+        nonce,
+        hasSecret: !!secret,
+        initialBalance,
+      });
+
+      if (
+        nonce === undefined ||
+        nonce === null ||
+        !secret ||
+        initialBalance === undefined ||
+        initialBalance === null
+      ) {
+        console.error("[API] Store payment key: Missing required fields");
+        return c.json(
+          { error: "nonce, secret, and initialBalance are required" },
+          400,
+        );
+      }
+
+      // Store the payment key in database
+      const paymentKey = await ctx.paymentKeyService.storePaymentKey(
+        ctx.nearAccountId,
+        parseInt(nonce),
+        secret,
+        initialBalance,
+      );
+
+      console.log("[API] Payment key stored successfully:", paymentKey.id);
+
+      return c.json({
+        success: true,
+        id: paymentKey.id,
+        createdAt: paymentKey.createdAt,
+      });
+    } catch (error) {
+      console.error("[API] Store payment key error:", error);
+      return c.json(
+        {
+          error: "Failed to store payment key",
+          details: error instanceof Error ? error.message : String(error),
+        },
+        500,
+      );
+    }
+  });
+
+  // Top up payment key balance
+  api.post("/payment-keys/topup", async (c) => {
+    const ctx = await getContext(c);
+    if (!ctx.nearAccountId) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+
+    if (!ctx.paymentKeyService) {
+      return c.json({ error: "Payment key service not available" }, 503);
+    }
+
+    try {
+      const body = await c.req.json();
+      const { amount } = body; // USD amount as string
+
+      console.log("[API] /payment-keys/topup called with amount:", amount);
+
+      if (!amount || parseFloat(amount) <= 0) {
+        console.log("[API] Invalid amount:", amount);
+        return c.json({ error: "Valid amount is required" }, 400);
+      }
+
+      // Get all keys and find incomplete ones (created but not yet funded)
+      const allKeys = await ctx.paymentKeyService.getAllPaymentKeys(
+        ctx.nearAccountId,
+      );
+      console.log(
+        `[API] Found ${allKeys.length} total keys for ${ctx.nearAccountId}`,
+      );
+
+      // Filter for incomplete keys (initialBalance is "0" = not yet funded)
+      const incompleteKeys = allKeys.filter(
+        (k) => k.isActive && k.initialBalance === "0",
+      );
+      console.log(`[API] Found ${incompleteKeys.length} incomplete keys`);
+
+      if (incompleteKeys.length === 0) {
+        return c.json(
+          {
+            error:
+              "No incomplete payment key found to top up. Create a new key first.",
+          },
+          404,
+        );
+      }
+
+      // Use the most recent incomplete key (already sorted by createdAt desc)
+      const paymentKey = incompleteKeys[0];
+      console.log(`[API] Using incomplete key with nonce ${paymentKey.nonce}`);
+
+      const tx = await ctx.paymentKeyService.topUpBalance(
+        paymentKey.nonce,
+        amount,
+      );
+      console.log("[API] Transaction prepared:", tx);
+
+      // tx already has the structure { transaction: { contractId, methodName, args, gas, deposit } }
+      return c.json(tx);
+    } catch (error) {
+      console.error("[API] Top up payment key error:", error);
+      return c.json({ error: "Failed to prepare top-up transaction" }, 500);
+    }
+  });
+
+  // Deactivate payment key
+  api.delete("/payment-keys/deactivate", async (c) => {
+    const ctx = await getContext(c);
+    if (!ctx.nearAccountId) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+
+    if (!ctx.paymentKeyService) {
+      return c.json({ error: "Payment key service not available" }, 503);
+    }
+
+    try {
+      const deactivated = await ctx.paymentKeyService.deactivateKey(
+        ctx.nearAccountId,
+      );
+
+      if (!deactivated) {
+        return c.json({ error: "No active payment key found" }, 404);
+      }
+
+      return c.json({
+        success: true,
+        message: "Payment key deactivated. You can create a new one anytime.",
+      });
+    } catch (error) {
+      console.error("[API] Deactivate payment key error:", error);
+      return c.json({ error: "Failed to deactivate payment key" }, 500);
+    }
+  });
+
+  // Delete a specific payment key by ID
+  api.delete("/payment-keys/:keyId", async (c) => {
+    const ctx = await getContext(c);
+    if (!ctx.nearAccountId) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+
+    if (!ctx.paymentKeyService) {
+      return c.json({ error: "Payment key service not available" }, 503);
+    }
+
+    try {
+      const keyId = c.req.param("keyId");
+
+      if (!keyId) {
+        return c.json({ error: "keyId is required" }, 400);
+      }
+
+      // Verify the key belongs to the user
+      const allKeys = await ctx.paymentKeyService.getAllPaymentKeys(
+        ctx.nearAccountId,
+      );
+      const keyToDelete = allKeys.find((k) => k.id === keyId);
+
+      if (!keyToDelete) {
+        return c.json({ error: "Payment key not found" }, 404);
+      }
+
+      const deleted = await ctx.paymentKeyService.deletePaymentKey(keyId);
+
+      if (!deleted) {
+        return c.json({ error: "Failed to delete payment key" }, 500);
+      }
+
+      return c.json({
+        success: true,
+        message: "Payment key deleted successfully",
+      });
+    } catch (error) {
+      console.error("[API] Delete payment key error:", error);
+      return c.json({ error: "Failed to delete payment key" }, 500);
+    }
+  });
+
+  // Update payment key initial balance after successful funding
+  api.post("/payment-keys/update-balance", async (c) => {
+    const ctx = await getContext(c);
+    if (!ctx.nearAccountId) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+
+    if (!ctx.paymentKeyService) {
+      return c.json({ error: "Payment key service not available" }, 503);
+    }
+
+    try {
+      const body = await c.req.json();
+      const { nonce, initialBalance } = body;
+
+      if (!nonce || !initialBalance) {
+        return c.json({ error: "nonce and initialBalance are required" }, 400);
+      }
+
+      const updated = await ctx.paymentKeyService.updateBalance(
+        parseInt(nonce),
+        initialBalance,
+      );
+
+      if (!updated) {
+        return c.json({ error: "Failed to update payment key balance" }, 500);
+      }
+
+      return c.json({
+        success: true,
+        message: "Payment key balance updated successfully",
+      });
+    } catch (error) {
+      console.error("[API] Update balance error:", error);
+      return c.json({ error: "Failed to update payment key balance" }, 500);
+    }
+  });
+
+  // Import existing payment key (simple approach - users paste their key)
+  api.post("/payment-keys/import", async (c) => {
+    const ctx = await getContext(c);
+    if (!ctx.nearAccountId) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+
+    if (!ctx.paymentKeyService) {
+      return c.json({ error: "Payment key service not available" }, 503);
+    }
+
+    try {
+      const body = await c.req.json();
+      const { paymentKey, initialBalance } = body;
+
+      if (!paymentKey || typeof paymentKey !== "string") {
+        return c.json({ error: "paymentKey is required" }, 400);
+      }
+
+      // Validate payment key format: owner:nonce:secret
+      const parts = paymentKey.split(":");
+      if (parts.length !== 3) {
+        return c.json(
+          {
+            error:
+              "Invalid payment key format. Expected: owner:nonce:secret (e.g., account.near:1:abc123...)",
+          },
+          400,
+        );
+      }
+
+      const [owner, nonceStr, secret] = parts;
+
+      // Strip network suffix from authenticated account ID for comparison
+      // nearAccountId might be "account.near:mainnet" but payment keys use "account.near"
+      const cleanAccountId = ctx.nearAccountId.split(":")[0];
+
+      // Validate owner matches authenticated user
+      if (owner !== cleanAccountId) {
+        return c.json(
+          {
+            error: `Payment key owner (${owner}) does not match your account (${cleanAccountId})`,
+          },
+          400,
+        );
+      }
+
+      // Validate nonce is a number
+      const nonce = parseInt(nonceStr);
+      if (isNaN(nonce) || nonce < 1) {
+        return c.json(
+          { error: "Invalid nonce. Must be a positive integer" },
+          400,
+        );
+      }
+
+      // Validate secret is 64 hex characters (32 bytes)
+      if (!/^[a-f0-9]{64}$/i.test(secret)) {
+        return c.json(
+          {
+            error:
+              "Invalid secret. Must be 64 hexadecimal characters (32 bytes)",
+          },
+          400,
+        );
+      }
+
+      // Check if key already exists in database
+      const existingKeys = await ctx.paymentKeyService.getAllPaymentKeys(
+        ctx.nearAccountId,
+      );
+      const existingKey = existingKeys.find((k) => k.nonce === nonce);
+
+      if (existingKey) {
+        return c.json(
+          { error: "Payment key with this nonce already exists" },
+          409,
+        );
+      }
+
+      // Import the key with provided initial balance or default to 0
+      // Convert USD to micro-units if provided as decimal
+      let balanceMicro = "0";
+      if (initialBalance !== undefined) {
+        if (typeof initialBalance === "number") {
+          balanceMicro = (initialBalance * 1000000).toString();
+        } else if (typeof initialBalance === "string") {
+          const usd = parseFloat(initialBalance);
+          if (!isNaN(usd)) {
+            balanceMicro = (usd * 1000000).toString();
+          }
+        }
+      }
+
+      // Import the key
+      try {
+        const importedKey = await ctx.paymentKeyService.storePaymentKey(
+          ctx.nearAccountId,
+          nonce,
+          secret,
+          balanceMicro,
+        );
+
+        const availableUsd = (parseInt(balanceMicro) / 1000000).toFixed(2);
+
+        return c.json({
+          success: true,
+          paymentKey: {
+            id: importedKey.id,
+            nonce: importedKey.nonce,
+            initialBalance: balanceMicro,
+            spent: "0",
+            available: balanceMicro,
+            availableUsd,
+            createdAt: importedKey.createdAt,
+          },
+          message: `Payment key imported successfully! Available balance: $${availableUsd}`,
+        });
+      } catch (storeError) {
+        console.error("[API] Failed to store imported key:", storeError);
+        return c.json(
+          {
+            error: "Failed to store payment key in database",
+            details:
+              storeError instanceof Error
+                ? storeError.message
+                : String(storeError),
+          },
+          500,
+        );
+      }
+    } catch (error) {
+      console.error("[API] Import payment key error:", error);
+      return c.json(
+        {
+          error: "Failed to import payment key",
+          details: error instanceof Error ? error.message : String(error),
+        },
+        500,
+      );
+    }
+  });
+
+  // Test payment key execution (debug endpoint - no auth required)
+  api.post("/payment-keys/test", async (c) => {
+    try {
+      const body = await c.req.json();
+      const { paymentKey } = body;
+
+      if (!paymentKey) {
+        return c.json({ error: "paymentKey is required" }, 400);
+      }
+
+      console.log(
+        "[API] Testing payment key:",
+        paymentKey.substring(0, 20) + "...",
+      );
+
+      // Test with a call to your actual OutLayer project
+      // URL format: /call/{project_owner}/{project_name}
+      const result = await fetch(
+        "https://api.outlayer.fastnear.com/call/kampouse.near/random-ark",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Payment-Key": paymentKey,
+          },
+          body: JSON.stringify({
+            input: {
+              test: "hello from payment key",
+            },
+          }),
+        },
+      );
+
+      const responseText = await result.text();
+      console.log("[API] OutLayer response status:", result.status);
+      console.log("[API] OutLayer response:", responseText.substring(0, 500));
+
+      if (result.ok) {
+        const data = JSON.parse(responseText);
+        return c.json({
+          success: true,
+          message: "Payment key works! OutLayer API accepted the request.",
+          data,
+        });
+      } else {
+        return c.json(
+          {
+            success: false,
+            error: `OutLayer API returned ${result.status}`,
+            details: responseText.substring(0, 1000),
+          },
+          400,
+        );
+      }
+    } catch (error) {
+      console.error("[API] Payment key test error:", error);
+      return c.json(
+        {
+          error: "Failed to test payment key",
+          details: error instanceof Error ? error.message : String(error),
+        },
+        500,
+      );
     }
   });
 

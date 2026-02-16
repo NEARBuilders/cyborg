@@ -78,11 +78,14 @@
   },
   "dependencies": {
     "@libsql/client": "^0.17.0",
+    "@stablelib/chacha20poly1305": "^2.0.1",
+    "@stablelib/random": "^2.0.1",
     "@tanstack/query-sync-storage-persister": "^5.90.22",
     "@types/better-sqlite3": "^7.6.13",
     "better-sqlite3": "^12.6.2",
     "borsh": "^2.0.0",
     "concurrently": "^9.1.2",
-    "everything-dev": "^0.0.8"
+    "everything-dev": "^0.0.8",
+    "near-api-js": "^7.1.1"
   }
 }

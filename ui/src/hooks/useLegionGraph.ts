@@ -163,17 +163,32 @@ export function useLegionFollowUnfollow() {
 
   const followMutation = useMutation({
     mutationFn: async (targetAccountId: string) => {
-      // Get transaction from API
+      // Get transaction from API (may execute via payment key)
       const result = await fetchApi("/legion/follow", {
         method: "POST",
         body: JSON.stringify({ targetAccountId }),
       });
 
-      if (!result.success || !result.transaction) {
+      if (!result.success) {
         throw new Error(result.error || "Failed to prepare follow transaction");
       }
 
-      // Sign transaction with wallet (client-side)
+      // Check if transaction was already executed via payment key
+      if (result.executed) {
+        console.log("[Legion Follow] Executed via payment key:", result.transactionHash);
+        return {
+          targetAccountId,
+          txHash: result.transactionHash,
+          executed: true,
+          remainingBalance: result.remainingBalance,
+        };
+      }
+
+      // Otherwise, sign transaction with wallet (client-side)
+      if (!result.transaction) {
+        throw new Error("No transaction returned");
+      }
+
       if (!nearAuth) {
         throw new Error("NEAR wallet not connected");
       }
@@ -199,7 +214,7 @@ export function useLegionFollowUnfollow() {
         )
         .send();
 
-      return { targetAccountId, txHash: tx.transaction.hash };
+      return { targetAccountId, txHash: tx.transaction.hash, executed: false };
     },
     onMutate: async (targetAccountId) => {
       // Cancel outgoing refetches
@@ -269,7 +284,11 @@ export function useLegionFollowUnfollow() {
       }
     },
     onSuccess: async (data) => {
-      toast.success("Followed!");
+      if (data.executed) {
+        toast.success("Followed instantly via payment key!");
+      } else {
+        toast.success("Followed!");
+      }
       const currentAccountId = getCurrentAccountId();
       if (!currentAccountId) return;
 
@@ -335,13 +354,30 @@ export function useLegionFollowUnfollow() {
 
   const unfollowMutation = useMutation({
     mutationFn: async (targetAccountId: string) => {
+      // Get transaction from API (may execute via payment key)
       const result = await fetchApi("/legion/unfollow", {
         method: "POST",
         body: JSON.stringify({ targetAccountId }),
       });
 
-      if (!result.success || !result.transaction) {
+      if (!result.success) {
         throw new Error(result.error || "Failed to prepare unfollow transaction");
+      }
+
+      // Check if transaction was already executed via payment key
+      if (result.executed) {
+        console.log("[Legion Unfollow] Executed via payment key:", result.transactionHash);
+        return {
+          targetAccountId,
+          txHash: result.transactionHash,
+          executed: true,
+          remainingBalance: result.remainingBalance,
+        };
+      }
+
+      // Otherwise, sign transaction with wallet (client-side)
+      if (!result.transaction) {
+        throw new Error("No transaction returned");
       }
 
       if (!nearAuth) {
@@ -369,7 +405,7 @@ export function useLegionFollowUnfollow() {
         )
         .send();
 
-      return { targetAccountId, txHash: tx.transaction.hash };
+      return { targetAccountId, txHash: tx.transaction.hash, executed: false };
     },
     onMutate: async (targetAccountId) => {
       // Cancel outgoing refetches
@@ -439,7 +475,11 @@ export function useLegionFollowUnfollow() {
       }
     },
     onSuccess: async (data) => {
-      toast.success("Unfollowed!");
+      if (data.executed) {
+        toast.success("Unfollowed instantly via payment key!");
+      } else {
+        toast.success("Unfollowed!");
+      }
       const currentAccountId = getCurrentAccountId();
       if (!currentAccountId) return;
 
