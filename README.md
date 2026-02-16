@@ -1,18 +1,25 @@
-# Cyborg: AI-Powered Social Hub for NEAR Builders
 
-A privacy-preserving social platform that combines decentralized AI, NFT-based reputation, and gasless social interactions—built for the NEAR ecosystem.
 
-**Live Demo:** [cyborg.pages.dev](https://cyborg.pages.dev)
+<p align="center">
+  <img src="screenshots/legion-social.jpg" alt="Legion social" width="200"/>
+</p>
+
+
+## Legion Social - The Social Layer for Builders on NEAR
+
+A hybrid platform leveraging the best of NEAR's builder ecosystem to create a comprehensive social layer through AI chat, directory services, and meaningful connections.
+
+**Live Demo:** [legion social](https://near-agent.pages.dev/)
 
 ---
 
 ## 🎯 What It Does
 
-Cyborg is a social platform for NEAR ecosystem builders that solves three core problems:
+Legion social  is a social platform for NEAR ecosystem builders that solves three core problems:
 
-1. **High Friction Social Interactions** - Every follow/unfollow requires wallet signing and gas fees
-2. **No Central Builder Directory** - Hard to discover and connect with other NEAR developers
-3. **AI Not Integrated Into Workflow** - AI tools exist but aren't connected to the development experience
+1. **High Friction Social Interactions** - Do you ever ask who is on near who actualy build stuff  not just the yapper on X who actualy in the trenches? 
+**social proof** builders builds some of them cant even yap on x there to busy what if they could have there quiet spot to share there journee and still be seen 
+3. **AI Not Integrated Into Workflow** - Google but for legionnaire.
 
 ---
 
@@ -26,7 +33,7 @@ Cyborg is a social platform for NEAR ecosystem builders that solves three core p
 - **NEAR-aware** - trained on NEAR ecosystem documentation
 - **Tool calling** - AI can query and interact with your application data
 
-**Use case:** Ask questions about NEAR development, get code help, brainstorm ideas.
+**Use case:** find people from there intrest and project / nft ? 
 
 ### 👥 Builder Discovery & Profiles
 
@@ -39,9 +46,7 @@ Cyborg is a social platform for NEAR ecosystem builders that solves three core p
 
 ### 🔒 Privacy-Preserving Payment Keys
 
-> **⚠️ PROOF OF CONCEPT** - This feature is currently in active development and should be considered experimental. Use at your own risk.
-being able to edit profile and project without having to  sign transaction using outlayer with contextual.near  
-
+> **⚠️ PROOF OF CONCEPT** - imagine being able to interact with the blockchain with a prepaid key?    
 
 ### 📁 Project Management
 
@@ -301,7 +306,7 @@ bun db:generate      # Generate migrations
 - **NEAR Social** - profile storage
 - **NEARBlocks API** - NFT holder data
 - **FastData** - social graph + projects
-- **OutLayer** - payment key execution
+- **OutLayer** - payment key execution / near.email
 
 ---
 
