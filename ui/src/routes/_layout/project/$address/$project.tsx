@@ -1,14 +1,30 @@
 import { createFileRoute, Link, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Calendar, FolderKanban, ExternalLink, Settings } from "lucide-react";
+import {
+  ArrowLeft,
+  Calendar,
+  FolderKanban,
+  ExternalLink,
+  Settings,
+} from "lucide-react";
 import { Markdown } from "@/components/ui/markdown";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { useProjectKv, useUpdateProject, type Project } from "@/hooks/useProjects";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  useProjectKv,
+  useUpdateProject,
+  type Project,
+} from "@/hooks/useProjects";
 import { authClient } from "@/lib/auth-client";
 import { useState } from "react";
 
@@ -46,7 +62,9 @@ function ProjectPage() {
   const routerState = useRouterState();
 
   // Check if we came from the builders page using navigation state
-  const locationState = routerState.location.state as unknown as { from?: string } | undefined;
+  const locationState = routerState.location.state as unknown as
+    | { from?: string }
+    | undefined;
   const cameFromBuilders = locationState?.from === "builders";
 
   // Update project mutation
@@ -62,13 +80,21 @@ function ProjectPage() {
     description: "",
     coverImageUrl: "",
     status: "active" as "active" | "completed" | "archived",
+    githubLinks: [] as Array<{ url: string; description?: string }>,
+    tags: [] as Array<{ name: string; target?: string }>,
   });
 
   // Fetch project directly by name using the new API endpoint
-  const { data: project, isLoading: isLoadingProject, error: projectError } = useQuery({
+  const {
+    data: project,
+    isLoading: isLoadingProject,
+    error: projectError,
+  } = useQuery({
     queryKey: ["project", address, projectName],
     queryFn: async () => {
-      const response = await fetchApi(`/accounts/${address}/projects/by-name/${encodeURIComponent(projectName)}`);
+      const response = await fetchApi(
+        `/accounts/${address}/projects/by-name/${encodeURIComponent(projectName)}`,
+      );
       if (!response.ok) {
         if (response.status === 404) {
           throw new Error("Project not found");
@@ -120,7 +146,10 @@ function ProjectPage() {
                   params: { builderId: address },
                 });
               } else {
-                navigate({ to: "/profile/$accountId", params: { accountId: address } });
+                navigate({
+                  to: "/profile/$accountId",
+                  params: { accountId: address },
+                });
               }
             }}
             className="flex items-center gap-2"
@@ -134,7 +163,8 @@ function ProjectPage() {
               Project Not Found
             </h1>
             <p className="text-muted-foreground mb-6">
-              The project "{decodeURIComponent(projectName)}" could not be found for {address}.
+              The project "{decodeURIComponent(projectName)}" could not be found
+              for {address}.
             </p>
             <Link
               to="/profile/$accountId"
@@ -170,7 +200,10 @@ function ProjectPage() {
                   params: { builderId: address },
                 });
               } else {
-                navigate({ to: "/profile/$accountId", params: { accountId: address } });
+                navigate({
+                  to: "/profile/$accountId",
+                  params: { accountId: address },
+                });
               }
             }}
             className="flex items-center gap-2"
@@ -188,6 +221,8 @@ function ProjectPage() {
                   description: project.description || "",
                   coverImageUrl: project.coverImageUrl || "",
                   status: project.status,
+                  githubLinks: project.githubLinks || [],
+                  tags: project.tags || [],
                 });
                 setIsEditModalOpen(true);
               }}
@@ -230,8 +265,8 @@ function ProjectPage() {
                 project.status === "active"
                   ? "default"
                   : project.status === "completed"
-                  ? "secondary"
-                  : "outline"
+                    ? "secondary"
+                    : "outline"
               }
               className="capitalize text-sm px-3 py-1"
             >
@@ -273,7 +308,67 @@ function ProjectPage() {
             </div>
           ) : (
             <div className="p-6 bg-muted/30 rounded-xl border border-border/50 text-center">
-              <p className="text-muted-foreground">No description provided for this project.</p>
+              <p className="text-muted-foreground">
+                No description provided for this project.
+              </p>
+            </div>
+          )}
+
+          {/* GitHub Links */}
+          {project.githubLinks && project.githubLinks.length > 0 && (
+            <div className="space-y-3">
+              <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
+                <span>GitHub Links</span>
+                <div className="flex-1 h-px bg-border/50" />
+              </h2>
+              <div className="flex flex-col gap-3">
+                {project.githubLinks.map((link, index) => (
+                  <a
+                    key={index}
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group flex items-center gap-3 p-4 bg-card hover:bg-card/80 rounded-lg border border-border/50 transition-all hover:shadow-md"
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <ExternalLink className="size-4 text-primary" />
+                        <span className="font-medium text-foreground">
+                          {link.description || link.url}
+                        </span>
+                      </div>
+                      {link.description && (
+                        <div className="text-sm text-muted-foreground font-mono truncate">
+                          {link.url}
+                        </div>
+                      )}
+                    </div>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Tags */}
+          {project.tags && project.tags.length > 0 && (
+            <div className="space-y-3">
+              <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
+                <span>Tags</span>
+                <div className="flex-1 h-px bg-border/50" />
+              </h2>
+              <div className="flex flex-wrap gap-2">
+                {project.tags.map((tag, index) => (
+                  <Badge key={index} variant="secondary" className="text-sm">
+                    {tag.name}
+                    {tag.target && (
+                      <span className="text-muted-foreground/60">
+                        {" → "}
+                        {tag.target}
+                      </span>
+                    )}
+                  </Badge>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -284,7 +379,8 @@ function ProjectPage() {
             <span>Project Data</span>
             {kvEntries.length > 0 && (
               <Badge variant="secondary" className="text-xs">
-                {kvEntries.length} {kvEntries.length === 1 ? 'entry' : 'entries'}
+                {kvEntries.length}{" "}
+                {kvEntries.length === 1 ? "entry" : "entries"}
               </Badge>
             )}
             <div className="flex-1 h-px bg-border/50" />
@@ -315,8 +411,8 @@ function ProjectPage() {
                   {entry.value && (
                     <div className="text-sm">
                       {entry.value.includes("#") ||
-                       entry.value.includes("*") ||
-                       entry.value.includes("```") ? (
+                      entry.value.includes("*") ||
+                      entry.value.includes("```") ? (
                         <Markdown content={entry.value} />
                       ) : (
                         <pre className="whitespace-pre-wrap break-words text-foreground bg-muted/30 p-3 rounded-md overflow-x-auto text-xs">
@@ -332,7 +428,9 @@ function ProjectPage() {
             <div className="p-12 text-center bg-muted/20 rounded-xl border border-border/50">
               <div className="space-y-3">
                 <span className="text-4xl">📭</span>
-                <p className="text-muted-foreground">No additional data available for this project.</p>
+                <p className="text-muted-foreground">
+                  No additional data available for this project.
+                </p>
               </div>
             </div>
           )}
@@ -357,14 +455,16 @@ function ProjectPage() {
 
       {/* Edit Project Modal */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col p-0">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b border-border/50">
             <DialogTitle>Edit Project</DialogTitle>
             <DialogDescription>
-              Update project details. You'll need to approve a transaction to save changes.
+              Update project details. You'll need to approve a transaction to
+              save changes.
             </DialogDescription>
           </DialogHeader>
           <form
+            id="edit-project-form"
             onSubmit={(e) => {
               e.preventDefault();
               updateProject(
@@ -374,6 +474,9 @@ function ProjectPage() {
                     name: editData.name,
                     description: editData.description,
                     status: editData.status,
+                    coverImageUrl: editData.coverImageUrl,
+                    githubLinks: editData.githubLinks,
+                    tags: editData.tags,
                   },
                 },
                 {
@@ -383,7 +486,7 @@ function ProjectPage() {
                 },
               );
             }}
-            className="space-y-4 pt-4"
+            className="flex-1 overflow-y-auto px-6 py-4 space-y-4"
           >
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">
@@ -422,7 +525,10 @@ function ProjectPage() {
                 type="url"
                 value={editData.coverImageUrl}
                 onChange={(e) =>
-                  setEditData((prev) => ({ ...prev, coverImageUrl: e.target.value }))
+                  setEditData((prev) => ({
+                    ...prev,
+                    coverImageUrl: e.target.value,
+                  }))
                 }
                 placeholder="https://example.com/banner.png"
                 className="h-9"
@@ -438,7 +544,10 @@ function ProjectPage() {
                 onChange={(e) =>
                   setEditData({
                     ...editData,
-                    status: e.target.value as "active" | "completed" | "archived",
+                    status: e.target.value as
+                      | "active"
+                      | "completed"
+                      | "archived",
                   })
                 }
                 className="w-full h-9 px-3 py-1 text-sm bg-background border border-border/50 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
@@ -449,8 +558,137 @@ function ProjectPage() {
               </select>
             </div>
 
-            <div className="flex gap-3 pt-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">
+                GitHub Links
+              </label>
+              <div className="space-y-2">
+                {editData.githubLinks.map((link, index) => (
+                  <div key={index} className="flex gap-2">
+                    <Input
+                      type="url"
+                      value={link.url}
+                      onChange={(e) => {
+                        const updated = [...editData.githubLinks];
+                        updated[index].url = e.target.value;
+                        setEditData({ ...editData, githubLinks: updated });
+                      }}
+                      placeholder="https://github.com/user/repo"
+                      className="flex-1 h-9"
+                    />
+                    <Input
+                      type="text"
+                      value={link.description || ""}
+                      onChange={(e) => {
+                        const updated = [...editData.githubLinks];
+                        updated[index].description = e.target.value;
+                        setEditData({ ...editData, githubLinks: updated });
+                      }}
+                      placeholder="Description (e.g., Frontend)"
+                      className="flex-1 h-9"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        const updated = editData.githubLinks.filter(
+                          (_, i) => i !== index,
+                        );
+                        setEditData({ ...editData, githubLinks: updated });
+                      }}
+                      className="h-9 px-3"
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setEditData({
+                      ...editData,
+                      githubLinks: [
+                        ...editData.githubLinks,
+                        { url: "", description: "" },
+                      ],
+                    })
+                  }
+                  className="w-full"
+                >
+                  + Add GitHub Link
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">
+                Tags
+              </label>
+              <div className="space-y-2">
+                {editData.tags.map((tag, index) => (
+                  <div key={index} className="flex gap-2">
+                    <Input
+                      type="text"
+                      value={tag.name}
+                      onChange={(e) => {
+                        const updated = [...editData.tags];
+                        updated[index].name = e.target.value;
+                        setEditData({ ...editData, tags: updated });
+                      }}
+                      placeholder="Tag name (e.g., React)"
+                      className="flex-1 h-9"
+                    />
+                    <Input
+                      type="text"
+                      value={tag.target || ""}
+                      onChange={(e) => {
+                        const updated = [...editData.tags];
+                        updated[index].target = e.target.value;
+                        setEditData({ ...editData, tags: updated });
+                      }}
+                      placeholder="Target (e.g., frontend)"
+                      className="flex-1 h-9"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        const updated = editData.tags.filter(
+                          (_, i) => i !== index,
+                        );
+                        setEditData({ ...editData, tags: updated });
+                      }}
+                      className="h-9 px-3"
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setEditData({
+                      ...editData,
+                      tags: [...editData.tags, { name: "", target: "" }],
+                    })
+                  }
+                  className="w-full"
+                >
+                  + Add Tag
+                </Button>
+              </div>
+            </div>
+          </form>
+          <div className="px-6 pb-6 pt-4 border-t border-border/50 bg-background">
+            <div className="flex gap-3">
               <button
+                form="edit-project-form"
                 type="submit"
                 disabled={isUpdating || !editData.name.trim()}
                 className="flex-1 h-9 px-6 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -466,7 +704,7 @@ function ProjectPage() {
                 Cancel
               </button>
             </div>
-          </form>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

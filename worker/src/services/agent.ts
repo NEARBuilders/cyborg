@@ -82,14 +82,16 @@ export const tools: OpenAI.ChatCompletionTool[] = [
     function: {
       name: "search_builders",
       strict: true,
-      description: "Search for builders by interests, skills, description, or what they do. Use this as the primary tool for discovering people based on their expertise and interests.",
+      description:
+        "Search for builders by interests, skills, description, or what they do. Use this as the primary tool for discovering people based on their expertise and interests.",
       parameters: {
         type: "object",
         additionalProperties: false,
         properties: {
           query: {
             type: "string",
-            description: "Search query - can include skills (react, python, smart contracts), interests (defi, nft, gaming), or any keywords from their profile/description",
+            description:
+              "Search query - can include skills (react, python, smart contracts), interests (defi, nft, gaming), or any keywords from their profile/description",
           },
           limit: {
             type: "number",
@@ -105,14 +107,16 @@ export const tools: OpenAI.ChatCompletionTool[] = [
     function: {
       name: "search_by_social",
       strict: true,
-      description: "Find builders who have specific social media accounts. Search for people with Twitter/X, Telegram, GitHub, Discord, YouTube, LinkedIn, Instagram, or any website URL.",
+      description:
+        "Find builders who have specific social media accounts. Search for people with Twitter/X, Telegram, GitHub, Discord, YouTube, LinkedIn, Instagram, or any website URL.",
       parameters: {
         type: "object",
         additionalProperties: false,
         properties: {
           platform: {
             type: "string",
-            description: "Social platform to search for. Options: twitter, x, telegram, github, discord, youtube, linkedin, instagram, website, or any custom platform name",
+            description:
+              "Social platform to search for. Options: twitter, x, telegram, github, discord, youtube, linkedin, instagram, website, or any custom platform name",
           },
           limit: {
             type: "number",
@@ -128,7 +132,8 @@ export const tools: OpenAI.ChatCompletionTool[] = [
     function: {
       name: "search_by_tags",
       strict: true,
-      description: "Find builders by their skills and interests (tags). Search for people with specific tags like 'react', 'defi', 'nft', 'smart contracts', 'rust', etc.",
+      description:
+        "Find builders by their skills and interests (tags). Search for people with specific tags like 'react', 'defi', 'nft', 'smart contracts', 'rust', etc.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -138,11 +143,13 @@ export const tools: OpenAI.ChatCompletionTool[] = [
             items: {
               type: "string",
             },
-            description: "Array of tags/skills to search for (e.g., ['react', 'typescript'], ['defi', 'trading'], ['rust', 'smart contracts'])",
+            description:
+              "Array of tags/skills to search for (e.g., ['react', 'typescript'], ['defi', 'trading'], ['rust', 'smart contracts'])",
           },
           matchAll: {
             type: "boolean",
-            description: "If true, only return builders who have ALL the specified tags. If false, returns builders who have ANY of the tags (default: false)",
+            description:
+              "If true, only return builders who have ALL the specified tags. If false, returns builders who have ANY of the tags (default: false)",
           },
           limit: {
             type: "number",
@@ -158,14 +165,16 @@ export const tools: OpenAI.ChatCompletionTool[] = [
     function: {
       name: "get_nft_holders",
       strict: true,
-      description: "Get holders of a specific NFT contract. Shows account IDs and quantities for NFTs like nearlegion.nfts.tg, ascendant.nearlegion.near, initiate.nearlegion.near, etc.",
+      description:
+        "Get holders of a specific NFT contract. Shows account IDs and quantities for NFTs like nearlegion.nfts.tg, ascendant.nearlegion.near, initiate.nearlegion.near, etc.",
       parameters: {
         type: "object",
         additionalProperties: false,
         properties: {
           contractId: {
             type: "string",
-            description: "NFT contract address (e.g., 'nearlegion.nfts.tg', 'ascendant.nearlegion.near')",
+            description:
+              "NFT contract address (e.g., 'nearlegion.nfts.tg', 'ascendant.nearlegion.near')",
           },
           limit: {
             type: "number",
@@ -181,7 +190,8 @@ export const tools: OpenAI.ChatCompletionTool[] = [
     function: {
       name: "get_builder_profile",
       strict: true,
-      description: "Get detailed profile for a specific builder including their description, interests (tags), social links, role (Ascendant/Initiate/Holder), and NFT avatar.",
+      description:
+        "Get detailed profile for a specific builder including their description, interests (tags), social links, role (Ascendant/Initiate/Holder), and NFT avatar.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -200,7 +210,8 @@ export const tools: OpenAI.ChatCompletionTool[] = [
     function: {
       name: "list_legion_members",
       strict: true,
-      description: "Get a paginated list of all Legion members. Filter by role (Ascendant, Initiate, Holder) to find specific tiers of members.",
+      description:
+        "Get a paginated list of all Legion members. Filter by role (Ascendant, Initiate, Holder) to find specific tiers of members.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -208,7 +219,8 @@ export const tools: OpenAI.ChatCompletionTool[] = [
           role: {
             type: "string",
             enum: ["Ascendant", "Initiate", "Holder", "any"],
-            description: "Filter by Legion rank - Ascendant (highest), Initiate, Holder, or any for all members",
+            description:
+              "Filter by Legion rank - Ascendant (highest), Initiate, Holder, or any for all members",
           },
           limit: {
             type: "number",
@@ -227,7 +239,8 @@ export const tools: OpenAI.ChatCompletionTool[] = [
     function: {
       name: "get_member_rank",
       strict: true,
-      description: "Check a member's Legion rank tier (Legendary/Mythic, Epic/Prime, Rare/Vanguard, Common/Ascendant) based on their skillcape NFTs.",
+      description:
+        "Check a member's Legion rank tier (Legendary/Mythic, Epic/Prime, Rare/Vanguard, Common/Ascendant) based on their skillcape NFTs.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -235,6 +248,32 @@ export const tools: OpenAI.ChatCompletionTool[] = [
           accountId: {
             type: "string",
             description: "NEAR account ID to check",
+          },
+        },
+        required: ["accountId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_user_projects",
+      strict: true,
+      description:
+        "Get all projects for a specific user including their name, description, status, cover image, GitHub links, and tags. Use this to see what someone has built.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          accountId: {
+            type: "string",
+            description:
+              "NEAR account ID to get projects for (e.g., 'example.near')",
+          },
+          status: {
+            type: "string",
+            enum: ["active", "completed", "archived", "all"],
+            description: "Filter by project status (default: 'all')",
           },
         },
         required: ["accountId"],
@@ -251,7 +290,7 @@ export class AgentError extends Error {
   constructor(
     public code: string,
     message: string,
-    public data?: Record<string, unknown>
+    public data?: Record<string, unknown>,
   ) {
     super(message);
     this.name = "AgentError";
@@ -273,13 +312,15 @@ function mapOpenAIError(error: unknown): never {
         retryAfter: parseInt(error.headers?.["retry-after"] || "60"),
       });
     }
-    throw new AgentError("SERVICE_UNAVAILABLE", error.message, { retryAfter: 30 });
+    throw new AgentError("SERVICE_UNAVAILABLE", error.message, {
+      retryAfter: 30,
+    });
   }
 
   throw new AgentError(
     "SERVICE_UNAVAILABLE",
     error instanceof Error ? error.message : "Unknown error",
-    { retryAfter: 30 }
+    { retryAfter: 30 },
   );
 }
 
@@ -293,7 +334,7 @@ export class AgentService {
   constructor(
     private db: Database,
     private config: AgentConfig,
-    private nearService: NearService | null
+    private nearService: NearService | null,
   ) {
     this.client = new OpenAI({
       apiKey: config.apiKey,
@@ -313,6 +354,7 @@ export class AgentService {
 - Search by social platforms (find people with Twitter/X, Telegram, GitHub, Discord, YouTube, LinkedIn, Instagram, etc.)
 - Search by tags/skills (find people with specific interests like 'react', 'defi', 'nft', 'smart contracts', 'rust', etc.)
 - Get detailed profiles for specific builders (including NFT avatars!)
+- Get user projects (see what builders have created - including GitHub links and tags!)
 - List Legion members by rank (Ascendant, Initiate, Holder)
 - Check member rank tiers
 
@@ -363,6 +405,9 @@ When you receive tool results, NEVER include the raw socials object or linktree 
 - "Find React developers" → Use search_by_tags with tags=["react"]
 - "Find people who know defi and smart contracts" → Use search_by_tags with tags=["defi", "smart contracts"] and matchAll=true
 - "Find rust or python developers" → Use search_by_tags with tags=["rust", "python"] and matchAll=false
+- "Show me @user.near's projects" → Use get_user_projects with accountId="user.near"
+- "What has @builder.near built?" → Use get_user_projects with accountId="builder.near"
+- "Show me active projects from @dev.near" → Use get_user_projects with accountId="dev.near" and status="active"
 
 **When summarizing search results:**
 - Count the number of results found
@@ -376,7 +421,8 @@ When you receive tool results, NEVER include the raw socials object or linktree 
     }
 
     try {
-      const hasInitiate = await this.nearService.hasInitiateToken(nearAccountId);
+      const hasInitiate =
+        await this.nearService.hasInitiateToken(nearAccountId);
 
       if (!hasInitiate) {
         return `${basePrompt}
@@ -434,7 +480,10 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
           return basePrompt;
       }
     } catch (error) {
-      console.error("[AgentService] Error fetching rank for system prompt:", error);
+      console.error(
+        "[AgentService] Error fetching rank for system prompt:",
+        error,
+      );
       return basePrompt;
     }
   }
@@ -443,7 +492,10 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
   // CORE CHAT METHODS
   // ===========================================================================
 
-  private async resolveConversation(nearAccountId: string, conversationId?: string) {
+  private async resolveConversation(
+    nearAccountId: string,
+    conversationId?: string,
+  ) {
     const convId = conversationId ?? nanoid();
     const conversation = await this.db.query.conversation.findFirst({
       where: eq(schema.conversation.id, convId),
@@ -459,9 +511,12 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
   private async buildChatContext(
     nearAccountId: string,
     userMessage: string,
-    conversationId?: string
+    conversationId?: string,
   ) {
-    const { convId, isNew } = await this.resolveConversation(nearAccountId, conversationId);
+    const { convId, isNew } = await this.resolveConversation(
+      nearAccountId,
+      conversationId,
+    );
     const now = new Date();
     const systemPrompt = await this.getSystemPrompt(nearAccountId);
 
@@ -545,7 +600,7 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
   async processMessage(
     nearAccountId: string,
     userMessage: string,
-    conversationId?: string
+    conversationId?: string,
   ): Promise<ChatResponse> {
     try {
       console.log("[processMessage] START:", {
@@ -556,7 +611,7 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
       const { convId, chatMessages, now, isNew } = await this.buildChatContext(
         nearAccountId,
         userMessage,
-        conversationId
+        conversationId,
       );
 
       await this.persistUserMessage({
@@ -570,7 +625,10 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
       console.log("[processMessage] Calling NEAR AI with tools...");
 
       // Initial request with tools available
-      console.log("[AgentService] Sending chat request with tools:", JSON.stringify(tools, null, 2));
+      console.log(
+        "[AgentService] Sending chat request with tools:",
+        JSON.stringify(tools, null, 2),
+      );
       let completion = await this.client.chat.completions.create({
         model: this.config.model,
         messages: chatMessages,
@@ -647,7 +705,10 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
               role: "tool",
               tool_call_id: toolCall.id,
               content: JSON.stringify({
-                error: toolError instanceof Error ? toolError.message : "Tool execution failed",
+                error:
+                  toolError instanceof Error
+                    ? toolError.message
+                    : "Tool execution failed",
                 tool: toolCall.function.name,
               }),
             });
@@ -703,7 +764,7 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
   async *processMessageStream(
     nearAccountId: string,
     userMessage: string,
-    conversationId?: string
+    conversationId?: string,
   ): AsyncGenerator<StreamEvent> {
     const eventId = () =>
       `evt-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -712,7 +773,7 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
       const { convId, chatMessages, now, isNew } = await this.buildChatContext(
         nearAccountId,
         userMessage,
-        conversationId
+        conversationId,
       );
 
       await this.persistUserMessage({
@@ -730,7 +791,9 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
       const assistantMsgId = nanoid();
 
       while (toolIteration < maxToolIterations) {
-        console.log(`[AgentService] Tool iteration ${toolIteration + 1}/${maxToolIterations}`);
+        console.log(
+          `[AgentService] Tool iteration ${toolIteration + 1}/${maxToolIterations}`,
+        );
         const stream = await this.client.chat.completions.create({
           model: this.config.model,
           messages: currentMessages,
@@ -740,7 +803,10 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
         });
 
         let accumulatedContent = "";
-        const toolCallMap = new Map<number, OpenAI.ChatCompletionMessageToolCall>();
+        const toolCallMap = new Map<
+          number,
+          OpenAI.ChatCompletionMessageToolCall
+        >();
 
         // Stream the response
         for await (const chunk of stream) {
@@ -767,9 +833,11 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
                 // Update existing tool call
                 if (toolCallChunk.id) existing.id = toolCallChunk.id;
                 if (toolCallChunk.function) {
-                  if (toolCallChunk.function.name) existing.function.name = toolCallChunk.function.name;
+                  if (toolCallChunk.function.name)
+                    existing.function.name = toolCallChunk.function.name;
                   if (toolCallChunk.function.arguments) {
-                    existing.function.arguments += toolCallChunk.function.arguments;
+                    existing.function.arguments +=
+                      toolCallChunk.function.arguments;
                   }
                 }
               } else {
@@ -792,7 +860,10 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
         console.log(`[AgentService] Iteration complete:`, {
           accumulatedContentLength: accumulatedContent.length,
           toolCallsCount: accumulatedToolCalls.length,
-          toolCalls: accumulatedToolCalls.map(tc => ({ name: tc.function.name, hasArgs: !!tc.function.arguments })),
+          toolCalls: accumulatedToolCalls.map((tc) => ({
+            name: tc.function.name,
+            hasArgs: !!tc.function.arguments,
+          })),
         });
 
         // Check if model wants to call tools
@@ -820,7 +891,9 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
             break;
           }
 
-          console.log(`[AgentService] Executing ${validToolCalls.length} tools`);
+          console.log(
+            `[AgentService] Executing ${validToolCalls.length} tools`,
+          );
 
           yield {
             type: "chunk",
@@ -838,7 +911,10 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
           for (const toolCall of validToolCalls) {
             try {
               const args = JSON.parse(toolCall.function.arguments);
-              console.log(`[AgentService] Executing tool: ${toolCall.function.name}`, args);
+              console.log(
+                `[AgentService] Executing tool: ${toolCall.function.name}`,
+                args,
+              );
               const result = await this.executeToolCall({
                 id: toolCall.id,
                 name: toolCall.function.name,
@@ -862,7 +938,10 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
                 role: "tool",
                 tool_call_id: toolCall.id,
                 content: JSON.stringify({
-                  error: toolError instanceof Error ? toolError.message : "Tool execution failed",
+                  error:
+                    toolError instanceof Error
+                      ? toolError.message
+                      : "Tool execution failed",
                   tool: toolCall.function.name,
                 }),
               });
@@ -870,7 +949,9 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
           }
 
           toolIteration++;
-          console.log(`[AgentService] Tool iteration complete, looping to get AI response...`);
+          console.log(
+            `[AgentService] Tool iteration complete, looping to get AI response...`,
+          );
         } else {
           // No tool calls, we're done
           console.log("[AgentService] No tool calls, finishing stream");
@@ -939,7 +1020,7 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
       .groupBy(schema.message.conversationId);
 
     const statsByConversationId = new Map(
-      messageStats.map((stat) => [stat.conversationId, stat])
+      messageStats.map((stat) => [stat.conversationId, stat]),
     );
 
     return conversations.map((conv) => {
@@ -1003,7 +1084,7 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
 
     // Quick check for common incomplete JSON patterns
     const trimmed = str.trim();
-    if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) return false;
+    if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return false;
 
     // Count braces to ensure they're balanced
     let braceCount = 0;
@@ -1016,7 +1097,7 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
         continue;
       }
 
-      if (char === '\\') {
+      if (char === "\\") {
         escaped = true;
         continue;
       }
@@ -1027,8 +1108,8 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
       }
 
       if (!inString) {
-        if (char === '{') braceCount++;
-        if (char === '}') braceCount--;
+        if (char === "{") braceCount++;
+        if (char === "}") braceCount--;
       }
     }
 
@@ -1075,13 +1156,17 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
           or(
             like(schema.nearSocialProfiles.description, `%${query}%`),
             like(schema.nearSocialProfiles.name, `%${query}%`),
-            like(schema.nearSocialProfiles.accountId, `%${query}%`)
-          )
+            like(schema.nearSocialProfiles.accountId, `%${query}%`),
+          ),
         )
         .limit(limit);
 
       if (results.length > 0) {
-        return await this.formatBuildersAsMarkdown(results, params.query, limit);
+        return await this.formatBuildersAsMarkdown(
+          results,
+          params.query,
+          limit,
+        );
       }
 
       if (isHolderQuery) {
@@ -1106,23 +1191,32 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
             return await this.db.query.nearSocialProfiles.findFirst({
               where: eq(schema.nearSocialProfiles.accountId, holder.accountId),
             });
-          })
+          }),
         );
 
-        const validProfiles = profileResults.filter((p): p is NonNullable<typeof p> => p !== null);
+        const validProfiles = profileResults.filter(
+          (p): p is NonNullable<typeof p> => p !== null,
+        );
 
         if (validProfiles.length > 0) {
-          return await this.formatBuildersAsMarkdown(validProfiles, `NFT holders (${params.query})`, limit);
+          return await this.formatBuildersAsMarkdown(
+            validProfiles,
+            `NFT holders (${params.query})`,
+            limit,
+          );
         }
       }
 
       return JSON.stringify({
         type: "error",
-        message: `No builders found matching "${params.query}". Try different keywords like specific technologies (react, rust, defi), account names, or ask for "NFT holders", "Legion members", "Ascendant members".`
+        message: `No builders found matching "${params.query}". Try different keywords like specific technologies (react, rust, defi), account names, or ask for "NFT holders", "Legion members", "Ascendant members".`,
       });
     } catch (error) {
       console.error("[searchBuilders] Error:", error);
-      return JSON.stringify({ type: "error", message: "Failed to search builders. Please try again." });
+      return JSON.stringify({
+        type: "error",
+        message: "Failed to search builders. Please try again.",
+      });
     }
   }
 
@@ -1137,7 +1231,9 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
     const limit = Math.min(params.limit || 20, 100);
 
     if (platform.length < 2) {
-      return JSON.stringify({ error: "Platform must be at least 2 characters" });
+      return JSON.stringify({
+        error: "Platform must be at least 2 characters",
+      });
     }
 
     try {
@@ -1157,29 +1253,40 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
         .limit(500); // Get a reasonable batch to check
 
       // Filter profiles that have the specified social platform
-      const matchingProfiles = profiles.filter((profile) => {
-        try {
-          const profileData = JSON.parse(profile.profileData);
-          const linktree = profileData?.linktree || {};
+      const matchingProfiles = profiles
+        .filter((profile) => {
+          try {
+            const profileData = JSON.parse(profile.profileData);
+            const linktree = profileData?.linktree || {};
 
-          // Check if the platform exists in linktree (case-insensitive)
-          const hasPlatform = Object.keys(linktree).some(
-            (key) => key.toLowerCase() === platform || key.toLowerCase().includes(platform)
-          );
+            // Check if the platform exists in linktree (case-insensitive)
+            const hasPlatform = Object.keys(linktree).some(
+              (key) =>
+                key.toLowerCase() === platform ||
+                key.toLowerCase().includes(platform),
+            );
 
-          return hasPlatform && linktree[Object.keys(linktree).find(
-            (key) => key.toLowerCase() === platform || key.toLowerCase().includes(platform)
-          )];
-        } catch {
-          return false;
-        }
-      }).slice(0, limit);
+            return (
+              hasPlatform &&
+              linktree[
+                Object.keys(linktree).find(
+                  (key) =>
+                    key.toLowerCase() === platform ||
+                    key.toLowerCase().includes(platform),
+                )
+              ]
+            );
+          } catch {
+            return false;
+          }
+        })
+        .slice(0, limit);
 
       if (matchingProfiles.length > 0) {
         return await this.formatBuildersAsMarkdown(
           matchingProfiles,
           `builders with ${platform}`,
-          limit
+          limit,
         );
       }
 
@@ -1189,7 +1296,10 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
       });
     } catch (error) {
       console.error("[searchBySocial] Error:", error);
-      return JSON.stringify({ type: "error", message: "Failed to search by social platform. Please try again." });
+      return JSON.stringify({
+        type: "error",
+        message: "Failed to search by social platform. Please try again.",
+      });
     }
   }
 
@@ -1201,7 +1311,9 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
     matchAll?: boolean;
     limit?: number;
   }): Promise<string> {
-    const tags = params.tags.map((t) => t.toLowerCase().trim()).filter((t) => t.length > 0);
+    const tags = params.tags
+      .map((t) => t.toLowerCase().trim())
+      .filter((t) => t.length > 0);
     const matchAll = params.matchAll || false;
     const limit = Math.min(params.limit || 20, 100);
 
@@ -1210,7 +1322,9 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
     }
 
     try {
-      console.log(`[searchByTags] Searching for tags: ${tags.join(", ")} (matchAll: ${matchAll})`);
+      console.log(
+        `[searchByTags] Searching for tags: ${tags.join(", ")} (matchAll: ${matchAll})`,
+      );
 
       // Get all profiles and check their tags
       const profiles = await this.db
@@ -1226,34 +1340,42 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
         .limit(1000); // Get a larger batch for tag matching
 
       // Filter profiles that match the tag criteria
-      const matchingProfiles = profiles.filter((profile) => {
-        try {
-          const profileData = JSON.parse(profile.profileData);
-          const profileTags = profileData?.tags || {};
-          const profileTagKeys = Object.keys(profileTags).map((t) => t.toLowerCase());
+      const matchingProfiles = profiles
+        .filter((profile) => {
+          try {
+            const profileData = JSON.parse(profile.profileData);
+            const profileTags = profileData?.tags || {};
+            const profileTagKeys = Object.keys(profileTags).map((t) =>
+              t.toLowerCase(),
+            );
 
-          if (matchAll) {
-            // Must have ALL the specified tags
-            return tags.every((tag) => profileTagKeys.some(
-              (pt) => pt.includes(tag) || tag.includes(pt)
-            ));
-          } else {
-            // Must have AT LEAST ONE of the specified tags
-            return tags.some((tag) => profileTagKeys.some(
-              (pt) => pt.includes(tag) || tag.includes(pt)
-            ));
+            if (matchAll) {
+              // Must have ALL the specified tags
+              return tags.every((tag) =>
+                profileTagKeys.some(
+                  (pt) => pt.includes(tag) || tag.includes(pt),
+                ),
+              );
+            } else {
+              // Must have AT LEAST ONE of the specified tags
+              return tags.some((tag) =>
+                profileTagKeys.some(
+                  (pt) => pt.includes(tag) || tag.includes(pt),
+                ),
+              );
+            }
+          } catch {
+            return false;
           }
-        } catch {
-          return false;
-        }
-      }).slice(0, limit);
+        })
+        .slice(0, limit);
 
       if (matchingProfiles.length > 0) {
         const matchType = matchAll ? "all of" : "any of";
         return await this.formatBuildersAsMarkdown(
           matchingProfiles,
           `builders with ${matchType}: ${tags.join(", ")}`,
-          limit
+          limit,
         );
       }
 
@@ -1263,7 +1385,10 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
       });
     } catch (error) {
       console.error("[searchByTags] Error:", error);
-      return JSON.stringify({ type: "error", message: "Failed to search by tags. Please try again." });
+      return JSON.stringify({
+        type: "error",
+        message: "Failed to search by tags. Please try again.",
+      });
     }
   }
 
@@ -1280,7 +1405,7 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
       nftAvatarUrl: string | null;
     }>,
     queryTitle: string,
-    limit: number
+    limit: number,
   ): Promise<string> {
     const builders = await Promise.all(
       profiles.map(async (profile) => {
@@ -1295,19 +1420,20 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
           if (holderData.contractId === "ascendant.nearlegion.near") {
             role = "Ascendant";
             roleEmoji = "🔥";
-          }
-          else if (holderData.contractId === "initiate.nearlegion.near") {
+          } else if (holderData.contractId === "initiate.nearlegion.near") {
             role = "Initiate";
             roleEmoji = "⚡";
-          }
-          else {
+          } else {
             role = "Holder";
             roleEmoji = "💎";
           }
         }
 
         // Use NFT avatar if available
-        const avatar = profile.nftAvatarUrl || profile.image || profileData?.image?.url ||
+        const avatar =
+          profile.nftAvatarUrl ||
+          profile.image ||
+          profileData?.image?.url ||
           (profileData?.image?.ipfs_cid
             ? `https://ipfs.near.social/ipfs/${profileData.image.ipfs_cid}`
             : `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile.accountId}`);
@@ -1320,33 +1446,54 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
         const socialLinks: string[] = [];
 
         // Build social links only if they're non-empty strings
-        if (linktree.github && typeof linktree.github === 'string' && linktree.github.trim()) {
+        if (
+          linktree.github &&
+          typeof linktree.github === "string" &&
+          linktree.github.trim()
+        ) {
           socialLinks.push(`[GitHub](https://github.com/${linktree.github})`);
         }
-        if (linktree.twitter && typeof linktree.twitter === 'string' && linktree.twitter.trim()) {
-          socialLinks.push(`[Twitter](https://twitter.com/${linktree.twitter})`);
+        if (
+          linktree.twitter &&
+          typeof linktree.twitter === "string" &&
+          linktree.twitter.trim()
+        ) {
+          socialLinks.push(
+            `[Twitter](https://twitter.com/${linktree.twitter})`,
+          );
         }
-        if (linktree.website && typeof linktree.website === 'string' && linktree.website.trim()) {
-          const url = linktree.website.startsWith('http') ? linktree.website : `https://${linktree.website}`;
+        if (
+          linktree.website &&
+          typeof linktree.website === "string" &&
+          linktree.website.trim()
+        ) {
+          const url = linktree.website.startsWith("http")
+            ? linktree.website
+            : `https://${linktree.website}`;
           socialLinks.push(`[Website](${url})`);
         }
-        if (linktree.telegram && typeof linktree.telegram === 'string' && linktree.telegram.trim()) {
+        if (
+          linktree.telegram &&
+          typeof linktree.telegram === "string" &&
+          linktree.telegram.trim()
+        ) {
           socialLinks.push(`[Telegram](https://t.me/${linktree.telegram})`);
         }
 
         // Add any other social platforms
         Object.entries(linktree).forEach(([platform, url]) => {
           if (
-            platform !== 'github' &&
-            platform !== 'twitter' &&
-            platform !== 'website' &&
-            platform !== 'telegram' &&
+            platform !== "github" &&
+            platform !== "twitter" &&
+            platform !== "website" &&
+            platform !== "telegram" &&
             url &&
-            typeof url === 'string' &&
+            typeof url === "string" &&
             url.trim()
           ) {
-            const platformName = platform.charAt(0).toUpperCase() + platform.slice(1);
-            const finalUrl = url.startsWith('http') ? url : `https://${url}`;
+            const platformName =
+              platform.charAt(0).toUpperCase() + platform.slice(1);
+            const finalUrl = url.startsWith("http") ? url : `https://${url}`;
             socialLinks.push(`[${platformName}](${finalUrl})`);
           }
         });
@@ -1371,7 +1518,7 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
         }
 
         if (tags.length > 0) {
-          markdown += `**Interests:** ${tags.map(t => `\`${t}\``).join(", ")}\n\n`;
+          markdown += `**Interests:** ${tags.map((t) => `\`${t}\``).join(", ")}\n\n`;
         }
 
         if (socialLinks.length > 0) {
@@ -1379,16 +1526,21 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
         }
 
         return markdown;
-      })
+      }),
     );
 
-    return `Found ${builders.length} builder${builders.length === 1 ? '' : 's'} matching "${queryTitle}":\n\n` + builders.join("\n\n---\n\n");
+    return (
+      `Found ${builders.length} builder${builders.length === 1 ? "" : "s"} matching "${queryTitle}":\n\n` +
+      builders.join("\n\n---\n\n")
+    );
   }
 
   /**
    * Get detailed builder profile - Returns markdown
    */
-  private async getBuilderProfile(params: { accountId: string }): Promise<string> {
+  private async getBuilderProfile(params: {
+    accountId: string;
+  }): Promise<string> {
     try {
       const profile = await this.db.query.nearSocialProfiles.findFirst({
         where: eq(schema.nearSocialProfiles.accountId, params.accountId),
@@ -1413,8 +1565,7 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
           role = "Ascendant";
           roleEmoji = "🔥";
           isLegion = true;
-        }
-        else if (h.contractId === "initiate.nearlegion.near") {
+        } else if (h.contractId === "initiate.nearlegion.near") {
           isInitiate = true;
         }
       }
@@ -1422,14 +1573,16 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
       if (isInitiate && !isLegion) {
         role = "Initiate";
         roleEmoji = "⚡";
-      }
-      else if (!isLegion && !isInitiate && holdings.length > 0) {
+      } else if (!isLegion && !isInitiate && holdings.length > 0) {
         role = "Holder";
         roleEmoji = "💎";
       }
 
       // Use NFT avatar if available
-      const avatar = profile.nftAvatarUrl || profile.image || profileData?.image?.url ||
+      const avatar =
+        profile.nftAvatarUrl ||
+        profile.image ||
+        profileData?.image?.url ||
         (profileData?.image?.ipfs_cid
           ? `https://ipfs.near.social/ipfs/${profileData.image.ipfs_cid}`
           : `https://api.dicebear.com/7.x/avataaars/svg?seed=${params.accountId}`);
@@ -1451,38 +1604,57 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
       }
 
       if (tags.length > 0) {
-        markdown += `**Interests:** ${tags.map(t => `\`${t}\``).join(", ")}\n\n`;
+        markdown += `**Interests:** ${tags.map((t) => `\`${t}\``).join(", ")}\n\n`;
       }
 
       // Safely build social links
       const socialLinks: string[] = [];
-      if (linktree.github && typeof linktree.github === 'string' && linktree.github.trim()) {
+      if (
+        linktree.github &&
+        typeof linktree.github === "string" &&
+        linktree.github.trim()
+      ) {
         socialLinks.push(`[GitHub](https://github.com/${linktree.github})`);
       }
-      if (linktree.twitter && typeof linktree.twitter === 'string' && linktree.twitter.trim()) {
+      if (
+        linktree.twitter &&
+        typeof linktree.twitter === "string" &&
+        linktree.twitter.trim()
+      ) {
         socialLinks.push(`[Twitter](https://twitter.com/${linktree.twitter})`);
       }
-      if (linktree.website && typeof linktree.website === 'string' && linktree.website.trim()) {
-        const url = linktree.website.startsWith('http') ? linktree.website : `https://${linktree.website}`;
+      if (
+        linktree.website &&
+        typeof linktree.website === "string" &&
+        linktree.website.trim()
+      ) {
+        const url = linktree.website.startsWith("http")
+          ? linktree.website
+          : `https://${linktree.website}`;
         socialLinks.push(`[Website](${url})`);
       }
-      if (linktree.telegram && typeof linktree.telegram === 'string' && linktree.telegram.trim()) {
+      if (
+        linktree.telegram &&
+        typeof linktree.telegram === "string" &&
+        linktree.telegram.trim()
+      ) {
         socialLinks.push(`[Telegram](https://t.me/${linktree.telegram})`);
       }
 
       // Add any other social platforms
       Object.entries(linktree).forEach(([platform, url]) => {
         if (
-          platform !== 'github' &&
-          platform !== 'twitter' &&
-          platform !== 'website' &&
-          platform !== 'telegram' &&
+          platform !== "github" &&
+          platform !== "twitter" &&
+          platform !== "website" &&
+          platform !== "telegram" &&
           url &&
-          typeof url === 'string' &&
+          typeof url === "string" &&
           url.trim()
         ) {
-          const platformName = platform.charAt(0).toUpperCase() + platform.slice(1);
-          const finalUrl = url.startsWith('http') ? url : `https://${url}`;
+          const platformName =
+            platform.charAt(0).toUpperCase() + platform.slice(1);
+          const finalUrl = url.startsWith("http") ? url : `https://${url}`;
           socialLinks.push(`[${platformName}](${finalUrl})`);
         }
       });
@@ -1530,7 +1702,11 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
       }
 
       // Filter by role if specified
-      const filteredAccounts: Array<{ accountId: string; role: string; roleEmoji: string }> = [];
+      const filteredAccounts: Array<{
+        accountId: string;
+        role: string;
+        roleEmoji: string;
+      }> = [];
 
       for (const [accountId, { contracts }] of accountMap) {
         let role = "Holder";
@@ -1538,8 +1714,7 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
         if (contracts.includes("ascendant.nearlegion.near")) {
           role = "Ascendant";
           roleEmoji = "🔥";
-        }
-        else if (contracts.includes("initiate.nearlegion.near")) {
+        } else if (contracts.includes("initiate.nearlegion.near")) {
           role = "Initiate";
           roleEmoji = "⚡";
         }
@@ -1557,33 +1732,40 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
 
       // Fetch profiles for filtered accounts and build markdown
       const builders = await Promise.all(
-        filteredAccounts.slice(0, limit).map(async ({ accountId, role, roleEmoji }) => {
-          const profile = await this.db.query.nearSocialProfiles.findFirst({
-            where: eq(schema.nearSocialProfiles.accountId, accountId),
-          });
+        filteredAccounts
+          .slice(0, limit)
+          .map(async ({ accountId, role, roleEmoji }) => {
+            const profile = await this.db.query.nearSocialProfiles.findFirst({
+              where: eq(schema.nearSocialProfiles.accountId, accountId),
+            });
 
-          const profileData = profile?.profileData ? JSON.parse(profile.profileData) : null;
-          const displayName = profile?.name || accountId.split(".")[0];
-          const tags = profileData?.tags ? Object.keys(profileData.tags) : [];
-          const linktree = profileData?.linktree || {};
+            const profileData = profile?.profileData
+              ? JSON.parse(profile.profileData)
+              : null;
+            const displayName = profile?.name || accountId.split(".")[0];
+            const tags = profileData?.tags ? Object.keys(profileData.tags) : [];
+            const linktree = profileData?.linktree || {};
 
-          // Use NFT avatar if available
-          const avatar = profile?.nftAvatarUrl || profile?.image || profileData?.image?.url ||
-            (profileData?.image?.ipfs_cid
-              ? `https://ipfs.near.social/ipfs/${profileData.image.ipfs_cid}`
-              : `https://api.dicebear.com/7.x/avataaars/svg?seed=${accountId}`);
+            // Use NFT avatar if available
+            const avatar =
+              profile?.nftAvatarUrl ||
+              profile?.image ||
+              profileData?.image?.url ||
+              (profileData?.image?.ipfs_cid
+                ? `https://ipfs.near.social/ipfs/${profileData.image.ipfs_cid}`
+                : `https://api.dicebear.com/7.x/avataaars/svg?seed=${accountId}`);
 
-          return {
-            accountId,
-            displayName,
-            avatar,
-            role,
-            roleEmoji,
-            description: profile?.description || "",
-            tags,
-            socials: linktree,
-          };
-        })
+            return {
+              accountId,
+              displayName,
+              avatar,
+              role,
+              roleEmoji,
+              description: profile?.description || "",
+              tags,
+              socials: linktree,
+            };
+          }),
       );
 
       let markdown = `## Legion Members (${builders.length})\n\n`;
@@ -1598,38 +1780,63 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
         }
 
         if (builder.tags.length > 0) {
-          markdown += `**Interests:** ${builder.tags.map(t => `\`${t}\``).join(", ")}\n\n`;
+          markdown += `**Interests:** ${builder.tags.map((t) => `\`${t}\``).join(", ")}\n\n`;
         }
 
         // Safely build social links
         const socialLinks: string[] = [];
-        if (builder.socials.github && typeof builder.socials.github === 'string' && builder.socials.github.trim()) {
-          socialLinks.push(`[GitHub](https://github.com/${builder.socials.github})`);
+        if (
+          builder.socials.github &&
+          typeof builder.socials.github === "string" &&
+          builder.socials.github.trim()
+        ) {
+          socialLinks.push(
+            `[GitHub](https://github.com/${builder.socials.github})`,
+          );
         }
-        if (builder.socials.twitter && typeof builder.socials.twitter === 'string' && builder.socials.twitter.trim()) {
-          socialLinks.push(`[Twitter](https://twitter.com/${builder.socials.twitter})`);
+        if (
+          builder.socials.twitter &&
+          typeof builder.socials.twitter === "string" &&
+          builder.socials.twitter.trim()
+        ) {
+          socialLinks.push(
+            `[Twitter](https://twitter.com/${builder.socials.twitter})`,
+          );
         }
-        if (builder.socials.website && typeof builder.socials.website === 'string' && builder.socials.website.trim()) {
-          const url = builder.socials.website.startsWith('http') ? builder.socials.website : `https://${builder.socials.website}`;
+        if (
+          builder.socials.website &&
+          typeof builder.socials.website === "string" &&
+          builder.socials.website.trim()
+        ) {
+          const url = builder.socials.website.startsWith("http")
+            ? builder.socials.website
+            : `https://${builder.socials.website}`;
           socialLinks.push(`[Website](${url})`);
         }
-        if (builder.socials.telegram && typeof builder.socials.telegram === 'string' && builder.socials.telegram.trim()) {
-          socialLinks.push(`[Telegram](https://t.me/${builder.socials.telegram})`);
+        if (
+          builder.socials.telegram &&
+          typeof builder.socials.telegram === "string" &&
+          builder.socials.telegram.trim()
+        ) {
+          socialLinks.push(
+            `[Telegram](https://t.me/${builder.socials.telegram})`,
+          );
         }
 
         // Add any other social platforms
         Object.entries(builder.socials).forEach(([platform, url]) => {
           if (
-            platform !== 'github' &&
-            platform !== 'twitter' &&
-            platform !== 'website' &&
-            platform !== 'telegram' &&
+            platform !== "github" &&
+            platform !== "twitter" &&
+            platform !== "website" &&
+            platform !== "telegram" &&
             url &&
-            typeof url === 'string' &&
+            typeof url === "string" &&
             url.trim()
           ) {
-            const platformName = platform.charAt(0).toUpperCase() + platform.slice(1);
-            const finalUrl = url.startsWith('http') ? url : `https://${url}`;
+            const platformName =
+              platform.charAt(0).toUpperCase() + platform.slice(1);
+            const finalUrl = url.startsWith("http") ? url : `https://${url}`;
             socialLinks.push(`[${platformName}](${finalUrl})`);
           }
         });
@@ -1651,7 +1858,10 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
   /**
    * Get holders of a specific NFT contract
    */
-  private async getNftHolders(params: { contractId: string; limit?: number }): Promise<string> {
+  private async getNftHolders(params: {
+    contractId: string;
+    limit?: number;
+  }): Promise<string> {
     const limit = Math.min(params.limit || 20, 100);
 
     try {
@@ -1663,7 +1873,7 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
       if (holders.length === 0) {
         return JSON.stringify({
           type: "error",
-          message: `No holders found for contract ${params.contractId}`
+          message: `No holders found for contract ${params.contractId}`,
         });
       }
 
@@ -1674,7 +1884,9 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
             where: eq(schema.nearSocialProfiles.accountId, holder.accountId),
           });
 
-          const profileData = profile?.profileData ? JSON.parse(profile.profileData) : null;
+          const profileData = profile?.profileData
+            ? JSON.parse(profile.profileData)
+            : null;
           const displayName = profile?.name || holder.accountId.split(".")[0];
           const tags = profileData?.tags ? Object.keys(profileData.tags) : [];
 
@@ -1686,7 +1898,7 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
             description: profile?.description || "",
             tags,
           };
-        })
+        }),
       );
 
       return JSON.stringify({
@@ -1697,7 +1909,10 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
       });
     } catch (error) {
       console.error("[getNftHolders] Error:", error);
-      return JSON.stringify({ type: "error", message: "Failed to fetch NFT holders. Please try again." });
+      return JSON.stringify({
+        type: "error",
+        message: "Failed to fetch NFT holders. Please try again.",
+      });
     }
   }
 
@@ -1731,6 +1946,204 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
   }
 
   /**
+   * Get user projects from FastData
+   */
+  private async getUserProjects(params: {
+    accountId: string;
+    status?: string;
+  }): Promise<string> {
+    try {
+      const { accountId, status = "all" } = params;
+
+      console.log(
+        `[getUserProjects] Fetching projects for ${accountId} with status ${status}`,
+      );
+
+      // Query FastData API
+      const apiUrl = new URL("https://fastdata.up.railway.app/v1/kv/query");
+      apiUrl.searchParams.set("accountId", accountId);
+      apiUrl.searchParams.set("contractId", "contextual.near");
+      apiUrl.searchParams.set("key_prefix", "projects/");
+      apiUrl.searchParams.set("value_format", "json");
+
+      const response = await fetch(apiUrl.toString(), {
+        headers: { "User-Agent": "near-agent-worker/1.0" },
+      });
+
+      if (!response.ok) {
+        console.error(
+          "[getUserProjects] FastData API failed:",
+          response.status,
+        );
+        return `Failed to fetch projects for @${accountId}. Please try again.`;
+      }
+
+      const data = await response.json();
+
+      if (!data.data || !Array.isArray(data.data) || data.data.length === 0) {
+        return `**@${accountId}** doesn't have any projects yet.`;
+      }
+
+      // Group by project ID
+      const projectsMap = new Map<string, Record<string, any>>();
+
+      for (const entry of data.data) {
+        const key = entry.key;
+        if (!key.startsWith("projects/")) continue;
+
+        const parts = key.split("/");
+        if (parts.length < 3) continue;
+
+        const projectId = parts[1];
+        if (!projectsMap.has(projectId)) {
+          projectsMap.set(projectId, {});
+        }
+
+        const field = parts.slice(2).join("/");
+        let value = entry.value;
+
+        // Try to parse JSON values
+        try {
+          if (
+            value.startsWith('"') ||
+            value.startsWith("{") ||
+            value.startsWith("[")
+          ) {
+            value = JSON.parse(value);
+          }
+        } catch {
+          // Keep as string if JSON parse fails
+        }
+
+        projectsMap.get(projectId)![field] = value;
+      }
+
+      // Build projects array
+      const projects: Array<{
+        id: string;
+        name: string;
+        description: string | null;
+        status: string;
+        coverImageUrl: string | null;
+        githubLinks: Array<{ url: string; description?: string }> | null;
+        tags: Array<{ name: string; target?: string }> | null;
+        createdAt: string;
+        updatedAt: string;
+      }> = [];
+
+      for (const [projectId, fields] of projectsMap.entries()) {
+        const name = fields.name;
+        const description = fields.description || null;
+        const projectStatus = fields.status;
+        const createdAt = fields.created;
+        const updatedAt = fields.updated;
+        const coverImageUrl =
+          fields.coverImageUrl !== undefined ? fields.coverImageUrl : null;
+
+        // Parse JSON fields
+        let githubLinks = null;
+        let tags = null;
+        try {
+          if (fields.githubLinks) {
+            githubLinks =
+              typeof fields.githubLinks === "string"
+                ? JSON.parse(fields.githubLinks)
+                : fields.githubLinks;
+          }
+          if (fields.tags) {
+            tags =
+              typeof fields.tags === "string"
+                ? JSON.parse(fields.tags)
+                : fields.tags;
+          }
+        } catch (e) {
+          console.warn(
+            `[getUserProjects] Failed to parse JSON for project ${projectId}:`,
+            e,
+          );
+        }
+
+        // Only include valid projects
+        if (name && projectStatus && createdAt && updatedAt) {
+          projects.push({
+            id: projectId,
+            name: String(name),
+            description: description !== null ? String(description) : null,
+            status: String(projectStatus),
+            coverImageUrl:
+              coverImageUrl !== null ? String(coverImageUrl) : null,
+            githubLinks,
+            tags,
+            createdAt: String(createdAt),
+            updatedAt: String(updatedAt),
+          });
+        }
+      }
+
+      // Filter by status if specified
+      let filteredProjects = projects;
+      if (status !== "all") {
+        filteredProjects = projects.filter((p) => p.status === status);
+      }
+
+      if (filteredProjects.length === 0) {
+        return `**@${accountId}** doesn't have any ${status} projects.`;
+      }
+
+      // Format as markdown
+      let markdown = `## **@${accountId}'s Projects**\n\n`;
+      markdown += `Found ${filteredProjects.length} project${filteredProjects.length === 1 ? "" : "s"}:\n\n`;
+
+      for (const project of filteredProjects) {
+        markdown += `### **${project.name}**\n\n`;
+
+        if (project.coverImageUrl) {
+          markdown += `![${project.name}](${project.coverImageUrl})\n\n`;
+        }
+
+        if (project.description) {
+          markdown += `${project.description}\n\n`;
+        }
+
+        // Status badge
+        const statusEmoji: Record<string, string> = {
+          active: "🟢",
+          completed: "✅",
+          archived: "📦",
+        };
+        markdown += `**Status:** ${statusEmoji[project.status] || ""} ${project.status}\n\n`;
+
+        // GitHub links
+        if (project.githubLinks && project.githubLinks.length > 0) {
+          markdown += `**GitHub Links:**\n`;
+          for (const link of project.githubLinks) {
+            const desc = link.description ? ` (${link.description})` : "";
+            markdown += `- [${desc || link.url}](${link.url})\n`;
+          }
+          markdown += `\n`;
+        }
+
+        // Tags
+        if (project.tags && project.tags.length > 0) {
+          markdown += `**Tags:** ${project.tags
+            .map((t) => {
+              const target = t.target ? ` → ${t.target}` : "";
+              return `\`${t.name}${target}\``;
+            })
+            .join(", ")}\n\n`;
+        }
+
+        markdown += `---\n\n`;
+      }
+
+      return markdown;
+    } catch (error) {
+      console.error("[getUserProjects] Error:", error);
+      return `Failed to fetch projects for @${params.accountId}. Please try again.`;
+    }
+  }
+
+  /**
    * Execute a tool call and return the result
    */
   async executeToolCall(toolCall: ToolCall): Promise<string> {
@@ -1743,26 +2156,39 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
         return this.searchBuilders(args as { query: string; limit?: number });
 
       case "search_by_social":
-        return this.searchBySocial(args as { platform: string; limit?: number });
+        return this.searchBySocial(
+          args as { platform: string; limit?: number },
+        );
 
       case "search_by_tags":
-        return this.searchByTags(args as { tags: string[]; matchAll?: boolean; limit?: number });
+        return this.searchByTags(
+          args as { tags: string[]; matchAll?: boolean; limit?: number },
+        );
 
       case "get_nft_holders":
-        return this.getNftHolders(args as { contractId: string; limit?: number });
+        return this.getNftHolders(
+          args as { contractId: string; limit?: number },
+        );
 
       case "get_builder_profile":
         return this.getBuilderProfile(args as { accountId: string });
 
       case "list_legion_members":
-        return this.listLegionMembers(args as {
-          role?: string;
-          limit?: number;
-          offset?: number;
-        });
+        return this.listLegionMembers(
+          args as {
+            role?: string;
+            limit?: number;
+            offset?: number;
+          },
+        );
 
       case "get_member_rank":
         return this.getMemberRank(args as { accountId: string });
+
+      case "get_user_projects":
+        return this.getUserProjects(
+          args as { accountId: string; status?: string },
+        );
 
       default:
         return JSON.stringify({ error: `Unknown tool: ${name}` });
@@ -1776,7 +2202,7 @@ Your current functionality: Standard helpful responses (up to 1000 tokens).`;
 export function createAgentService(
   db: Database,
   config: { apiKey?: string; baseUrl: string; model: string },
-  nearService: NearService | null
+  nearService: NearService | null,
 ): AgentService | null {
   if (!config.apiKey) {
     console.log("[AgentService] API key not provided - service unavailable");
@@ -1790,6 +2216,6 @@ export function createAgentService(
       baseUrl: config.baseUrl,
       model: config.model,
     },
-    nearService
+    nearService,
   );
 }

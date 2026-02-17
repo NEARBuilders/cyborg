@@ -10,6 +10,9 @@ export interface ProjectData {
   name: string;
   description?: string;
   status: "active" | "completed" | "archived";
+  coverImageUrl?: string | null;
+  githubLinks?: Array<{ url: string; description?: string }> | null;
+  tags?: Array<{ name: string; target?: string }> | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -88,8 +91,11 @@ export class ProjectsService {
     prefix: string,
     retries = 3,
   ): Promise<Record<string, string | null>> {
+    // Strip :mainnet or :testnet suffix if present
+    const cleanAccountId = accountId.split(":")[0];
+
     console.log(
-      `[ProjectsService] Querying contract state for ${accountId} with prefix ${prefix}`,
+      `[ProjectsService] Querying contract state for ${cleanAccountId} with prefix ${prefix}`,
     );
 
     for (let attempt = 0; attempt < retries; attempt++) {
@@ -197,6 +203,35 @@ export class ProjectsService {
     const status = state[`${prefix}/status`];
     const createdAt = state[`${prefix}/created`];
     const updatedAt = state[`${prefix}/updated`];
+    const coverImageUrl = state[`${prefix}/coverImageUrl`];
+
+    // Parse JSON fields
+    let githubLinks = null;
+    let tags = null;
+
+    try {
+      const githubLinksRaw = state[`${prefix}/githubLinks`];
+      if (githubLinksRaw) {
+        githubLinks = JSON.parse(githubLinksRaw);
+      }
+    } catch (e) {
+      console.warn(
+        `[ProjectsService] Failed to parse githubLinks for ${projectId}:`,
+        e,
+      );
+    }
+
+    try {
+      const tagsRaw = state[`${prefix}/tags`];
+      if (tagsRaw) {
+        tags = JSON.parse(tagsRaw);
+      }
+    } catch (e) {
+      console.warn(
+        `[ProjectsService] Failed to parse tags for ${projectId}:`,
+        e,
+      );
+    }
 
     if (!name || !status || !createdAt || !updatedAt) {
       return null;
@@ -207,6 +242,9 @@ export class ProjectsService {
       name,
       description: description || undefined,
       status: status as "active" | "completed" | "archived",
+      coverImageUrl: coverImageUrl || null,
+      githubLinks,
+      tags,
       createdAt,
       updatedAt,
     };

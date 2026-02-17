@@ -1,0 +1,9 @@
+This infrastructure allows users to store and retrieve key-value data on NEAR without having to deposit NEAR for storage, only transaction fees. Instead of storing data in contract state, FastKV indexes the arguments of prefixed function calls (e.g., __fastdata_kv) directly from the transaction ledger. This works for any contract, even one without that method, because NEAR logs function call arguments regardless of whether the call succeeds. We provide contextual.near as a default receiver with a no-op method. Each entry is keyed by (predecessor_account_id, current_account_id, key), supports overwrites, and retains full version history. The FastKV API exposes this data through REST endpoints for lookups, prefix scans, and history queries.
+
+near.garden API server: https://github.com/MultiAgency/fastkv-server
+
+FastData indexer: https://github.com/MultiAgency/fastdata-indexer
+
+near.directory frontend: https://github.com/MultiAgency/fastdata-social
+
+No-op FastKV contract: https://github.com/MultiAgency/fd_contract

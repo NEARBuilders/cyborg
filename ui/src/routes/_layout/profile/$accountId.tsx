@@ -3,11 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useRouterState } from "@tanstack/react-router";
 import { Social } from "near-social-js";
 import { toast } from "sonner";
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-} from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Markdown } from "@/components/ui/markdown";
@@ -34,10 +30,7 @@ import { Near } from "near-kit";
 import { FollowButton } from "@/components/ui/follow-button";
 import { LegionFollowButton } from "@/components/ui/legion-follow-button";
 import { SocialStats } from "@/components/ui/social-stats";
-import {
-  useLegionFollowers,
-  useLegionFollowing,
-} from "@/hooks/useLegionGraph";
+import { useLegionFollowers, useLegionFollowing } from "@/hooks/useLegionGraph";
 import {
   useProjects,
   useDeleteProject,
@@ -80,7 +73,9 @@ export const Route = createFileRoute("/_layout/profile/$accountId")({
   validateSearch: (search: Record<string, unknown>) => {
     return {
       from: (search.from as string | undefined) ?? undefined,
-      tab: (search.tab as "followers" | "following" | "projects" | undefined) ?? undefined,
+      tab:
+        (search.tab as "followers" | "following" | "projects" | undefined) ??
+        undefined,
     };
   },
   loader: async ({ params }) => {
@@ -164,7 +159,9 @@ function ProfilePage() {
   const showBackToChat = search.from === "chat";
 
   // Map URL tab to socialTab state
-  const urlTabToSocialTab = (tab: typeof search.tab): "none" | "followers" | "following" | "projects" => {
+  const urlTabToSocialTab = (
+    tab: typeof search.tab,
+  ): "none" | "followers" | "following" | "projects" => {
     if (tab === "followers") return "followers";
     if (tab === "following") return "following";
     if (tab === "projects") return "projects";
@@ -172,20 +169,23 @@ function ProfilePage() {
   };
 
   // Social tab state (followers/following/projects - social media style)
-  const [socialTab, setSocialTab] = useState<"none" | "followers" | "following" | "projects">(() =>
-    urlTabToSocialTab(search.tab)
-  );
+  const [socialTab, setSocialTab] = useState<
+    "none" | "followers" | "following" | "projects"
+  >(() => urlTabToSocialTab(search.tab));
 
   // Update URL when socialTab changes
-  const handleSetSocialTab = useCallback((tab: "none" | "followers" | "following" | "projects") => {
-    setSocialTab(tab);
-    // Update URL search params
-    if (tab === "none") {
-      navigate({ search: { from: search.from } });
-    } else {
-      navigate({ search: { ...search, tab: tab } });
-    }
-  }, [navigate, search.from, search.tab]);
+  const handleSetSocialTab = useCallback(
+    (tab: "none" | "followers" | "following" | "projects") => {
+      setSocialTab(tab);
+      // Update URL search params
+      if (tab === "none") {
+        navigate({ search: { from: search.from } });
+      } else {
+        navigate({ search: { ...search, tab: tab } });
+      }
+    },
+    [navigate, search.from, search.tab],
+  );
 
   // Sync socialTab with URL changes
   useEffect(() => {
@@ -222,7 +222,11 @@ function ProfilePage() {
       normalizeAccountId(currentAccountId) === normalizeAccountId(accountId));
 
   // Fetch projects for this account using useProjects hook (same as /projects page)
-  const { data: projectsData, isLoading: isLoadingProjects, error: projectsError } = useProjects(undefined, 50, 0, accountId);
+  const {
+    data: projectsData,
+    isLoading: isLoadingProjects,
+    error: projectsError,
+  } = useProjects(undefined, 50, 0, accountId);
   const projects = projectsData?.projects ?? [];
 
   const [isEditing, setIsEditing] = useState(false);
@@ -240,7 +244,9 @@ function ProfilePage() {
   const [isSavingTags, setIsSavingTags] = useState(false);
 
   // Status filter for projects (when viewing profile's projects tab)
-  const [projectStatusFilter, setProjectStatusFilter] = useState<"all" | "active" | "completed" | "archived">("all");
+  const [projectStatusFilter, setProjectStatusFilter] = useState<
+    "all" | "active" | "completed" | "archived"
+  >("all");
 
   // Reset social tab when navigating to different profile
   useEffect(() => {
@@ -332,26 +338,34 @@ function ProfilePage() {
   const canPoke = !!currentAccountId && !isOwnProfile;
 
   // Delete project mutation (for own profile only)
-  const { delete: deleteProject, isPending: isDeletingProject } = useDeleteProject();
+  const { delete: deleteProject, isPending: isDeletingProject } =
+    useDeleteProject();
 
   // Create project mutation (for own profile only)
-  const { create: createProject, isPending: isCreatingProject } = useCreateProject();
+  const { create: createProject, isPending: isCreatingProject } =
+    useCreateProject();
 
   // Update project mutation (for own profile only)
-  const { update: updateProject, isPending: isUpdatingProject } = useUpdateProject();
+  const { update: updateProject, isPending: isUpdatingProject } =
+    useUpdateProject();
 
   // Create project modal state
-  const [isCreateProjectModalOpen, setIsCreateProjectModalOpen] = useState(false);
+  const [isCreateProjectModalOpen, setIsCreateProjectModalOpen] =
+    useState(false);
   const [newProjectData, setNewProjectData] = useState<{
     name: string;
     description: string;
     coverImageUrl: string;
     status: "active" | "completed" | "archived";
+    githubLinks: Array<{ url: string; description?: string }>;
+    tags: Array<{ name: string; target?: string }>;
   }>({
     name: "",
     description: "",
     coverImageUrl: "",
     status: "active",
+    githubLinks: [],
+    tags: [],
   });
 
   // Edit project modal state
@@ -362,11 +376,15 @@ function ProfilePage() {
     description: string;
     coverImageUrl: string;
     status: "active" | "completed" | "archived";
+    githubLinks: Array<{ url: string; description?: string }>;
+    tags: Array<{ name: string; target?: string }>;
   }>({
     name: "",
     description: "",
     coverImageUrl: "",
     status: "active",
+    githubLinks: [],
+    tags: [],
   });
 
   return (
@@ -539,21 +557,35 @@ function ProfilePage() {
                 statusFilter={projectStatusFilter}
                 onStatusFilterChange={setProjectStatusFilter}
                 isOwnProfile={isOwnProfile}
-                onDeleteProject={isOwnProfile ? async (projectId) => {
-                  if (confirm("Are you sure you want to delete this project?")) {
-                    await deleteProject(projectId);
-                  }
-                } : undefined}
-                onEditProject={isOwnProfile ? (project) => {
-                  setEditingProject(project);
-                  setEditProjectData({
-                    name: project.name,
-                    description: project.description || "",
-                    coverImageUrl: project.coverImageUrl || "",
-                    status: project.status,
-                  });
-                  setIsEditProjectModalOpen(true);
-                } : undefined}
+                onDeleteProject={
+                  isOwnProfile
+                    ? async (projectId) => {
+                        if (
+                          confirm(
+                            "Are you sure you want to delete this project?",
+                          )
+                        ) {
+                          await deleteProject(projectId);
+                        }
+                      }
+                    : undefined
+                }
+                onEditProject={
+                  isOwnProfile
+                    ? (project) => {
+                        setEditingProject(project);
+                        setEditProjectData({
+                          name: project.name,
+                          description: project.description || "",
+                          coverImageUrl: project.coverImageUrl || "",
+                          status: project.status,
+                          githubLinks: project.githubLinks || [],
+                          tags: project.tags || [],
+                        });
+                        setIsEditProjectModalOpen(true);
+                      }
+                    : undefined
+                }
                 isCreatingProject={isCreatingProject}
                 onCreateProject={() => setIsCreateProjectModalOpen(true)}
                 accountId={accountId}
@@ -990,24 +1022,33 @@ function ProfilePage() {
         open={isCreateProjectModalOpen}
         onOpenChange={setIsCreateProjectModalOpen}
       >
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-hidden flex flex-col p-0">
+          <DialogHeader className="px-6 pt-6 pb-2">
             <DialogTitle>Create New Project</DialogTitle>
             <DialogDescription>
-              Add a new project to your profile. You'll need to approve a transaction to save it.
+              Add a new project to your profile. You'll need to approve a
+              transaction to save it.
             </DialogDescription>
           </DialogHeader>
           <form
+            id="create-project-form"
             onSubmit={(e) => {
               e.preventDefault();
               createProject(newProjectData, {
                 onSuccess: () => {
                   setIsCreateProjectModalOpen(false);
-                  setNewProjectData({ name: "", description: "", coverImageUrl: "", status: "active" });
+                  setNewProjectData({
+                    name: "",
+                    description: "",
+                    coverImageUrl: "",
+                    status: "active",
+                    githubLinks: [],
+                    tags: [],
+                  });
                 },
               });
             }}
-            className="space-y-4 pt-4"
+            className="space-y-3 px-6 overflow-y-auto flex-1"
           >
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">
@@ -1046,7 +1087,10 @@ function ProfilePage() {
                 type="url"
                 value={newProjectData.coverImageUrl}
                 onChange={(e) =>
-                  setNewProjectData({ ...newProjectData, coverImageUrl: e.target.value })
+                  setNewProjectData({
+                    ...newProjectData,
+                    coverImageUrl: e.target.value,
+                  })
                 }
                 placeholder="https://example.com/banner.png"
                 className="h-9"
@@ -1062,7 +1106,10 @@ function ProfilePage() {
                 onChange={(e) =>
                   setNewProjectData({
                     ...newProjectData,
-                    status: e.target.value as "active" | "completed" | "archived",
+                    status: e.target.value as
+                      | "active"
+                      | "completed"
+                      | "archived",
                   })
                 }
                 className="w-full h-9 px-3 py-1 text-sm bg-background border border-border/50 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
@@ -1073,24 +1120,177 @@ function ProfilePage() {
               </select>
             </div>
 
-            <div className="flex gap-3 pt-4">
-              <button
-                type="submit"
-                disabled={isCreatingProject || !newProjectData.name.trim()}
-                className="flex-1 h-9 px-6 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isCreatingProject ? "Creating..." : "Create Project"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsCreateProjectModalOpen(false)}
-                disabled={isCreatingProject}
-                className="h-9 px-6 border border-border/50 rounded-md text-sm font-medium hover:bg-muted/50 transition-colors disabled:opacity-50"
-              >
-                Cancel
-              </button>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">
+                GitHub Links
+              </label>
+              <div className="space-y-2">
+                {newProjectData.githubLinks.map((link, index) => (
+                  <div key={index} className="flex gap-2">
+                    <Input
+                      type="url"
+                      value={link.url}
+                      onChange={(e) => {
+                        const updated = [...newProjectData.githubLinks];
+                        updated[index].url = e.target.value;
+                        setNewProjectData({
+                          ...newProjectData,
+                          githubLinks: updated,
+                        });
+                      }}
+                      placeholder="https://github.com/user/repo"
+                      className="flex-1 h-9"
+                    />
+                    <Input
+                      type="text"
+                      value={link.description || ""}
+                      onChange={(e) => {
+                        const updated = [...newProjectData.githubLinks];
+                        updated[index].description = e.target.value;
+                        setNewProjectData({
+                          ...newProjectData,
+                          githubLinks: updated,
+                        });
+                      }}
+                      placeholder="Description (e.g., Frontend)"
+                      className="flex-1 h-9"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        const updated = newProjectData.githubLinks.filter(
+                          (_, i) => i !== index,
+                        );
+                        setNewProjectData({
+                          ...newProjectData,
+                          githubLinks: updated,
+                        });
+                      }}
+                      className="h-9 px-3"
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setNewProjectData({
+                      ...newProjectData,
+                      githubLinks: [
+                        ...newProjectData.githubLinks,
+                        { url: "", description: "" },
+                      ],
+                    })
+                  }
+                  className="w-full"
+                >
+                  + Add GitHub Link
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">
+                Tags
+              </label>
+              <div className="space-y-2">
+                {newProjectData.tags.map((tag, index) => (
+                  <div key={index} className="flex gap-2">
+                    <Input
+                      type="text"
+                      value={tag.name}
+                      onChange={(e) => {
+                        const updated = [...newProjectData.tags];
+                        updated[index].name = e.target.value;
+                        setNewProjectData({
+                          ...newProjectData,
+                          tags: updated,
+                        });
+                      }}
+                      placeholder="Tag name (e.g., React)"
+                      className="flex-1 h-9"
+                    />
+                    <Input
+                      type="text"
+                      value={tag.target || ""}
+                      onChange={(e) => {
+                        const updated = [...newProjectData.tags];
+                        updated[index].target = e.target.value;
+                        setNewProjectData({
+                          ...newProjectData,
+                          tags: updated,
+                        });
+                      }}
+                      placeholder="Target (e.g., frontend)"
+                      className="flex-1 h-9"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        const updated = newProjectData.tags.filter(
+                          (_, i) => i !== index,
+                        );
+                        setNewProjectData({
+                          ...newProjectData,
+                          tags: updated,
+                        });
+                      }}
+                      className="h-9 px-3"
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setNewProjectData({
+                      ...newProjectData,
+                      tags: [...newProjectData.tags, { name: "", target: "" }],
+                    })
+                  }
+                  className="w-full"
+                >
+                  + Add Tag
+                </Button>
+              </div>
             </div>
           </form>
+
+          <div className="flex gap-3 px-6 pb-6 pt-2 border-t border-border/50">
+            <button
+              type="submit"
+              form="create-project-form"
+              disabled={isCreatingProject || !newProjectData.name.trim()}
+              className="flex-1 h-10 px-6 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={(e) => {
+                e.preventDefault();
+                const form = document.getElementById(
+                  "create-project-form",
+                ) as HTMLFormElement;
+                if (form) form.requestSubmit();
+              }}
+            >
+              {isCreatingProject ? "Creating..." : "Create Project"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsCreateProjectModalOpen(false)}
+              disabled={isCreatingProject}
+              className="h-10 px-6 border border-border/50 rounded-md text-sm font-medium hover:bg-muted/50 transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -1099,17 +1299,24 @@ function ProfilePage() {
         open={isEditProjectModalOpen}
         onOpenChange={setIsEditProjectModalOpen}
       >
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-hidden flex flex-col p-0">
+          <DialogHeader className="px-6 pt-6 pb-2">
             <DialogTitle>Edit Project</DialogTitle>
             <DialogDescription>
-              Update project details. You'll need to approve a transaction to save changes.
+              Update project details. You'll need to approve a transaction to
+              save changes.
             </DialogDescription>
           </DialogHeader>
           <form
+            id="edit-project-form"
             onSubmit={(e) => {
               e.preventDefault();
               if (!editingProject) return;
+              console.log("[Edit Project Form] Submitting with data:", {
+                ...editProjectData,
+                coverImageUrlValue: editProjectData.coverImageUrl,
+                coverImageUrlType: typeof editProjectData.coverImageUrl,
+              });
               updateProject(
                 {
                   projectId: editingProject.id,
@@ -1118,6 +1325,8 @@ function ProfilePage() {
                     description: editProjectData.description,
                     status: editProjectData.status,
                     coverImageUrl: editProjectData.coverImageUrl,
+                    githubLinks: editProjectData.githubLinks,
+                    tags: editProjectData.tags,
                   },
                 },
                 {
@@ -1128,7 +1337,7 @@ function ProfilePage() {
                 },
               );
             }}
-            className="space-y-4 pt-4"
+            className="space-y-3 px-6 overflow-y-auto flex-1"
           >
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">
@@ -1137,7 +1346,10 @@ function ProfilePage() {
               <Input
                 value={editProjectData.name}
                 onChange={(e) =>
-                  setEditProjectData((prev) => ({ ...prev, name: e.target.value }))
+                  setEditProjectData((prev) => ({
+                    ...prev,
+                    name: e.target.value,
+                  }))
                 }
                 placeholder="My Awesome Project"
                 required
@@ -1152,7 +1364,10 @@ function ProfilePage() {
               <MarkdownEditor
                 value={editProjectData.description}
                 onChange={(value) =>
-                  setEditProjectData((prev) => ({ ...prev, description: value }))
+                  setEditProjectData((prev) => ({
+                    ...prev,
+                    description: value,
+                  }))
                 }
                 placeholder="Tell us about your project... Type / for commands"
                 rows={8}
@@ -1167,7 +1382,10 @@ function ProfilePage() {
                 type="url"
                 value={editProjectData.coverImageUrl}
                 onChange={(e) =>
-                  setEditProjectData((prev) => ({ ...prev, coverImageUrl: e.target.value }))
+                  setEditProjectData((prev) => ({
+                    ...prev,
+                    coverImageUrl: e.target.value,
+                  }))
                 }
                 placeholder="https://example.com/banner.png"
                 className="h-9"
@@ -1183,7 +1401,10 @@ function ProfilePage() {
                 onChange={(e) =>
                   setEditProjectData({
                     ...editProjectData,
-                    status: e.target.value as "active" | "completed" | "archived",
+                    status: e.target.value as
+                      | "active"
+                      | "completed"
+                      | "archived",
                   })
                 }
                 className="w-full h-9 px-3 py-1 text-sm bg-background border border-border/50 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
@@ -1194,24 +1415,177 @@ function ProfilePage() {
               </select>
             </div>
 
-            <div className="flex gap-3 pt-4">
-              <button
-                type="submit"
-                disabled={isUpdatingProject || !editProjectData.name.trim()}
-                className="flex-1 h-9 px-6 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isUpdatingProject ? "Saving..." : "Save Changes"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsEditProjectModalOpen(false)}
-                disabled={isUpdatingProject}
-                className="h-9 px-6 border border-border/50 rounded-md text-sm font-medium hover:bg-muted/50 transition-colors disabled:opacity-50"
-              >
-                Cancel
-              </button>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">
+                GitHub Links
+              </label>
+              <div className="space-y-2">
+                {editProjectData.githubLinks.map((link, index) => (
+                  <div key={index} className="flex gap-2">
+                    <Input
+                      type="url"
+                      value={link.url}
+                      onChange={(e) => {
+                        const updated = [...editProjectData.githubLinks];
+                        updated[index].url = e.target.value;
+                        setEditProjectData((prev) => ({
+                          ...prev,
+                          githubLinks: updated,
+                        }));
+                      }}
+                      placeholder="https://github.com/user/repo"
+                      className="flex-1 h-9"
+                    />
+                    <Input
+                      type="text"
+                      value={link.description || ""}
+                      onChange={(e) => {
+                        const updated = [...editProjectData.githubLinks];
+                        updated[index].description = e.target.value;
+                        setEditProjectData((prev) => ({
+                          ...prev,
+                          githubLinks: updated,
+                        }));
+                      }}
+                      placeholder="Description (e.g., Frontend)"
+                      className="flex-1 h-9"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        const updated = editProjectData.githubLinks.filter(
+                          (_, i) => i !== index,
+                        );
+                        setEditProjectData((prev) => ({
+                          ...prev,
+                          githubLinks: updated,
+                        }));
+                      }}
+                      className="h-9 px-3"
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setEditProjectData((prev) => ({
+                      ...prev,
+                      githubLinks: [
+                        ...prev.githubLinks,
+                        { url: "", description: "" },
+                      ],
+                    }))
+                  }
+                  className="w-full"
+                >
+                  + Add GitHub Link
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">
+                Tags
+              </label>
+              <div className="space-y-2">
+                {editProjectData.tags.map((tag, index) => (
+                  <div key={index} className="flex gap-2">
+                    <Input
+                      type="text"
+                      value={tag.name}
+                      onChange={(e) => {
+                        const updated = [...editProjectData.tags];
+                        updated[index].name = e.target.value;
+                        setEditProjectData((prev) => ({
+                          ...prev,
+                          tags: updated,
+                        }));
+                      }}
+                      placeholder="Tag name (e.g., React)"
+                      className="flex-1 h-9"
+                    />
+                    <Input
+                      type="text"
+                      value={tag.target || ""}
+                      onChange={(e) => {
+                        const updated = [...editProjectData.tags];
+                        updated[index].target = e.target.value;
+                        setEditProjectData((prev) => ({
+                          ...prev,
+                          tags: updated,
+                        }));
+                      }}
+                      placeholder="Target (e.g., frontend)"
+                      className="flex-1 h-9"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        const updated = editProjectData.tags.filter(
+                          (_, i) => i !== index,
+                        );
+                        setEditProjectData((prev) => ({
+                          ...prev,
+                          tags: updated,
+                        }));
+                      }}
+                      className="h-9 px-3"
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setEditProjectData((prev) => ({
+                      ...prev,
+                      tags: [...prev.tags, { name: "", target: "" }],
+                    }))
+                  }
+                  className="w-full"
+                >
+                  + Add Tag
+                </Button>
+              </div>
             </div>
           </form>
+
+          <div className="flex gap-3 px-6 pb-6 pt-2 border-t border-border/50">
+            <button
+              type="submit"
+              form="edit-project-form"
+              disabled={isUpdatingProject || !editProjectData.name.trim()}
+              className="flex-1 h-10 px-6 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={(e) => {
+                e.preventDefault();
+                const form = document.getElementById(
+                  "edit-project-form",
+                ) as HTMLFormElement;
+                if (form) form.requestSubmit();
+              }}
+            >
+              {isUpdatingProject ? "Saving..." : "Save Changes"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsEditProjectModalOpen(false)}
+              disabled={isUpdatingProject}
+              className="h-10 px-6 border border-border/50 rounded-md text-sm font-medium hover:bg-muted/50 transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
@@ -1521,9 +1895,7 @@ function ProfileSkills({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-foreground">
-          Skills
-        </h3>
+        <h3 className="text-lg font-semibold text-foreground">Skills</h3>
         {isOwnProfile && onEdit && (
           <button
             type="button"
@@ -1551,9 +1923,7 @@ function ProfileSkills({
 function ProfileAbout({ description }: { description: string }) {
   return (
     <div className="space-y-3">
-      <h3 className="text-lg font-semibold text-foreground">
-        About
-      </h3>
+      <h3 className="text-lg font-semibold text-foreground">About</h3>
       <Markdown content={description} />
     </div>
   );
@@ -1574,7 +1944,9 @@ function ProfileProjects({
   projects: Project[];
   isLoadingProjects: boolean;
   statusFilter: "all" | "active" | "completed" | "archived";
-  onStatusFilterChange: (filter: "all" | "active" | "completed" | "archived") => void;
+  onStatusFilterChange: (
+    filter: "all" | "active" | "completed" | "archived",
+  ) => void;
   isOwnProfile?: boolean;
   onDeleteProject?: (projectId: string) => void;
   onEditProject?: (project: Project) => void;
@@ -1583,7 +1955,7 @@ function ProfileProjects({
   accountId: string;
 }) {
   // Filter projects client-side based on status
-  const filteredProjects = projects.filter(project => {
+  const filteredProjects = projects.filter((project) => {
     if (statusFilter === "all") return true;
     return project.status === statusFilter;
   });
@@ -1591,15 +1963,13 @@ function ProfileProjects({
   return (
     <div className="space-y-4">
       {/* Header with Status Filter and Create button */}
-      <div className="flex items-center justify-between pb-2 border-b border-border/50">
-        <h3 className="text-xl font-semibold text-foreground">
-          Projects
-        </h3>
-        <div className="flex items-center gap-3">
-          <div className="flex gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2 border-b border-border/50">
+        <h3 className="text-xl font-semibold text-foreground">Projects</h3>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+          <div className="flex overflow-x-auto gap-2 pb-2 sm:pb-0 -mx-4 px-4 sm:mx-0 scrollbar-hide">
             <button
               onClick={() => onStatusFilterChange("all")}
-              className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
+              className={`px-3 py-1.5 text-xs rounded-md transition-colors whitespace-nowrap ${
                 statusFilter === "all"
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted text-muted-foreground hover:bg-muted/80"
@@ -1609,7 +1979,7 @@ function ProfileProjects({
             </button>
             <button
               onClick={() => onStatusFilterChange("active")}
-              className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
+              className={`px-3 py-1.5 text-xs rounded-md transition-colors whitespace-nowrap ${
                 statusFilter === "active"
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted text-muted-foreground hover:bg-muted/80"
@@ -1619,7 +1989,7 @@ function ProfileProjects({
             </button>
             <button
               onClick={() => onStatusFilterChange("completed")}
-              className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
+              className={`px-3 py-1.5 text-xs rounded-md transition-colors whitespace-nowrap ${
                 statusFilter === "completed"
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted text-muted-foreground hover:bg-muted/80"
@@ -1629,7 +1999,7 @@ function ProfileProjects({
             </button>
             <button
               onClick={() => onStatusFilterChange("archived")}
-              className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
+              className={`px-3 py-1.5 text-xs rounded-md transition-colors whitespace-nowrap ${
                 statusFilter === "archived"
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted text-muted-foreground hover:bg-muted/80"
@@ -1642,9 +2012,9 @@ function ProfileProjects({
             <button
               onClick={() => onCreateProject?.()}
               disabled={isCreatingProject}
-              className="bg-primary text-primary-foreground px-3 py-1.5 rounded-md text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+              className="bg-primary text-primary-foreground px-3 py-1.5 rounded-md text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 whitespace-nowrap"
             >
-              {isCreatingProject ? "Creating..." : "Create Project"}
+              {isCreatingProject ? "Creating..." : "Create"}
             </button>
           )}
         </div>
@@ -1657,7 +2027,9 @@ function ProfileProjects({
         </div>
       ) : filteredProjects.length === 0 ? (
         <div className="text-center py-8 bg-muted/20 rounded-lg border border-border/50">
-          <p className="text-sm text-muted-foreground mb-3">No projects found</p>
+          <p className="text-sm text-muted-foreground mb-3">
+            No projects found
+          </p>
           {isOwnProfile && (
             <button
               onClick={() => onCreateProject?.()}
@@ -1688,7 +2060,8 @@ function ProfileProjects({
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                     onError={(e) => {
                       // Hide image on error
-                      (e.currentTarget as HTMLImageElement).style.display = 'none';
+                      (e.currentTarget as HTMLImageElement).style.display =
+                        "none";
                     }}
                   />
                 </div>
@@ -1704,13 +2077,15 @@ function ProfileProjects({
                   <h3 className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors line-clamp-1">
                     {project.name}
                   </h3>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${
-                    project.status === "active"
-                      ? "bg-green-500/10 text-green-600 dark:text-green-400"
-                      : project.status === "completed"
-                      ? "bg-blue-500/10 text-blue-600 dark:text-blue-400"
-                      : "bg-muted text-muted-foreground"
-                  }`}>
+                  <span
+                    className={`text-[10px] px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${
+                      project.status === "active"
+                        ? "bg-green-500/10 text-green-600 dark:text-green-400"
+                        : project.status === "completed"
+                          ? "bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                          : "bg-muted text-muted-foreground"
+                    }`}
+                  >
                     {project.status}
                   </span>
                 </div>
@@ -1747,7 +2122,11 @@ function ProfileProjects({
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            if (confirm("Are you sure you want to delete this project?")) {
+                            if (
+                              confirm(
+                                "Are you sure you want to delete this project?",
+                              )
+                            ) {
                               onDeleteProject(project.id);
                             }
                           }}
@@ -1840,13 +2219,19 @@ function ProfileSocials({
       return `https://${cleanUrl}`;
     }
     if (lowerPlatform.includes("discord")) {
-      if (!cleanUrl.includes("discord.gg") && !cleanUrl.includes("discord.com")) {
+      if (
+        !cleanUrl.includes("discord.gg") &&
+        !cleanUrl.includes("discord.com")
+      ) {
         return `https://discord.gg/${cleanUrl}`;
       }
       return `https://${cleanUrl}`;
     }
     if (lowerPlatform.includes("youtube")) {
-      if (!cleanUrl.includes("youtube.com/") && !cleanUrl.includes("youtu.be/")) {
+      if (
+        !cleanUrl.includes("youtube.com/") &&
+        !cleanUrl.includes("youtu.be/")
+      ) {
         return `https://youtube.com/@${cleanUrl}`;
       }
       return `https://${cleanUrl}`;
@@ -1859,9 +2244,7 @@ function ProfileSocials({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-foreground">
-          Connect
-        </h3>
+        <h3 className="text-lg font-semibold text-foreground">Connect</h3>
         {isOwnProfile && onEdit && (
           <button
             type="button"
@@ -1992,9 +2375,7 @@ function ProfileEditForm({
 
       {/* Description */}
       <div className="space-y-2">
-        <label className="text-lg font-semibold text-foreground">
-          About
-        </label>
+        <label className="text-lg font-semibold text-foreground">About</label>
         <MarkdownEditor
           value={formData.description || ""}
           onChange={(value) =>

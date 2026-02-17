@@ -6,6 +6,16 @@ import { authClient } from "@/lib/auth-client";
 // TYPES
 // =============================================================================
 
+export interface GitHubLink {
+  url: string;
+  description?: string;
+}
+
+export interface ProjectTag {
+  name: string;
+  target?: string; // e.g., "frontend", "backend", "smart-contract"
+}
+
 export interface Project {
   id: string;
   nearAccountId: string;
@@ -13,6 +23,8 @@ export interface Project {
   description: string | null;
   status: "active" | "completed" | "archived";
   coverImageUrl?: string | null;
+  githubLinks?: GitHubLink[];
+  tags?: ProjectTag[];
   createdAt: string;
   updatedAt: string;
   transaction?: any;
@@ -230,6 +242,11 @@ export function useUpdateProject() {
         coverImageUrl?: string;
       };
     }) => {
+      console.log(
+        "[useUpdateProject] Sending data:",
+        JSON.stringify(data, null, 2),
+      );
+
       // Get transaction from API
       // For KV storage, update sends all fields like create
       const result = await fetchApi(`/projects/${projectId}`, {

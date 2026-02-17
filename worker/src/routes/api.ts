@@ -857,6 +857,9 @@ export function createApiRoutes(
         status: string;
         createdAt: string;
         updatedAt: string;
+        coverImageUrl: string | null;
+        githubLinks: Array<{ url: string; description?: string }> | null;
+        tags: Array<{ name: string; target?: string }> | null;
       }> = [];
 
       for (const [projectId, fields] of projectsMap.entries()) {
@@ -865,6 +868,32 @@ export function createApiRoutes(
         const projectStatus = fields.status;
         const createdAt = fields.created;
         const updatedAt = fields.updated;
+        // Preserve empty strings - only use null if truly undefined
+        const coverImageUrl =
+          fields.coverImageUrl !== undefined ? fields.coverImageUrl : null;
+
+        // Parse JSON fields
+        let githubLinks = null;
+        let tags = null;
+        try {
+          if (fields.githubLinks) {
+            githubLinks =
+              typeof fields.githubLinks === "string"
+                ? JSON.parse(fields.githubLinks)
+                : fields.githubLinks;
+          }
+          if (fields.tags) {
+            tags =
+              typeof fields.tags === "string"
+                ? JSON.parse(fields.tags)
+                : fields.tags;
+          }
+        } catch (e) {
+          console.warn(
+            `[API] Failed to parse JSON for project ${projectId}:`,
+            e,
+          );
+        }
 
         // Only include valid projects
         if (name && projectStatus && createdAt && updatedAt) {
@@ -874,6 +903,10 @@ export function createApiRoutes(
             name: String(name),
             description: description !== null ? String(description) : null,
             status: String(projectStatus),
+            coverImageUrl:
+              coverImageUrl !== null ? String(coverImageUrl) : null,
+            githubLinks,
+            tags,
             createdAt: String(createdAt),
             updatedAt: String(updatedAt),
           });
@@ -933,26 +966,112 @@ export function createApiRoutes(
     const projectId = c.req.param("projectId");
 
     try {
-      const projectsService = new ProjectsService(ctx.db, {
-        network: "mainnet",
-      });
-      const project = await projectsService.getProject(
-        ctx.nearAccountId,
-        projectId,
-      );
+      // Use FastData API to fetch project data (same as list endpoint)
+      const apiUrl = new URL("https://fastdata.up.railway.app/v1/kv/query");
+      apiUrl.searchParams.set("accountId", ctx.nearAccountId);
+      apiUrl.searchParams.set("contractId", FASTDATA_CONTRACT);
+      apiUrl.searchParams.set("key_prefix", `${PROJECTS_PREFIX}/`);
+      apiUrl.searchParams.set("value_format", "json");
 
-      if (!project) {
+      const response = await fetch(apiUrl.toString(), {
+        headers: { "User-Agent": "near-agent-worker/1.0" },
+      });
+
+      if (!response.ok) {
+        console.error("[API] FastData API failed:", response.status);
+        return c.json({ error: "Failed to fetch project" }, 502);
+      }
+
+      const data = await response.json();
+
+      if (!data.data || !Array.isArray(data.data)) {
         return c.json({ error: "Project not found" }, 404);
       }
 
+      // Group by project ID
+      const projectsMap = new Map<string, Record<string, any>>();
+
+      for (const entry of data.data) {
+        const key = entry.key;
+        if (!key.startsWith(`${PROJECTS_PREFIX}/`)) continue;
+
+        const parts = key.split("/");
+        if (parts.length < 3) continue;
+
+        const entryProjectId = parts[1];
+        if (!projectsMap.has(entryProjectId)) {
+          projectsMap.set(entryProjectId, {});
+        }
+
+        const field = parts.slice(2).join("/");
+        let value = entry.value;
+
+        // Try to parse JSON values
+        try {
+          if (
+            value.startsWith('"') ||
+            value.startsWith("{") ||
+            value.startsWith("[")
+          ) {
+            value = JSON.parse(value);
+          }
+        } catch {
+          // Keep as string if JSON parse fails
+        }
+
+        projectsMap.get(entryProjectId)![field] = value;
+      }
+
+      // Find the requested project
+      const fields = projectsMap.get(projectId);
+
+      if (!fields) {
+        return c.json({ error: "Project not found" }, 404);
+      }
+
+      const name = fields.name;
+      const description = fields.description || null;
+      const projectStatus = fields.status;
+      const createdAt = fields.created;
+      const updatedAt = fields.updated;
+      const coverImageUrl =
+        fields.coverImageUrl !== undefined ? fields.coverImageUrl : null;
+
+      // Parse JSON fields
+      let githubLinks = null;
+      let tags = null;
+      try {
+        if (fields.githubLinks) {
+          githubLinks =
+            typeof fields.githubLinks === "string"
+              ? JSON.parse(fields.githubLinks)
+              : fields.githubLinks;
+        }
+        if (fields.tags) {
+          tags =
+            typeof fields.tags === "string"
+              ? JSON.parse(fields.tags)
+              : fields.tags;
+        }
+      } catch (e) {
+        console.warn(`[API] Failed to parse JSON for project ${projectId}:`, e);
+      }
+
+      if (!name || !projectStatus || !createdAt || !updatedAt) {
+        return c.json({ error: "Invalid project data" }, 500);
+      }
+
       return c.json({
-        id: project.id,
+        id: projectId,
         nearAccountId: ctx.nearAccountId,
-        name: project.name,
-        description: project.description || null,
-        status: project.status,
-        createdAt: project.createdAt,
-        updatedAt: project.updatedAt,
+        name: String(name),
+        description: description !== null ? String(description) : null,
+        status: String(projectStatus),
+        coverImageUrl: coverImageUrl !== null ? String(coverImageUrl) : null,
+        githubLinks,
+        tags,
+        createdAt: String(createdAt),
+        updatedAt: String(updatedAt),
       });
     } catch (error) {
       console.error("[API] Get project error:", error);
@@ -974,11 +1093,15 @@ export function createApiRoutes(
         description,
         status = "active",
         coverImageUrl,
+        githubLinks,
+        tags,
       }: {
         name?: string;
         description?: string;
         status?: "active" | "completed" | "archived";
         coverImageUrl?: string;
+        githubLinks?: Array<{ url: string; description?: string }>;
+        tags?: Array<{ name: string; target?: string }>;
       } = body;
 
       if (!name || typeof name !== "string") {
@@ -1003,8 +1126,15 @@ export function createApiRoutes(
           [`projects/${projectId}/status`]: status,
           [`projects/${projectId}/created`]: now,
           [`projects/${projectId}/updated`]: now,
-          ...(coverImageUrl !== undefined
-            ? { [`projects/${projectId}/coverImageUrl`]: coverImageUrl }
+          [`projects/${projectId}/coverImageUrl`]: coverImageUrl || "",
+          ...(githubLinks && githubLinks.length > 0
+            ? {
+                [`projects/${projectId}/githubLinks`]:
+                  JSON.stringify(githubLinks),
+              }
+            : {}),
+          ...(tags && tags.length > 0
+            ? { [`projects/${projectId}/tags`]: JSON.stringify(tags) }
             : {}),
           [`index/project/${projectId}`]: JSON.stringify({
             type: "project",
@@ -1025,6 +1155,8 @@ export function createApiRoutes(
         description: description || null,
         status,
         coverImageUrl: coverImageUrl || null,
+        githubLinks: githubLinks || null,
+        tags: tags || null,
         createdAt: now,
         updatedAt: now,
         transaction,
@@ -1046,17 +1178,36 @@ export function createApiRoutes(
 
     try {
       const body = await c.req.json();
+      console.log(
+        "[API] PUT /projects/:projectId - Received body:",
+        JSON.stringify(body, null, 2),
+      );
+
       const {
         name,
         description,
         status,
         coverImageUrl,
+        githubLinks,
+        tags,
       }: {
         name?: string;
         description?: string;
         status?: "active" | "completed" | "archived";
         coverImageUrl?: string;
+        githubLinks?: Array<{ url: string; description?: string }>;
+        tags?: Array<{ name: string; target?: string }>;
       } = body;
+
+      console.log("[API] Parsed values:", {
+        name,
+        description,
+        status,
+        coverImageUrl,
+        coverImageUrlType: typeof coverImageUrl,
+        githubLinks,
+        tags,
+      });
 
       if (!name || typeof name !== "string") {
         return c.json({ error: "name is required" }, 400);
@@ -1074,8 +1225,15 @@ export function createApiRoutes(
           : {}),
         [`projects/${projectId}/status`]: projectStatus,
         [`projects/${projectId}/updated`]: now,
-        ...(coverImageUrl !== undefined
-          ? { [`projects/${projectId}/coverImageUrl`]: coverImageUrl }
+        [`projects/${projectId}/coverImageUrl`]: coverImageUrl || "",
+        ...(githubLinks && githubLinks.length > 0
+          ? {
+              [`projects/${projectId}/githubLinks`]:
+                JSON.stringify(githubLinks),
+            }
+          : {}),
+        ...(tags && tags.length > 0
+          ? { [`projects/${projectId}/tags`]: JSON.stringify(tags) }
           : {}),
         [`index/project/${projectId}`]: JSON.stringify({
           type: "project",
@@ -1085,6 +1243,11 @@ export function createApiRoutes(
           createdAt: now,
         }),
       };
+
+      console.log(
+        "[API] Transaction args:",
+        JSON.stringify(transactionArgs, null, 2),
+      );
 
       // FAST PATH: Try payment key execution (opt-in)
       if (ctx.paymentKeyService) {
@@ -1121,6 +1284,8 @@ export function createApiRoutes(
                   description: description || null,
                   status: projectStatus,
                   coverImageUrl: coverImageUrl || null,
+                  githubLinks: githubLinks || null,
+                  tags: tags || null,
                   updatedAt: now,
                   executed: true, // Indicates fast path was used
                   transactionHash: result.transactionHash,
@@ -1161,6 +1326,8 @@ export function createApiRoutes(
         description: description || null,
         status: projectStatus,
         coverImageUrl: coverImageUrl || null,
+        githubLinks: githubLinks || null,
+        tags: tags || null,
         updatedAt: now,
         executed: false, // Indicates client must sign
         transaction,
@@ -1373,6 +1540,11 @@ export function createApiRoutes(
         projectGroups.get(projectId)![field] = value;
       }
 
+      console.log(`[API] Total projects found: ${projectGroups.size}`);
+      for (const [projectId, fields] of projectGroups.entries()) {
+        console.log(`[API] Project ${projectId} fields:`, Object.keys(fields));
+      }
+
       // Parse projects
       let projects: any[] = [];
       for (const [projectId, fields] of projectGroups.entries()) {
@@ -1381,6 +1553,11 @@ export function createApiRoutes(
         const projectStatus = fields["status"];
         const createdAt = fields["created"];
         const updatedAt = fields["updated"];
+        // Preserve empty strings - only use null if truly undefined
+        const coverImageUrl =
+          fields["coverImageUrl"] !== undefined
+            ? fields["coverImageUrl"]
+            : null;
 
         if (name && projectStatus && createdAt && updatedAt) {
           projects.push({
@@ -1388,6 +1565,7 @@ export function createApiRoutes(
             nearAccountId: accountId,
             name,
             description: description || null,
+            coverImageUrl: coverImageUrl,
             status: projectStatus,
             createdAt,
             updatedAt,
@@ -1488,7 +1666,43 @@ export function createApiRoutes(
           const projectStatus = fields["status"];
           const createdAt = fields["created"];
           const updatedAt = fields["updated"];
-          const coverImageUrl = fields["coverImageUrl"];
+          // Preserve empty strings - only use null if truly undefined
+          const coverImageUrl =
+            fields["coverImageUrl"] !== undefined
+              ? fields["coverImageUrl"]
+              : null;
+
+          // Parse JSON fields for githubLinks and tags
+          let githubLinks = null;
+          let tags = null;
+          try {
+            if (fields["githubLinks"]) {
+              githubLinks =
+                typeof fields["githubLinks"] === "string"
+                  ? JSON.parse(fields["githubLinks"])
+                  : fields["githubLinks"];
+            }
+            if (fields["tags"]) {
+              tags =
+                typeof fields["tags"] === "string"
+                  ? JSON.parse(fields["tags"])
+                  : fields["tags"];
+            }
+          } catch (e) {
+            console.warn(
+              `[API] Failed to parse JSON for project ${projectId}:`,
+              e,
+            );
+          }
+
+          console.log(`[API] Project fields for ${projectId}:`, {
+            name,
+            hasCoverImageUrl: !!coverImageUrl,
+            coverImageUrl,
+            hasGithubLinks: !!githubLinks,
+            hasTags: !!tags,
+            allFields: Object.keys(fields),
+          });
 
           if (projectStatus && createdAt && updatedAt) {
             foundProject = {
@@ -1496,8 +1710,10 @@ export function createApiRoutes(
               nearAccountId: accountId,
               name,
               description: description || null,
-              coverImageUrl: coverImageUrl || null,
+              coverImageUrl: coverImageUrl,
               status: projectStatus,
+              githubLinks,
+              tags,
               createdAt,
               updatedAt,
             };
