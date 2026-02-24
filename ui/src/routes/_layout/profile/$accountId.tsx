@@ -54,6 +54,8 @@ interface BuilderProfileData {
   role?: string;
   tags?: string[];
   socials?: Record<string, string>;
+  avatarUrl?: string;
+  backgroundUrl?: string;
 }
 
 // Chat state interface (same as in chat-page.tsx)
@@ -251,6 +253,8 @@ function ProfilePage() {
   // Reset social tab when navigating to different profile
   useEffect(() => {
     setSocialTab("none");
+    // Clear local profile to prevent data from previous profile persisting
+    setLocalProfile(null);
     // Clear tab from URL
     if (search.tab) {
       navigate({ search: { from: search.from } });
@@ -768,6 +772,33 @@ function ProfilePage() {
               projects,
               socials,
             });
+
+            // Update KV database with image URLs
+            try {
+              const updatedProfile: BuilderProfileData = {
+                displayName,
+                description: editFormData.description,
+                role,
+                tags,
+                socials,
+                // Store image URLs in KV database for persistence
+                ...(pendingAvatarUrl && { avatarUrl: pendingAvatarUrl }),
+                ...(pendingBackgroundUrl && {
+                  backgroundUrl: pendingBackgroundUrl,
+                }),
+              };
+
+              await apiClient.setValue({
+                key: PROFILE_KEY,
+                value: JSON.stringify(updatedProfile),
+              });
+
+              console.log("Profile image URLs saved to database");
+            } catch (dbError) {
+              console.error("Failed to save to database:", dbError);
+              // Don't fail the entire operation if database save fails
+              // Profile is already saved to NEAR Social
+            }
 
             toast.success("Profile updated on NEAR Social!");
           } catch (error) {
@@ -1766,23 +1797,35 @@ function LegionRankSection({
   };
 
   const getContractBadge = (contractId: string, quantity: number) => {
-    if (contractId.includes("ascendant")) {
+    // Match exact contract IDs
+    if (contractId === "ascendant.nearlegion.near") {
       return {
         label: `Ascendant ${quantity > 1 ? `(${quantity})` : ""}`,
         className: "bg-purple-500/20 text-purple-400 border-purple-500/40",
         icon: "🏆",
       };
     }
-    if (contractId.includes("initiate")) {
+    if (contractId === "initiate.nearlegion.near") {
       return {
         label: `Initiate ${quantity > 1 ? `(${quantity})` : ""}`,
         className: "bg-emerald-500/20 text-emerald-400 border-emerald-500/40",
         icon: "🌱",
       };
     }
-    if (contractId.includes("nearlegion.nfts")) {
+    if (contractId === "nearlegion.nfts.tg") {
       return {
         label: `Legion ${quantity > 1 ? `(${quantity})` : ""}`,
+        className: "bg-orange-500/20 text-orange-400 border-orange-500/40",
+        icon: "⚔️",
+      };
+    }
+    // Fallback for any other Legion contracts
+    if (contractId.includes("nearlegion")) {
+      const name =
+        contractId.replace(".near", "").replace(".tg", "").split(".").pop() ||
+        "Legion";
+      return {
+        label: `${name.charAt(0).toUpperCase() + name.slice(1)} ${quantity > 1 ? `(${quantity})` : ""}`,
         className: "bg-orange-500/20 text-orange-400 border-orange-500/40",
         icon: "⚔️",
       };
@@ -1847,7 +1890,18 @@ function LegionRankSection({
                   contract.contractId,
                   contract.quantity,
                 );
-                if (!badge) return null;
+                if (!badge) {
+                  // Unknown contract - show generic badge
+                  return (
+                    <span
+                      key={contract.contractId}
+                      className="inline-flex items-center gap-1.5 text-sm px-4 py-2 font-mono font-medium border bg-muted text-muted-foreground border-border"
+                    >
+                      <span className="text-base">🎴</span>
+                      {contract.contractId} ({contract.quantity})
+                    </span>
+                  );
+                }
                 return (
                   <span
                     key={contract.contractId}
@@ -1858,6 +1912,16 @@ function LegionRankSection({
                   </span>
                 );
               })}
+            </div>
+          )}
+
+          {/* Debug info: Show if we have data but no contracts matched */}
+          {process.env.NODE_ENV === "development" && holderTypes && (
+            <div className="text-xs text-muted-foreground font-mono">
+              Debug: {holderTypes.contracts.length} contracts, isAscendant:{" "}
+              {String(holderTypes.isAscendant)}, isInitiate:{" "}
+              {String(holderTypes.isInitiate)}, isNearlegion:{" "}
+              {String(holderTypes.isNearlegion)}
             </div>
           )}
 
@@ -2571,7 +2635,8 @@ function SocialList({ accountId, type }: SocialListProps) {
         const displayName = profile?.name || accountId.split(".")[0];
         const avatarUrl = profile?.image?.ipfs_cid
           ? `https://ipfs.near.social/ipfs/${profile.image.ipfs_cid}`
-          : profile?.image?.url || undefined;
+          : profile?.image?.url ||
+            `https://api.dicebear.com/7.x/avataaars/svg?seed=${accountId}`;
 
         return (
           <Link

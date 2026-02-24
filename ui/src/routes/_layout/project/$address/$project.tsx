@@ -373,69 +373,6 @@ function ProjectPage() {
           )}
         </div>
 
-        {/* KV Data Section */}
-        <div className="space-y-4 pt-6 border-t border-border/50">
-          <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
-            <span>Project Data</span>
-            {kvEntries.length > 0 && (
-              <Badge variant="secondary" className="text-xs">
-                {kvEntries.length}{" "}
-                {kvEntries.length === 1 ? "entry" : "entries"}
-              </Badge>
-            )}
-            <div className="flex-1 h-px bg-border/50" />
-          </h2>
-
-          {isLoadingKv ? (
-            <div className="grid gap-4">
-              {[...Array(3)].map((_, i) => (
-                <Skeleton key={i} className="h-24 w-full" />
-              ))}
-            </div>
-          ) : kvEntries.length > 0 ? (
-            <div className="grid gap-4">
-              {kvEntries.map((entry) => (
-                <div
-                  key={entry.key}
-                  className="group p-4 bg-card hover:bg-card/80 rounded-lg border border-border/50 space-y-3 transition-colors"
-                >
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-mono text-sm font-medium text-primary flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-primary" />
-                      {entry.key}
-                    </h3>
-                    <span className="text-xs text-muted-foreground">
-                      {new Date(entry.createdAt).toLocaleDateString()}
-                    </span>
-                  </div>
-                  {entry.value && (
-                    <div className="text-sm">
-                      {entry.value.includes("#") ||
-                      entry.value.includes("*") ||
-                      entry.value.includes("```") ? (
-                        <Markdown content={entry.value} />
-                      ) : (
-                        <pre className="whitespace-pre-wrap break-words text-foreground bg-muted/30 p-3 rounded-md overflow-x-auto text-xs">
-                          {entry.value}
-                        </pre>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="p-12 text-center bg-muted/20 rounded-xl border border-border/50">
-              <div className="space-y-3">
-                <span className="text-4xl">📭</span>
-                <p className="text-muted-foreground">
-                  No additional data available for this project.
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-
         {/* Project Footer */}
         <div className="pt-6 border-t border-border/50">
           <div className="flex items-center justify-between text-sm text-muted-foreground">

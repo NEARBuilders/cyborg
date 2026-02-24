@@ -33,7 +33,10 @@ interface ChatMessageProps {
 }
 
 // Parse URL to determine route type and params
-function parseInternalUrl(url: string): { type: 'profile' | 'builders' | 'unknown'; params?: Record<string, string> } | null {
+function parseInternalUrl(url: string): {
+  type: "profile" | "builders" | "unknown";
+  params?: Record<string, string>;
+} | null {
   try {
     // Remove origin if present
     const cleanPath = url.startsWith(window.location.origin)
@@ -43,10 +46,18 @@ function parseInternalUrl(url: string): { type: 'profile' | 'builders' | 'unknow
     // Profile route: /profile/:accountId
     const profileMatch = cleanPath.match(/^\/profile\/([a-z0-9._-]+)$/i);
     if (profileMatch) {
-      return { type: 'profile', params: { accountId: profileMatch[1] } };
+      return { type: "profile", params: { accountId: profileMatch[1] } };
     }
 
-    return { type: 'unknown' };
+    // NEAR Explorer links for NFTs: https://explorer.oneverse.near.org/accounts/:accountId?tab=nfts
+    const explorerMatch = url.match(
+      /explorer\.oneverse\.near\.org\/accounts\/([a-z0-9._-]+)/i,
+    );
+    if (explorerMatch) {
+      return { type: "profile", params: { accountId: explorerMatch[1] } };
+    }
+
+    return { type: "unknown" };
   } catch {
     return null;
   }
@@ -63,18 +74,30 @@ async function prefetchProfileData(accountId: string) {
   }
 }
 
-export function ChatMessage({ message, isStreaming, chatState }: ChatMessageProps) {
+export function ChatMessage({
+  message,
+  isStreaming,
+  chatState,
+}: ChatMessageProps) {
   const isUser = message.role === "user";
-  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(
+    null,
+  );
   const queryClient = useQueryClient();
 
   // Clean up any remaining markers from content
   const displayContent = message.content
-    .replace(/\[SEARCHING\]/g, '')
-    .replace(/\[BUILDER_RESULTS:([\s\S]*?)\]/g, '')
-    .replace(/\[HOLDERS_RESULTS:([\s\S]*?)\]/g, '')
-    .replace(/\[HOLDER_RESULTS:([\s\S]*?)\]/g, '')
-    .replace(/The builder data has been included[\s\S]*?End your response immediately[\s\S]*?/g, '')
+    .replace(/\[SEARCHING\]/g, "")
+    .replace(/\[BUILDER_RESULTS:([\s\S]*?)\]/g, "")
+    .replace(/\[HOLDERS_RESULTS:([\s\S]*?)\]/g, "")
+    .replace(/\[HOLDER_RESULTS:([\s\S]*?)\]/g, "")
+    .replace(
+      /The builder data has been included[\s\S]*?End your response immediately[\s\S]*?/g,
+      "",
+    )
+    // Clean up [object Object] errors by removing them and adjacent punctuation
+    .replace(/\[object Object\],?\s*/g, "")
+    .replace(/,\s*\[object Object\]/g, "")
     .trim();
 
   return (
@@ -85,20 +108,25 @@ export function ChatMessage({ message, isStreaming, chatState }: ChatMessageProp
           "shrink-0 w-6 h-6 flex items-center justify-center text-[9px] font-mono font-bold uppercase",
           isUser
             ? "bg-primary/15 text-primary/80"
-            : "bg-muted/30 text-muted-foreground/60"
+            : "bg-muted/30 text-muted-foreground/60",
         )}
       >
         {isUser ? "you" : "ai"}
       </div>
 
       {/* Message Content */}
-      <div className={cn("flex-1 max-w-[90%]", isUser && "flex flex-col items-end")}>
+      <div
+        className={cn(
+          "flex-1 max-w-[90%]",
+          isUser && "flex flex-col items-end",
+        )}
+      >
         <div
           className={cn(
             "px-2.5 py-1.5 text-sm",
             isUser
               ? "bg-primary/80 text-primary-foreground"
-              : "bg-muted/20 text-foreground/90"
+              : "bg-muted/20 text-foreground/90",
           )}
         >
           <div className="prose prose-sm dark:prose-invert max-w-none prose-p:leading-relaxed prose-p:my-1">
@@ -106,7 +134,7 @@ export function ChatMessage({ message, isStreaming, chatState }: ChatMessageProp
               remarkPlugins={[remarkGfm]}
               components={{
                 code: ({ node, className, children, ...props }: any) => {
-                  const inline = !node || node.tagName !== 'pre';
+                  const inline = !node || node.tagName !== "pre";
                   if (inline) {
                     return (
                       <code
@@ -114,7 +142,7 @@ export function ChatMessage({ message, isStreaming, chatState }: ChatMessageProp
                           "px-1.5 py-0.5 rounded text-xs font-mono",
                           isUser
                             ? "bg-primary/20 text-primary-foreground"
-                            : "bg-muted/50 text-foreground/90"
+                            : "bg-muted/50 text-foreground/90",
                         )}
                         {...props}
                       >
@@ -128,7 +156,7 @@ export function ChatMessage({ message, isStreaming, chatState }: ChatMessageProp
                         "block px-2 py-1.5 rounded text-xs font-mono overflow-x-auto",
                         isUser
                           ? "bg-primary/10 text-primary-foreground"
-                          : "bg-muted/30 text-foreground"
+                          : "bg-muted/30 text-foreground",
                       )}
                       {...props}
                     >
@@ -138,20 +166,39 @@ export function ChatMessage({ message, isStreaming, chatState }: ChatMessageProp
                 },
                 // Custom text renderer to convert @mentions and NEAR account IDs to inline buttons
                 p: ({ node, children, ...props }) => {
+                  // Check if children are plain strings (not React elements like <strong>, <em>, etc.)
+                  // If children contain React elements, let ReactMarkdown handle them normally
+                  const hasReactElements =
+                    Array.isArray(children) &&
+                    children.some(
+                      (child) =>
+                        typeof child !== "string" && typeof child !== "number",
+                    );
+
+                  if (hasReactElements) {
+                    // Let the default renderer handle it
+                    return <p {...props}>{children}</p>;
+                  }
+
                   // Convert children to string and process account IDs
                   const content = String(children);
 
                   // Check if this paragraph contains @mentions or NEAR account IDs (with dots)
-                  if (content.includes('@') || content.includes('.')) {
+                  if (content.includes("@") || content.includes(".")) {
                     // Pattern to match @mentions OR NEAR account IDs (with dots, not at start/end)
                     // Matches: @account.near OR account.near (but avoids matching URLs, decimals, etc.)
-                    const parts = content.split(/(@[a-z0-9._-]+|(?<![a-z0-9-])[a-z0-9]+(?:\.[a-z0-9-]+)+\.(?:near|tg)(?![a-z0-9.-]))/gi);
+                    const parts = content.split(
+                      /(@[a-z0-9._-]+|(?<![a-z0-9-])[a-z0-9]+(?:\.[a-z0-9-]+)+\.(?:near|tg)(?![a-z0-9.-]))/gi,
+                    );
 
                     return (
-                      <p {...props} className="prose-p:leading-relaxed prose-p:my-1">
+                      <p
+                        {...props}
+                        className="prose-p:leading-relaxed prose-p:my-1"
+                      >
                         {parts.map((part, index) => {
                           let accountId = part;
-                          const isMention = part.startsWith('@');
+                          const isMention = part.startsWith("@");
 
                           // Remove @ from mentions
                           if (isMention) {
@@ -159,12 +206,15 @@ export function ChatMessage({ message, isStreaming, chatState }: ChatMessageProp
                           }
 
                           // Validate it's a NEAR account ID (must have dots, valid chars, reasonable length)
-                          const isValidAccount = accountId.includes('.') &&
-                              /^[a-z0-9._-]+$/i.test(accountId) &&
-                              accountId.length >= 3 &&
-                              !accountId.startsWith('.') &&
-                              !accountId.endsWith('.') &&
-                              (accountId.endsWith('.near') || accountId.endsWith('.tg') || accountId.split('.').length >= 2);
+                          const isValidAccount =
+                            accountId.includes(".") &&
+                            /^[a-z0-9._-]+$/i.test(accountId) &&
+                            accountId.length >= 3 &&
+                            !accountId.startsWith(".") &&
+                            !accountId.endsWith(".") &&
+                            (accountId.endsWith(".near") ||
+                              accountId.endsWith(".tg") ||
+                              accountId.split(".").length >= 2);
 
                           if (isValidAccount) {
                             // Render as inline button
@@ -175,7 +225,8 @@ export function ChatMessage({ message, isStreaming, chatState }: ChatMessageProp
                                   // Prefetch on hover (intent-based loading)
                                   queryClient.prefetchQuery({
                                     queryKey: ["builder-profile", accountId],
-                                    queryFn: () => prefetchProfileData(accountId),
+                                    queryFn: () =>
+                                      prefetchProfileData(accountId),
                                     staleTime: 5 * 60 * 1000,
                                   });
                                 }}
@@ -200,10 +251,10 @@ export function ChatMessage({ message, isStreaming, chatState }: ChatMessageProp
                 },
                 a: ({ node, href, children, ...props }) => {
                   // Check if this is an internal link (same site)
-                  const isInternalLink = href && (
-                    href.startsWith('/') ||
-                    href.startsWith(window.location.origin)
-                  );
+                  const isInternalLink =
+                    href &&
+                    (href.startsWith("/") ||
+                      href.startsWith(window.location.origin));
 
                   // For internal links, check if it's a profile link
                   if (!isStreaming && isInternalLink && href) {
@@ -215,7 +266,10 @@ export function ChatMessage({ message, isStreaming, chatState }: ChatMessageProp
                     const parsed = parseInternalUrl(cleanUrl);
 
                     // Profile links -> open ProfileSheet
-                    if (parsed?.type === 'profile' && parsed?.params?.accountId) {
+                    if (
+                      parsed?.type === "profile" &&
+                      parsed?.params?.accountId
+                    ) {
                       return (
                         <a
                           href={href}
@@ -224,13 +278,17 @@ export function ChatMessage({ message, isStreaming, chatState }: ChatMessageProp
                             "underline underline-offset-2 cursor-pointer",
                             isUser
                               ? "text-primary-foreground/90 hover:text-primary-foreground"
-                              : "text-primary hover:text-primary/80"
+                              : "text-primary hover:text-primary/80",
                           )}
                           onPointerEnter={() => {
                             // Prefetch on hover (intent-based loading)
                             queryClient.prefetchQuery({
-                              queryKey: ["builder-profile", parsed.params!.accountId],
-                              queryFn: () => prefetchProfileData(parsed.params!.accountId!),
+                              queryKey: [
+                                "builder-profile",
+                                parsed.params!.accountId,
+                              ],
+                              queryFn: () =>
+                                prefetchProfileData(parsed.params!.accountId!),
                               staleTime: 5 * 60 * 1000,
                             });
                           }}
@@ -253,7 +311,7 @@ export function ChatMessage({ message, isStreaming, chatState }: ChatMessageProp
                           "underline underline-offset-2",
                           isUser
                             ? "text-primary-foreground/90 hover:text-primary-foreground"
-                            : "text-primary hover:text-primary/80"
+                            : "text-primary hover:text-primary/80",
                         )}
                         target="_blank"
                         rel="noopener noreferrer"
@@ -272,7 +330,7 @@ export function ChatMessage({ message, isStreaming, chatState }: ChatMessageProp
                         "underline underline-offset-2",
                         isUser
                           ? "text-primary-foreground/90 hover:text-primary-foreground"
-                          : "text-primary hover:text-primary/80"
+                          : "text-primary hover:text-primary/80",
                       )}
                       target="_blank"
                       rel="noopener noreferrer"
@@ -285,10 +343,16 @@ export function ChatMessage({ message, isStreaming, chatState }: ChatMessageProp
                   <h1 className="text-lg font-semibold mt-2 mb-1" {...props} />
                 ),
                 h2: ({ node, ...props }) => (
-                  <h2 className="text-base font-semibold mt-2 mb-1" {...props} />
+                  <h2
+                    className="text-base font-semibold mt-2 mb-1"
+                    {...props}
+                  />
                 ),
                 h3: ({ node, ...props }) => (
-                  <h3 className="text-sm font-semibold mt-1.5 mb-1" {...props} />
+                  <h3
+                    className="text-sm font-semibold mt-1.5 mb-1"
+                    {...props}
+                  />
                 ),
                 ul: ({ node, ...props }) => (
                   <ul className="my-1 ml-4 list-disc" {...props} />
@@ -313,17 +377,26 @@ export function ChatMessage({ message, isStreaming, chatState }: ChatMessageProp
                 ),
                 table: ({ node, ...props }) => (
                   <div className="my-2 overflow-x-auto">
-                    <table className="min-w-full divide-y divide-border" {...props} />
+                    <table
+                      className="min-w-full divide-y divide-border"
+                      {...props}
+                    />
                   </div>
                 ),
                 thead: ({ node, ...props }) => (
                   <thead className="bg-muted/30" {...props} />
                 ),
                 th: ({ node, ...props }) => (
-                  <th className="px-2 py-1 text-left text-xs font-medium" {...props} />
+                  <th
+                    className="px-2 py-1 text-left text-xs font-medium"
+                    {...props}
+                  />
                 ),
                 td: ({ node, ...props }) => (
-                  <td className="px-2 py-1 text-xs border-t border-border/30" {...props} />
+                  <td
+                    className="px-2 py-1 text-xs border-t border-border/30"
+                    {...props}
+                  />
                 ),
                 img: ({ node, ...props }) => (
                   <img
