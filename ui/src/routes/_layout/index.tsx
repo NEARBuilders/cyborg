@@ -163,7 +163,7 @@ function LandingPage() {
                     </Button>
                   </Link>
                   <a
-                    href="https://nearlegion.near"
+                    href="https://nearlegion.com"
                     target="_blank"
                     rel="noopener noreferrer"
                   >
@@ -300,7 +300,7 @@ function LandingPage() {
           <p>Built with NEAR Protocol, NEAR AI, and Cloudflare</p>
           <div className="flex items-center gap-4">
             <a
-              href="https://nearlegion.near"
+              href="https://nearlegion.com"
               target="_blank"
               rel="noopener noreferrer"
               className="hover:text-foreground transition-colors"
